@@ -1,6 +1,6 @@
 # PC 공동 개발 지침
 
-- 먼저 CONTRIBUTING.md, docs/DEVELOPMENT_POLICY.md, docs/STATUS.md, docs/ARCHITECTURE.md를 읽는다. 사용자의 후속 지시가 문서에 우선한다.
+- PC판 작업 루트다. 먼저 docs/CODEX_START.md, docs/CODEX_HANDOFF.md, CONTRIBUTING.md, docs/DEVELOPMENT_POLICY.md, docs/STATUS.md, docs/ARCHITECTURE.md를 읽는다. 모바일판은 별도 작업이며 사용자의 후속 지시가 문서에 우선한다.
 - Windows 우선 독립 상주 앱이다. 운영 서버·유료 API·모바일 연동·원격 조작·WOL·절전 해제를 추가하지 않는다. PC가 켜져 있고 절전이 아닐 때만 실행하며 지난 기한을 소급하지 않는다.
 - Android 제품·APK·서명 자료·릴리스는 변경하지 않는다. PC 작업은 이 저장소에서 한다. vendor는 지정된 sync 스크립트로만 명시적으로 갱신하고 출처 SHA와 관련 검사를 검토한다.
 - Node24/npm11·고정 Electron·lockfile을 유지한다. npm test, npm run check, 관련 Electron 합성 검사를 실행하고 실제 항목 수와 실행 환경을 기록한다. Linux 컨테이너의 자식 IPC 제한 때문에 항목이 누락되면 이를 제품 통과로 쓰지 않는다.
