@@ -1,3 +1,5 @@
+새 Codex 작업: [PC판 시작 안내](docs/CODEX_START.md) · [현재 인계](docs/CODEX_HANDOFF.md). 모바일판과 별도 작업으로 진행합니다.
+
 # 의사 이삭 줍기 PC
 
 Windows PC를 켜두고 사용하는 독립형 상주 프로그램. 기준 버전은 **0.1.0-preview.9**이다. 운영 서버·유료 API·모바일 동기화·자체 원격 조작·절전 해제를 사용하지 않는다.
