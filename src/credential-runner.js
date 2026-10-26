@@ -23,6 +23,11 @@ export class CredentialRunner{
     const supplement=await page.call('credential-page-state.js',[input]);
     reply={...reply,...(supplement.status==='manual'?{status:'manual',detail:supplement.detail}:{}),evidence:{...reply.evidence,...supplement.evidence}};phase='provider';
    }
+   if(site==='dtalks'&&submitted&&reply.status==='unknown'){
+    const state=page.diagnostics?.(),actual=state?.credentialNetworkEnabled===true&&state.credentialRequests>0&&state.credentialResponses>0&&state.credentialHttpStatus>=200&&state.credentialHttpStatus<400;
+    const supplement=await page.call('credential-page-state.js',[{...input,dtalksProtectedRead:refreshed,dtalksAuthResponse:actual}]);
+    reply={...reply,...(supplement.status==='authenticated'?{status:'authenticated'}:{}),evidence:{...reply.evidence,...supplement.evidence}};phase='provider';
+   }
    const network=page.diagnostics?.();
    if(submitted&&['unknown','loading'].includes(reply.status)&&network?.credentialNetworkEnabled===true&&network.credentialResponses>0&&network.credentialHttpStatus>=500){reply={...reply,status:'network_error'};phase='provider';}
    observe(phase,reply);
@@ -38,6 +43,10 @@ export class CredentialRunner{
     let reply;
     if(attempted){reply=await verify();}
     else{reply=await page.call('credential-login.js',[request('probe')]);reads++;observe('probe',reply);}
+    if(!attempted&&!validation&&site==='dtalks'&&['unknown','manual'].includes(reply.status)&&!reply.evidence?.barrierReason){
+     const supplement=await page.call('credential-page-state.js',[{...request('verify'),validation:false}]);
+     if(supplement.status==='authenticated')reply=supplement;observe('provider',supplement);
+    }
     status=safeCredentialStatus(reply.status);onChange(status);
     if(status==='authenticated'){
      if(validation&&(!attempted||!submitted)){status='manual';break;}

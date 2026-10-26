@@ -43,3 +43,5 @@ v8부터 검토한 닥터빌·디톡스 인증 경로의 실제 요청/응답 �
 - 새 항목은 고정 enum·boolean·제한된 수치로 허용 목록을 확장한다. 임의 문자열이나 사이트 객체 전체를 이벤트에 복사하지 않는다.
 - `npm test`, `npm run check`, 관련 `npm run test:electron -- --suite=catalog`로 기본 꺼짐·현재 상태 내보내기·명시적 기록·비밀정보 제외·배포용 제외를 확인한다. 보관·실패 조건을 바꾸면 관련 회귀도 실행한다.
 - 공유한 JSON은 원인 조사 자료다. 수정 완료 근거는 합성 재현과 해당 Windows/사이트 경로의 재확인으로 따로 남긴다.
+
+v9의 dtalksLogoutPresent·dtalksLogoutVisible·dtalksLogoutSafe·dtalksLoginConflict는 검토한 서버 프로필 메뉴의 고정 boolean이다. 회원 이름·HTML·클래스 목록·링크 원문은 내보내지 않는다. authEvidenceSource=dtalks_server_logout는 메뉴 근거이며, 후보 계정 저장에는 네이티브 실제 요청/응답과 보호 목록 재확인도 필요하다. 수동 창의 login_fallback은 고정 로그인 화면을1회 열었다는 의미로 인증 성공과 구분한다.

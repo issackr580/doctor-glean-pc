@@ -32,7 +32,7 @@ for(const id of ['doctorville','keymedi','whodadoc','dtalks']){
  await profile.protocol.handle('https',request=>{
   requests.push({site:id,method:request.method});
   if(request.method!=='GET')return new Response('not allowed',{status:405});
-  if(id==='dtalks'&&modes.dtalks==='entry-error'&&new URL(request.url).pathname!=='/login.do')return Response.error();
+  if(id==='dtalks'&&(modes.dtalks==='all-error'||modes.dtalks==='entry-error'&&new URL(request.url).pathname!=='/login.do'))return Response.error();
   const ready=(id==='doctorville'?doctorCards:id==='keymedi'?keyCards:'<main>웨비나</main>')+'<a href="/logout">로그아웃</a>';
   const body=modes[id]==='login'?login:`<script>document.write(localStorage.getItem('synthetic-login')==='ready'?${JSON.stringify(ready)}:${JSON.stringify(login)});const b=document.getElementById('synthetic-login');if(b)b.onclick=()=>{localStorage.setItem('synthetic-login','ready');location.reload();};</script>`;
   return new Response(shell(body),{headers:{'content-type':'text/html; charset=utf-8'}});
@@ -72,12 +72,14 @@ try{
   const window=await until(()=>BrowserWindow.getAllWindows().find(w=>!prior.has(w)));
   check(id+' manual window is visible before login',window.isVisible());
   if(id==='dtalks'){
-   await until(async()=>(await state()).sites.find(s=>s.id===id).session.load==='failed');
-   await until(()=>window.webContents.executeJavaScript('document.body?.innerText.includes("사이트를 열지 못했어요")'));
-   check('failed page retains a visible retry window',window.isVisible());
-   await evaluate('window.doctorGlean.openLogin("dtalks")');
    await until(()=>window.webContents.executeJavaScript('!!document.querySelector("input[type=password]")'));
-   check('fixed Dtalks login entry recovers from a failed catalog load',window.webContents.getURL()==='https://www.dtalks.kr/login.do');
+   check('a failed Dtalks catalog automatically opens only its fixed login screen',window.webContents.getURL()==='https://www.dtalks.kr/login.do');
+   modes.dtalks='all-error';await evaluate('window.doctorGlean.openLogin("dtalks")');
+   await until(()=>window.webContents.executeJavaScript('document.body?.innerText.includes("사이트를 열지 못했어요")'));
+   check('failed catalog and login keep a visible retry window',window.isVisible());
+   modes.dtalks='entry-error';await evaluate('window.doctorGlean.openLogin("dtalks")');
+   await until(()=>window.webContents.executeJavaScript('!!document.querySelector("input[type=password]")'));
+   check('fixed Dtalks login entry still recovers after both targets failed',window.webContents.getURL()==='https://www.dtalks.kr/login.do');
   }else{
    await until(()=>window.webContents.executeJavaScript('!!document.querySelector("input[type=password]")'));
    window.minimize();await evaluate('window.doctorGlean.openSite("whodadoc")');
