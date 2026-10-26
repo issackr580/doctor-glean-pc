@@ -36,7 +36,7 @@ Node24/npm11을 사용한다. Windows에서는 Electron 검사를 그대로 실�
 
 ## 실행과 업데이트
 
-[Windows 안내](docs/WINDOWS_PREVIEW.md)를 따른다. 배포용 실행물은 이 저장소의 [공개 검증판](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.7), 본인용 developer 실행물은 관리자 로그인 후 [Releases 목록](https://github.com/issackr580/-/releases)의 초안에서 받는다. 개발자용 실행파일을 공개 릴리스에 첨부하지 않는다.
+[Windows 안내](docs/WINDOWS_PREVIEW.md)를 따른다. 배포용 실행물은 이 저장소의 [공개 검증판](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.7), 개발자용 실행물은 지정 collaborator가 GitHub 로그인 후 같은 [Releases 목록](https://github.com/issackr580/doctor-glean-pc/releases)의 **협업자 전용 Draft**에서 받는다. 접근 권한은 [배포·협업 권한 기준](docs/ACCESS.md)을 따른다. 개발자용 실행파일을 공개 릴리스에 첨부하지 않는다.
 
 preview.6.1 사용자는 같은 에디션의 **6.1→7 작은 패치**를 받는다. 완전 종료 → 기존 resources/app 백업 → 패치 app 전체 교체 → 하단 버전 확인 순서다. X는 트레이 숨김이다. 로그인·계정·시도는 별도 데이터 폴더에 유지된다. 첫 설치·다른 버전·runtime 변경은 전체 ZIP이다.
 

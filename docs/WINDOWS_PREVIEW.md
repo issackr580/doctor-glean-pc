@@ -39,7 +39,7 @@ preview.6.1 사용자에게는 같은 에디션의 **preview.6.1 → preview.7**
 
 문제가 생기면 완전히 종료한 뒤 새 app을 다른 이름으로 옮기고 백업 폴더를 app으로 되돌린다. `%APPDATA%`의 로그인·설정·시도 기록 폴더는 교체하지 않는다. 올바른 위치는 resources/app/package.json이며 그 파일의 version도 확인할 수 있다.
 
-배포용은 [공개 릴리스](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.7)에서 받는다. 개발자용은 `issackr580` 로그인 후 [Releases 목록](https://github.com/issackr580/-/releases)의 **PC 개발자용 0.1.0-preview.7 · 본인용 초안**에서 Assets를 연다. 초안의 임시 링크는 바뀔 수 있고 로그인하지 않으면 404가 정상이다.
+배포용은 [공개 릴리스](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.7)에서 받는다. 개발자용은 관리자 또는 지정된 쓰기 권한 collaborator가 GitHub 로그인 후 같은 [Releases 목록](https://github.com/issackr580/doctor-glean-pc/releases)의 **PC 개발자용 0.1.0-preview.7 · 협업자 전용 Draft**에서 Assets를 연다. 초안의 임시 링크는 바뀔 수 있고 로그인하지 않으면 404가 정상이다.
 
 두 에디션과 Android는 로그인·설정·실행 내역을 공유하지 않는다. 자동 실행 장비를 정해 사용한다. 프로그램은 별도 서버·유료 API·자체 원격 조작·절전 해제·자동 업데이트를 사용하지 않는다. 자체 Windows 코드 서명은 없다.
 

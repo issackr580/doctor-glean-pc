@@ -1,6 +1,6 @@
 # 검증과 릴리스 절차
 
-릴리스 담당 관리자가 수행한다. 공동작업자의 PR이 자동으로 실행파일을 공개하지 않게 한다. 소스와 distribution 검증판은 공개 PC 저장소 `issackr580/doctor-glean-pc`에서 함께 관리한다. 기존 `issackr580/-`의 Android·과거 PC 릴리스를 변경하지 않는다. developer 실행물은 기존 관리자 전용 초안으로 분리한다.
+릴리스 담당 관리자가 수행한다. 공동작업자의 PR이 자동으로 실행파일을 공개하지 않게 한다. 소스와 distribution 검증판은 공개 PC 저장소 `issackr580/doctor-glean-pc`에서 함께 관리한다. 기존 `issackr580/-`의 Android·과거 PC 릴리스를 변경하지 않는다. developer 실행물은 같은 PC 저장소의 지정 collaborator 전용 Draft로 공유하며 공개 게시하지 않는다. [권한 기준](ACCESS.md)을 따른다.
 
 ## 변경 검토
 
@@ -45,7 +45,7 @@ node scripts/build-app-patch.mjs --from=/old/artifact/developer --to=/new/artifa
 - 기준 커밋과 `pc-source-v앱버전` 태그를 연결한다. 릴리스 노트에 소스 커밋/태그, 항목 수·검증 환경·남은 확인, 전체/패치 SHA를 기록한다.
 - GitHub 자격증명은 운영자가 OS/CLI의 인증으로 제공한다. 토큰·서명키·기존 개인 인증 스크립트를 저장소나 소스 ZIP에 넣지 않는다.
 - 새 자산의 크기·서버 SHA·다운로드를 대조한 뒤 distribution만 prerelease로 공개한다. PC 저장소의 target_commitish는 검증한 소스 커밋으로 지정한다. 기존 Android 저장소의 latest를 바꾸지 않는다. 이전 릴리스·자산은 교체하거나 삭제하지 않는다.
-- developer 초안은 편집 후 release ID로 다시 조회해 현재 주소를 확인한다. 임시 untagged URL은 편집하면 바뀔 수 있다. 영구 안내는 관리자 로그인 후 Releases 목록이다.
+- developer 초안은 편집 후 release ID로 다시 조회해 현재 주소를 확인한다. 임시 untagged URL은 편집하면 바뀔 수 있다. 영구 안내는 관리자·쓰기 권한 collaborator가 GitHub 로그인 후 같은 PC 저장소의 Releases 목록이다. 일반 사용자의 404는 정상이다.
 - 공개 이후 수정은 새 버전으로 배포한다. 기존 ZIP을 같은 이름으로 갈아 끼우지 않는다.
 
 ## Windows 확인
