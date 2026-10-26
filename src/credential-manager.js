@@ -4,6 +4,7 @@ import {CredentialAttempts} from './credential-attempts.js';
 import {CredentialRunner} from './credential-runner.js';
 import {credentialSite,credentialInput,safeCredentialStatus} from './credential-policy.js';
 import {join} from 'node:path';
+import {inspectDocpleSession} from './credential-session.js';
 export class CredentialManager{
  constructor({directory,applicationId,protect,createPage,automaticAllowed,isManualOpen,onChange=()=>{},now=Date.now}){
   Object.assign(this,{createPage,automaticAllowed,isManualOpen,onChange,now});this.vault=new CredentialVault(join(directory,'credentials-v1.json'),applicationId,protect);this.attempts=new CredentialAttempts(join(directory,'credential-attempts-v1.json'));this.runner=new CredentialRunner({attempts:this.attempts,now});this.active=null;this.last=new Map();
@@ -31,6 +32,7 @@ export class CredentialManager{
    if(controller.signal.aborted)return result={status:'cancelled'};
    run.page=await this.createPage(site,controller.signal,{validation:kind==='save',partition:'credential-validation-'+randomUUID()});
    result=await work(run.page,controller.signal,()=>!controller.signal.aborted&&(!automatic||this.automaticAllowed()&&this.vault.enabled(site)));
+   if(kind==='recover'&&result.status==='authenticated')await run.page.flushSession?.();
   }catch(error){result={status:safeCredentialStatus(controller.signal.aborted?'cancelled':error.code??error.message)};}
   finally{run.page?.close();signal?.removeEventListener('abort',abort);if(this.active===run)this.active=null;this.last.set(site,{status:result.status,at:this.now(),kind,attempted:result.attempted===true,submitted:result.submitted===true,retryAt:this.attempts.retryAt(site,this.now()),...(result.detail==='input_format'?{detail:'input_format'}:{}),...(Array.isArray(result.trace)?{trace:result.trace}:{}),...(Number.isSafeInteger(result.reads)?{reads:result.reads,elapsedMs:result.elapsedMs}:{})});this.onChange();}
   return result;
@@ -53,6 +55,10 @@ export class CredentialManager{
  async verifyPage(site,page){
   await page.ready?.();const input={site,mode:'verify',nonce:'readonly_session_123456789',pageTag:'1:'+Math.max(1,page.version),expectedUrl:page.url,diagnostics:false};
   let reply=await page.call('credential-login.js',[input]);
+  if(site==='docple'&&['authenticated','unknown','login_required'].includes(reply.status)&&reply.evidence?.passwordShown!==true&&!reply.evidence?.barrierReason){
+   const server=await inspectDocpleSession(page,{now:this.now});
+   if(page.url===credentialSite('docple').entry||server.status==='authenticated'||server.status==='login_required')reply=server;
+  }
   if(site==='dtalks'&&reply.status==='unknown'){
    const supplement=await page.call('credential-page-state.js',[{...input,validation:false}]);if(supplement.status==='authenticated')reply=supplement;
   }

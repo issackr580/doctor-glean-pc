@@ -5,8 +5,10 @@ import {pageRole} from './page-role.js';
 import {waitFor} from './async-work.js';
 import {credentialPageState} from './credential-page-state.js';
 import {isCredentialRequest} from './credential-policy.js';
+import {doctorvilleQuizPage} from './doctorville-quiz-page.js';
+import {credentialDocpleSession} from './credential-session-page.js';
 const assets=new Map();
-const NAMES=new Set(['daily.js','auto-entry.js','keymedi-lounge.js','doctorville-quiz-pilot.js','doctorville-quiz-journey.js','doctorville-survey.js','credential-login.js','credential-keymedi-proof.js','credential-background-keymedi-proof.js','credential-page-state.js']);
+const NAMES=new Set(['daily.js','auto-entry.js','keymedi-lounge.js','doctorville-quiz-pilot.js','doctorville-quiz-journey.js','doctorville-quiz-page.js','doctorville-survey.js','credential-login.js','credential-keymedi-proof.js','credential-background-keymedi-proof.js','credential-page-state.js','credential-docple-session.js']);
 const failure=code=>Object.assign(Error(code),{code});
 function bounded(promise,signal,ms){return new Promise((resolve,reject)=>{
  let finished=false;const finish=(fn,value)=>{if(finished)return;finished=true;clearTimeout(timer);signal.removeEventListener('abort',abort);fn(value);};
@@ -88,7 +90,10 @@ export class AutomationPage{
  async call(name,args,{navigation=false}={}){
   await this.ready();
   if(!NAMES.has(name)||!allowedNavigation(this.site,this.url))throw failure('policy_rejected');
-  if(!assets.has(name))assets.set(name,name==='credential-page-state.js'?credentialPageState.toString():readFileSync(new URL('../vendor/'+(name.startsWith('credential-')?'credentials/':'automation/')+name,import.meta.url),'utf8'));
+  // This credential-prefixed session read cannot dispatch an attendance action.
+  // It retains native document binding and bypasses the recovery wrapper itself.
+  if(name==='credential-docple-session.js'&&(this.site!=='docple'||args?.[0]?.site!=='docple'||args[0].mode!=='verify'||args[0].kind!=='attendance'||args[0].autoClaim!==false||args[0].attempted!==false||args[0].phase!==undefined||args[0].action!==undefined||navigation))throw failure('policy_rejected');
+  if(!assets.has(name))assets.set(name,name==='credential-page-state.js'?credentialPageState.toString():name==='credential-docple-session.js'?credentialDocpleSession.toString():name==='doctorville-quiz-page.js'?doctorvilleQuizPage.toString():readFileSync(new URL('../vendor/'+(name.startsWith('credential-')?'credentials/':'automation/')+name,import.meta.url),'utf8'));
   const contents=this.current.webContents,url=this.url,version=this.version;
   const credential=name.startsWith('credential-'),reading=credential&&['probe','verify','cancel'].includes(args?.[0]?.mode);
   // A read may wait across a POST redirect, but its caller must bind a fresh
@@ -103,6 +108,10 @@ export class AutomationPage{
   if(typeof encoded!=='string'||encoded.length>500000)throw failure('invalid_response');
   let value;try{value=JSON.parse(encoded);}catch{throw failure('invalid_response');}
   if(!value||typeof value!=='object'||Array.isArray(value))throw failure('invalid_response');return value;
+ }
+ async flushSession(){
+  this.#alive();const profile=this.current.webContents.session;
+  await bounded(profile.cookies.flushStore().then(()=>profile.flushStorageData()),this.signal,3000);
  }
  close(){
   if(this.closed)return;this.closed=true;this.signal.removeEventListener('abort',this.abort);

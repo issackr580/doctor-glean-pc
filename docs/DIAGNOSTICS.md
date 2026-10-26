@@ -45,3 +45,7 @@ v8부터 검토한 닥터빌·디톡스 인증 경로의 실제 요청/응답 �
 - 공유한 JSON은 원인 조사 자료다. 수정 완료 근거는 합성 재현과 해당 Windows/사이트 경로의 재확인으로 따로 남긴다.
 
 v9의 dtalksLogoutPresent·dtalksLogoutVisible·dtalksLogoutSafe·dtalksLoginConflict는 검토한 서버 프로필 메뉴의 고정 boolean이다. 회원 이름·HTML·클래스 목록·링크 원문은 내보내지 않는다. authEvidenceSource=dtalks_server_logout는 메뉴 근거이며, 후보 계정 저장에는 네이티브 실제 요청/응답과 보호 목록 재확인도 필요하다. 수동 창의 login_fallback은 고정 로그인 화면을1회 열었다는 의미로 인증 성공과 구분한다.
+
+작업 중인 v10은 후다닥의 고정 `/auth/login` POST에도 같은 요청/응답 개수·HTTP 상태 관찰을 적용한다. 차단 목적지·본문·헤더는 남기지 않는다. 후다닥의 refresh는 실제 제출 ACK/응답 뒤 원래 PC 페이지를1회 다시 읽은 단계다. 성공 여부는 그 페이지의 인증 근거로 별도 확인한다.
+
+`authEvidenceSource=docple_server_calendar`는 고정 보호 페이지의 현재 토큰으로 정상 출석 calendar 응답을 확인했다는 뜻이다. 토큰·회원·과거 출석 날짜는 내보내지 않는다. 토큰·문서·날짜가 바뀐 이전 응답은 인증 근거로 재사용하지 않는다. 로그인 복구의 성공과 이후 출석 수령·적립은 별개다.
