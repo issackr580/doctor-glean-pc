@@ -10,7 +10,8 @@ PC 전용 [공개 소스 저장소](https://github.com/issackr580/doctor-glean-p
 2. [현재 상태](docs/STATUS.md): 구현·검증·남은 문제·다음 작업
 3. [구조](docs/ARCHITECTURE.md): 모듈·신뢰 경계·저장 형식·엔진 동기화
 4. [개발 방침](docs/DEVELOPMENT_POLICY.md)과 [결정 기록](docs/DECISIONS.md): 확정 범위
-5. [배포 절차](docs/RELEASE_PROCESS.md)와 [이번 기록](docs/releases/0.1.0-preview.7.md): 소스 기준점·검증·릴리스
+5. [개발자 로그 수집](docs/DIAGNOSTICS.md): 재현 전 기록 켜기·JSON 내보내기·공유 기준
+6. [배포 절차](docs/RELEASE_PROCESS.md)와 [이번 기록](docs/releases/0.1.0-preview.7.md): 소스 기준점·검증·릴리스
 
 ```sh
 npm ci
