@@ -9,7 +9,9 @@ export class CredentialRunner{
   const policy=credentialSite(site),nonce=randomUUID().replace(/-/g,''),began=this.now();let attempted=false,submitted=false,at=0,usedProbe=false,reads=0,ready=0,lastVersion=-1,status='unknown',manualSince=0,submittedVersion=-1,refreshed=false,settledReads=0;
   const trace=[],observe=(phase,reply)=>recordCredentialObservation(trace,credentialObservation(site,page,phase,reply,this.now()-began));
   const live=()=>!signal.aborted&&allowed()&&!page.closed&&this.now()-began<90000&&(!attempted||this.now()-at<(validation?45000:20000));
-  const request=mode=>({site,mode,nonce,pageTag:'1:'+Math.max(1,page.version),expectedUrl:page.url,diagnostics:true,validation,...(validation?{validationSubmitted:submitted}:{backgroundRecovery:true,backgroundSubmitted:submitted})});
+  // The original background proof rejects candidate-validation fields, even
+  // validation:false. Keep candidate validation and saved recovery distinct.
+  const request=mode=>({site,mode,nonce,pageTag:'1:'+Math.max(1,page.version),expectedUrl:page.url,diagnostics:true,...(validation?{validation:true,validationSubmitted:submitted}:{backgroundRecovery:true,backgroundSubmitted:submitted})});
   const verify=async()=>{
    await page.ready?.();
    const input={...request('verify'),revealCkdMenu:submitted};let reply=await page.call('credential-login.js',[input]),phase='verify';reads++;

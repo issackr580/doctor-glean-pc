@@ -53,6 +53,37 @@ async function run(){
  }
 
 
+ // The real Keymedi helper must receive background-only options from the
+ // native runner. A visible logout link would conceal a rejected proof call.
+ for(const scenario of ['spa','navigation','unauthorized']){
+  const partition='keymedi-recovery-'+randomUUID(),profile=session.fromPartition(partition),file=join(root,'keymedi-'+scenario+'.json');
+  const recoveryAttempts=new CredentialAttempts(file);let loginPosts=0,memberReads=0,accepted=false;
+  await profile.protocol.handle('https',async request=>{
+   const u=new URL(request.url),headers={'content-type':'text/html; charset=utf-8'};
+   if(u.origin==='https://api.keymedi.com'){
+    assert.equal(request.url,'https://api.keymedi.com/api/member/getMyInfo');
+    if(request.method==='OPTIONS')return new Response(null,{headers:{'access-control-allow-origin':'https://www.keymedi.com','access-control-allow-methods':'POST','access-control-allow-headers':'authorization,content-type'}});
+    memberReads++;assert.equal(JSON.parse(readFileSync(file)).sites.keymedi.status,'submitted');
+    return new Response(JSON.stringify({code:0,data:{info:{name:'SYNTHETIC_MEMBER'}}}),{status:scenario==='unauthorized'?401:200,headers:{'content-type':'application/json','access-control-allow-origin':'https://www.keymedi.com'}});
+   }
+   if(request.method==='POST'){
+    loginPosts++;assert.equal(u.pathname,'/synthetic-login');assert.equal(JSON.parse(readFileSync(file)).sites.keymedi.status,'submitted');accepted=true;
+    return new Response('{}',{headers:{'content-type':'application/json'}});
+   }
+   if(accepted)return new Response(shell('<main>합성 로그인 후 화면</main>'),{headers});
+   const script=`const form=document.querySelector('form'),button=form.querySelector('button');Object.defineProperty(form,'__reactProps$synthetic',{value:{onSubmit(){}}});form.addEventListener('input',()=>queueMicrotask(()=>button.disabled=false));form.addEventListener('submit',async event=>{event.preventDefault();await fetch('/synthetic-login',{method:'POST'});localStorage.setItem('access_token','SYNTHETIC_ACCESS_TOKEN');${scenario==='navigation'?"location.href='/meditv/live';":"history.pushState({},'','/');document.body.innerHTML='<main>합성 로그인 후 화면</main>';"}});`;
+   return new Response(shell(inputs.keymedi+'<script>'+script+'</script>'),{headers});
+  });
+  const page=new AutomationPage('keymedi',new AbortController().signal,{...remotePreferences('keymedi'),partition});let decryptions=0;
+  try{
+   const result=await new CredentialRunner({attempts:recoveryAttempts}).run('keymedi',page,{automatic:true,signal:page.signal,readCredentials:()=>{decryptions++;return {id:'SYNTHETIC_USER',password:'SYNTHETIC_PASSWORD'};}});
+   check('Keymedi '+scenario+' recovery uses one durable login and one server member read',loginPosts===1&&memberReads===1&&decryptions===1);
+   check('Keymedi '+scenario+' authenticates only a verified server member',result.status===(scenario==='unauthorized'?'time_limit':'authenticated')&&(scenario==='unauthorized'||result.trace.some(row=>row.authEvidenceSource==='keymedi_background_member')));
+   check('Keymedi '+scenario+' diagnostics exclude account and token values',!/SYNTHETIC_|Bearer|https:/.test(JSON.stringify(result)));
+   if(scenario==='unauthorized')check('Keymedi uncertain recovery remains disabled for automatic resubmission',recoveryAttempts.decision('keymedi',Date.now()+60001,false,true)==='disabled');
+  }finally{page.close();}
+ }
+
  for(const authenticated of [true,false]){
   const partition='post-result-'+randomUUID(),profile=session.fromPartition(partition);let sent=0,catalogReads=0;
   await profile.protocol.handle('https',request=>{
