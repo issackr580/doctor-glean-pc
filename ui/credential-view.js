@@ -3,8 +3,11 @@ labels.stale='로그인 화면이 바뀌어 입력·제출을 중단했어요. �
 let currentSite='',state=null,api,refresh,busy=false;
 const dialog=()=>document.getElementById('credential-dialog');
 function resultLabel(result){
+ if(result?.detail==='input_format')return '닥터빌 화면의 비밀번호 형식 안내를 확인해 주세요. 입력한 계정은 저장하지 않았어요.';
  if(result?.status==='saved')return result.profileStatus==='authenticated'?'계정 저장과 작업용 로그인 확인을 마쳤어요. 강의 목록도 다시 확인해요.':'계정은 저장됐어요. 「저장 계정으로 로그인」을 누르면 작업용 로그인과 강의 목록을 확인해요.';
  if(result?.status==='blocked'&&result.submitted)return '로그인 제출 후 이동한 화면에서 완료 여부를 확인하지 못했어요. 입력한 계정은 저장하지 않았어요.';
+ if(result?.status==='cancelled'&&result.submitted)return '로그인 제출 후 확인 작업이 중지됐어요. 성공 여부를 확인하지 못해 계정을 저장하지 않았어요.';
+ if(result?.status==='cooldown'&&result.retryAt>0&&result.retryAt<=Date.now())return '재시도 대기 시간이 끝났어요. 이전 로그인 결과를 확인한 뒤 다시 시도해 주세요.';
  const text=labels[result?.status]??(result?.ok?'계정 설정을 저장했어요.':'계정 작업을 완료하지 못했어요.');
  return ['cooldown','daily_limit'].includes(result?.status)&&result.retryAt>Date.now()?text+' 다음 시도 가능 '+new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(result.retryAt):text;
 }

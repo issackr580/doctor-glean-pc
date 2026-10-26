@@ -52,6 +52,38 @@ async function run(){
   }finally{candidate.id='';candidate.password='';page.close();}
  }
 
+
+ for(const authenticated of [true,false]){
+  const partition='post-result-'+randomUUID(),profile=session.fromPartition(partition);let sent=0,catalogReads=0;
+  await profile.protocol.handle('https',request=>{
+   const path=new URL(request.url).pathname;
+   if(request.method==='POST'){sent++;return new Response(shell('처리 결과'),{headers:{'content-type':'text/html; charset=utf-8'}});}
+   if(path==='/websim/vodList.do'){catalogReads++;return new Response(shell(authenticated?'<a href="/logout">로그아웃</a>':inputs.dtalks),{headers:{'content-type':'text/html; charset=utf-8'}});}
+   return new Response(shell(inputs.dtalks),{headers:{'content-type':'text/html; charset=utf-8'}});
+  });
+  const page=new AutomationPage('dtalks',new AbortController().signal,{...remotePreferences('dtalks'),partition});
+  const result=await new CredentialRunner({attempts:new CredentialAttempts(join(root,'post-result-'+authenticated+'.json'))}).run('dtalks',page,{candidate:{id:'SYNTHETIC_USER',password:'SYNTHETIC_PASSWORD'},validation:true,signal:page.signal});
+  check(authenticated?'a blank POST result verifies the session with one protected catalog GET and one POST':'a blank result and anonymous catalog do not prove candidate authentication',result.status===(authenticated?'authenticated':'login_required')&&sent===1&&catalogReads===1&&result.trace.some(row=>row.phase==='refresh'));page.close();
+ }
+ const formatPartition='provider-format-'+randomUUID(),formatSession=session.fromPartition(formatPartition);let formatPosts=0;
+ await formatSession.protocol.handle('https',request=>{
+  if(request.method==='POST'){formatPosts++;return new Response('{}',{headers:{'content-type':'application/json'}});}
+  return new Response(shell(inputs.doctorville+`<script>const form=document.querySelector('form');Object.defineProperty(form,'__reactProps$synthetic',{value:{onSubmit(){}}});form.onsubmit=event=>{event.preventDefault();const notice=document.createElement('p');notice.textContent='8~20자 영문, 숫자 조합으로 입력해주세요';form.append(notice);};</script>`),{headers:{'content-type':'text/html; charset=utf-8'}});
+ });
+ const formatPage=new AutomationPage('doctorville',new AbortController().signal,{...remotePreferences('doctorville'),partition:formatPartition});
+ const formatResult=await new CredentialRunner({attempts:new CredentialAttempts(join(root,'format-attempts.json'))}).run('doctorville',formatPage,{candidate:{id:'SYNTHETIC_FORMAT_USER',password:'xxxx'},validation:true,signal:formatPage.signal});
+ check('a provider client-format error is reported without waiting for a nonexistent auth request',formatResult.status==='manual'&&formatResult.detail==='input_format'&&formatPosts===0&&formatResult.elapsedMs<5000&&formatResult.trace.some(row=>row.clientValidationError));
+ check('client-format telemetry contains no auth request, field value or page text',formatPage.diagnostics().credentialNetworkEnabled&&formatPage.diagnostics().credentialRequests===0&&!/SYNTHETIC_FORMAT_USER|xxxx|8~20/.test(JSON.stringify(formatResult)));formatPage.close();
+ const failedPartition='provider-http-'+randomUUID(),failedSession=session.fromPartition(failedPartition);let failedPosts=0;
+ await failedSession.protocol.handle('https',request=>{
+  if(request.method==='POST'){failedPosts++;return new Response('{}',{status:503,headers:{'content-type':'application/json'}});}
+  return new Response(shell(inputs.doctorville+`<script>const form=document.querySelector('form');Object.defineProperty(form,'__reactProps$synthetic',{value:{onSubmit(){}}});form.onsubmit=event=>{event.preventDefault();fetch('/apis/auth/login',{method:'POST',body:new URLSearchParams(new FormData(form))});};</script>`),{headers:{'content-type':'text/html; charset=utf-8'}});
+ });
+ const failedController=new AbortController(),failedPage=new AutomationPage('doctorville',failedController.signal,{...remotePreferences('doctorville'),partition:failedPartition}),cancelFailed=setTimeout(()=>failedController.abort(),2200);
+ const failedResult=await new CredentialRunner({attempts:new CredentialAttempts(join(root,'http-attempts.json'))}).run('doctorville',failedPage,{candidate:{id:'SYNTHETIC_HTTP_USER',password:'SYNTHETIC_HTTP_PASSWORD'},validation:true,signal:failedController.signal});clearTimeout(cancelFailed);
+ const httpTrace=failedResult.trace.find(row=>row.credentialHttpStatus===503);
+ check('the fixed auth endpoint records HTTP failure without treating a POST or HTTP response as authentication',failedResult.status==='network_error'&&failedPosts===1&&httpTrace?.credentialRequests===1&&httpTrace?.credentialResponses===1&&!/SYNTHETIC_HTTP_|https:/.test(JSON.stringify(failedResult)));failedPage.close();
+
  const legacyPartition='legacy-post-'+randomUUID(),legacySession=session.fromPartition(legacyPartition);let legacySent=0;
  await legacySession.protocol.handle('https',async request=>{
   const path=new URL(request.url).pathname;

@@ -255,7 +255,7 @@ function ipc(){
   registerIPC('pc:set-entry-sites',ids=>{automation.setEntrySites(ids);return {ok:true,state:buildState()};});
   registerIPC('pc:daily',readOnly=>{if(typeof readOnly!=='boolean')return {ok:false,reason:'invalid_setting'};return automation.requestDaily({readOnly});});
   registerIPC('pc:quick-run',()=>automation.quick());
-  const credentialReply=result=>({ok:['saved','authenticated'].includes(result.status),status:safeCredentialStatus(result.status),submitted:result.submitted===true,attempted:result.attempted===true,...(Number.isSafeInteger(result.retryAt)?{retryAt:result.retryAt}:{})});
+  const credentialReply=result=>({ok:['saved','authenticated'].includes(result.status),status:safeCredentialStatus(result.status),submitted:result.submitted===true,attempted:result.attempted===true,...(result.detail==='input_format'?{detail:'input_format'}:{}),...(Number.isSafeInteger(result.retryAt)?{retryAt:result.retryAt}:{})});
   const refreshCredentialProfile=async(site,result)=>{
    if(result.status!=='authenticated')return;
    sessionChange(site,{login:'authenticated',authSource:'verified_profile',checkedAt:Date.now(),lastError:''});

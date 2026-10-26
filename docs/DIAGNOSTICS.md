@@ -22,11 +22,13 @@
 | `currentState.collection`, `sites`, `pendingQueries` | 선택 날짜·진행·판독 개수·종료 범위·대기열 |
 | `currentState.siteSessions`, `browserEvents` | 로그인 관찰과 세션 보관 요청, 차단·로드 실패. 세션 저장 요청은 로그인 성공과 다름 |
 | `currentState.credentials` | 보호 저장소 가용 여부·저장 여부·동의·시도 제한·최근 단계 진단. 암호문·계정값 없음 |
-| 계정 결과의 `trace` | 단계·상태·경과 시간·문서 세대·허용 origin 여부·고정 인증 신호·차단 개수. 최근 작업의 제한된 관찰이며 모든 과거 로그인 이력은 아님 |
+| 계정 결과의 `trace` | 단계·상태·경과 시간·문서 세대·허용 origin 여부·고정 인증 신호·차단 개수. 반복 관찰은 samples·firstElapsedMs로 합치고 초기 probe/fill을 보존. 최근 작업의 제한된 관찰이며 모든 과거 로그인 이력은 아님 |
 | `currentState.automation`, `attempts` | 작업 설정과 슬롯별 시도/미확인/완료. 클릭과 실제 사이트 완료를 구분 |
 | `heapUsedKb`, `rssKb` | Electron 주 프로세스 메모리. 전체 앱·렌더러·Windows 총 사용량이 아님 |
 
 원시 URL·HTML·콘솔 원문·네트워크 요청 본문·비밀번호·정답·쿠키·토큰을 수집하지 않는다. OS sandbox 상태, 실제 계정 인증 성공, 포인트 적립을 관찰 없이 추정하지 않는다.
+
+v8부터 검토한 닥터빌·디톡스 인증 경로의 실제 요청/응답 개수, HTTP 상태, 콘솔 오류 개수와 입력 형식 안내 여부도 고정 수치·boolean으로 내보낸다. credentialNetworkEnabled가 false이면 요청 개수0을 미전송 증거로 해석하지 않는다. HTTP200이나 버튼 클릭을 인증 성공으로 바꾸지 않는다. 본문·헤더·쿠키·토큰·콘솔 원문은 수집하지 않는다.
 
 ## 보관과 실패 처리
 
