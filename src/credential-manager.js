@@ -21,7 +21,7 @@ export class CredentialManager{
   const decision=this.attempts.decision(site,this.now(),kind==='save',automatic);
   if(decision!=='ready'){
    const result={status:decision,at:this.now(),attempted:false,submitted:false,retryAt:this.attempts.retryAt(site,this.now()),kind};
-   const old=this.last.get(site);if(old?.submitted&&old.trace)result.previous={status:old.status,at:old.at,trace:old.trace};
+   const old=this.last.get(site);if(old?.submitted&&old.trace)result.previous={status:old.status,at:old.at,kind:old.kind,submitted:true,attempted:old.attempted===true,reads:old.reads,elapsedMs:old.elapsedMs,trace:old.trace};
    else if(old?.previous)result.previous=old.previous;
    this.last.set(site,result);this.onChange();return result;
   }
@@ -32,7 +32,7 @@ export class CredentialManager{
    run.page=await this.createPage(site,controller.signal,{validation:kind==='save',partition:'credential-validation-'+randomUUID()});
    result=await work(run.page,controller.signal,()=>!controller.signal.aborted&&(!automatic||this.automaticAllowed()&&this.vault.enabled(site)));
   }catch(error){result={status:safeCredentialStatus(controller.signal.aborted?'cancelled':error.code??error.message)};}
-  finally{run.page?.close();signal?.removeEventListener('abort',abort);if(this.active===run)this.active=null;this.last.set(site,{status:result.status,at:this.now(),kind,attempted:result.attempted===true,submitted:result.submitted===true,retryAt:this.attempts.retryAt(site,this.now()),...(Array.isArray(result.trace)?{trace:result.trace}:{}),...(Number.isSafeInteger(result.reads)?{reads:result.reads,elapsedMs:result.elapsedMs}:{})});this.onChange();}
+  finally{run.page?.close();signal?.removeEventListener('abort',abort);if(this.active===run)this.active=null;this.last.set(site,{status:result.status,at:this.now(),kind,attempted:result.attempted===true,submitted:result.submitted===true,retryAt:this.attempts.retryAt(site,this.now()),...(result.detail==='input_format'?{detail:'input_format'}:{}),...(Array.isArray(result.trace)?{trace:result.trace}:{}),...(Number.isSafeInteger(result.reads)?{reads:result.reads,elapsedMs:result.elapsedMs}:{})});this.onChange();}
   return result;
  }
  async save(site,id,password,automatic){

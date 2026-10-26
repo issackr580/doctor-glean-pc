@@ -43,3 +43,70 @@ test('retry time gives the actual rolling-window boundary without clearing login
 test('manager blocks a cooling-down request before opening another login page',async t=>{const s=setup(t);let pages=0;const m=new CredentialManager({directory:s.root,applicationId:'developer',protect:protector(),automaticAllowed:()=>true,isManualOpen:()=>false,now:s.now,createPage:async()=>{pages++;throw Error();}});m.attempts.reserve('hmp',s.now());m.attempts.finish('hmp','blocked',s.now());const result=await m.save('hmp',account.id,account.password,true);assert.equal(result.status,'cooldown');assert.equal(result.retryAt,s.now()+60000);assert.equal(pages,0);});
 test('credential diagnostics project only fixed observations even from arbitrary provider text',async()=>{const {credentialObservation}=await import('../src/credential-diagnostics.js');const row=credentialObservation('dtalks',{url:'https://www.dtalks.kr/member/loginConfirm.do?token=SYNTHETIC_PRIVATE',version:3,route:'other',diagnostics:()=>({popupDenied:0,navigationBlocked:1,raw:'SYNTHETIC_PRIVATE'})},'verify',{status:'blocked',message:'SYNTHETIC_PRIVATE',evidence:{passwordShown:true,account:'SYNTHETIC_PRIVATE',authEvidenceSource:'none'}},10);assert.equal(row.originAllowed,true);assert.equal(row.navigationBlocked,1);assert.equal(row.passwordShown,true);assert.doesNotMatch(JSON.stringify(row),/SYNTHETIC_PRIVATE|https:|token|loginConfirm/);});
 test('readiness is awaited before capturing the redirected verification URL',async t=>{const s=setup(t),a=new CredentialAttempts(join(s.root,'a.json'));let filled=false,settled=false;const p=fakePage('dtalks',async(_name,[input])=>{if(input.mode==='probe')return {status:'ready'};if(input.mode==='fill'){filled=true;return {status:'submitted',submitted:true};}assert.equal(settled,true);assert.equal(input.expectedUrl,'https://www.dtalks.kr/websim/vodList.do');return {status:'authenticated'};});p.ready=async()=>{if(filled&&!settled){p.url='https://www.dtalks.kr/websim/vodList.do';p.version++;settled=true;}};const r=await new CredentialRunner({...s,attempts:a}).run('dtalks',p,{candidate:account,validation:true,signal:new AbortController().signal});assert.equal(r.status,'authenticated');});
+
+test('a settled Dtalks POST result reads the fixed protected catalog once without another POST',async t=>{
+ const clock=setup(t),attempts=new CredentialAttempts(join(clock.root,'a.json'));let posts=0,catalogs=0;
+ const page=fakePage('dtalks',async(_name,[input])=>{
+  if(input.mode==='probe')return {status:'ready'};
+  if(input.mode==='fill'){posts++;page.url='https://www.dtalks.kr/member/loginConfirm.do';page.version++;return {status:'submitted',submitted:true};}
+  return page.url===credentialSite('dtalks').entry?{status:'authenticated'}:{status:'unknown',evidence:{observed:true,loginShown:false,passwordShown:false,logoutShown:false}};
+ });const load=page.load.bind(page);page.load=async url=>{if(url===credentialSite('dtalks').entry)catalogs++;await load(url);};
+ const result=await new CredentialRunner({attempts,now:clock.now,sleep:clock.sleep}).run('dtalks',page,{candidate:{...account},validation:true,signal:new AbortController().signal});
+ assert.equal(result.status,'authenticated');assert.equal(posts,1);assert.equal(catalogs,1);assert.ok(result.trace.some(row=>row.phase==='refresh'&&row.route==='login_result'));assert.ok(result.trace.some(row=>row.phase==='fill'));
+});
+test('a Dtalks result destination alone never validates the account or repeats its submission',async t=>{
+ const clock=setup(t),attempts=new CredentialAttempts(join(clock.root,'a.json'));let posts=0,catalogs=0;
+ const page=fakePage('dtalks',async(_name,[input])=>{
+  if(input.mode==='probe')return {status:'ready'};
+  if(input.mode==='fill'){posts++;page.url='https://www.dtalks.kr/member/loginConfirm.do';page.version++;return {status:'submitted',submitted:true};}
+  return page.url===credentialSite('dtalks').entry?{status:'login_required'}:{status:'unknown',evidence:{observed:true,loginShown:false,passwordShown:false,logoutShown:false}};
+ });const load=page.load.bind(page);page.load=async url=>{if(url===credentialSite('dtalks').entry)catalogs++;await load(url);};
+ const result=await new CredentialRunner({attempts,now:clock.now,sleep:clock.sleep}).run('dtalks',page,{candidate:{...account},validation:true,signal:new AbortController().signal});
+ assert.equal(result.status,'login_required');assert.equal(posts,1);assert.equal(catalogs,1);
+});
+test('an explicit Dtalks challenge is preserved without navigating it away',async t=>{
+ const clock=setup(t),attempts=new CredentialAttempts(join(clock.root,'a.json'));let catalogs=0;
+ const page=fakePage('dtalks',async(_name,[input])=>{
+  if(input.mode==='probe')return {status:'ready'};
+  if(input.mode==='fill'){page.url='https://www.dtalks.kr/member/loginConfirm.do';page.version++;return {status:'submitted',submitted:true};}
+  return {status:'challenge'};
+ });const load=page.load.bind(page);page.load=async url=>{if(url===credentialSite('dtalks').entry)catalogs++;await load(url);};
+ const result=await new CredentialRunner({attempts,now:clock.now,sleep:clock.sleep}).run('dtalks',page,{candidate:{...account},validation:true,signal:new AbortController().signal});
+ assert.equal(result.status,'challenge');assert.equal(catalogs,0);
+});
+test('repeated credential observations preserve the original probe and submit sequence',async()=>{
+ const {recordCredentialObservation}=await import('../src/credential-diagnostics.js');const rows=[];
+ for(const phase of ['open','probe','fill'])recordCredentialObservation(rows,{phase,status:'ready',elapsedMs:1});
+ for(let i=1;i<=126;i++)recordCredentialObservation(rows,{phase:'verify',status:'unknown',elapsedMs:i*350});
+ recordCredentialObservation(rows,{phase:'finish',status:'time_limit',elapsedMs:46000});
+ assert.deepEqual(rows.map(row=>row.phase),['open','probe','fill','verify','finish']);assert.equal(rows[3].samples,126);assert.equal(rows[3].firstElapsedMs,350);assert.equal(rows[3].elapsedMs,44100);
+ for(let i=0;i<100;i++)recordCredentialObservation(rows,{phase:'verify',status:i%2?'loading':'unknown',elapsedMs:47000+i});
+ assert.ok(rows.length<=32);assert.deepEqual(rows.slice(0,3).map(row=>row.phase),['open','probe','fill']);
+});
+test('a provider client-format notice stops candidate verification without saving its account',async t=>{
+ const clock=setup(t),attempts=new CredentialAttempts(join(clock.root,'a.json'));
+ const page=fakePage('doctorville',async(name,[input])=>{
+  if(name==='credential-page-state.js')return {status:'manual',detail:'input_format',evidence:{clientValidationError:true}};
+  if(input.mode==='probe')return {status:'ready'};
+  if(input.mode==='fill')return {status:'submitted',submitted:true};
+  return {status:'unknown',evidence:{observed:true,loginShown:true,passwordShown:true}};
+ });const result=await new CredentialRunner({attempts,now:clock.now,sleep:clock.sleep}).run('doctorville',page,{candidate:{...account},validation:true,signal:new AbortController().signal});
+ assert.equal(result.status,'manual');assert.equal(result.detail,'input_format');assert.ok(result.elapsedMs<5000);assert.ok(result.trace.some(row=>row.clientValidationError));
+});
+test('credential network counters recognize only the reviewed exact endpoints',async()=>{
+ const {isCredentialRequest}=await import('../src/credential-policy.js');
+ assert.ok(isCredentialRequest('doctorville','https://mims-account.shop.co.kr/apis/auth/login'));
+ assert.ok(isCredentialRequest('dtalks','https://www.dtalks.kr/member/loginConfirm.do'));
+ for(const url of ['https://mims-account.shop.co.kr.evil.invalid/apis/auth/login','http://mims-account.shop.co.kr/apis/auth/login','https://mims-account.shop.co.kr/apis/auth/login?password=private','https://user:pass@mims-account.shop.co.kr/apis/auth/login'])assert.equal(isCredentialRequest('doctorville',url),false);
+ assert.equal(isCredentialRequest('keymedi','https://mims-account.shop.co.kr/apis/auth/login'),false);
+});
+test('provider supplementation still coalesces unchanged polling and retains initial dispatch evidence',async t=>{
+ const clock=setup(t),attempts=new CredentialAttempts(join(clock.root,'a.json'));
+ const page=fakePage('doctorville',async(name,[input])=>{
+  if(name==='credential-page-state.js')return {status:'unknown',evidence:{clientValidationError:false}};
+  if(input.mode==='probe')return {status:'ready'};
+  if(input.mode==='fill')return {status:'submitted',submitted:true};
+  return {status:'unknown',evidence:{observed:true,loginShown:true,passwordShown:true}};
+ });const result=await new CredentialRunner({attempts,now:clock.now,sleep:clock.sleep}).run('doctorville',page,{candidate:{...account},validation:true,signal:new AbortController().signal});
+ assert.equal(result.status,'time_limit');assert.ok(result.trace.length<8);assert.ok(result.trace.some(row=>row.phase==='fill'));assert.ok(result.trace.some(row=>row.phase==='provider'&&row.samples>100));
+});
