@@ -4,7 +4,7 @@ Windows용 독립 실행기를 작은 단계로 검증한다. 기존 Android 제
 
 2026년 10월 26일 0.1.0-preview.7 기준. 계정 제출 후 문서 전환의 검증 바인딩 오류를 재현·수정하고, 인증 팝업·다음 시도 시각·단계 진단과 저장 후 작업 프로필 확인/조회 갱신을 연결했다. 사용자 Windows 보고에서5사이트 계정 저장을 확인했으나 나머지 사이트의 실제 성공은 추가 확인이 필요하다.
 
-공동 개발은 CONTRIBUTING, STATUS, ARCHITECTURE, DECISIONS, RELEASE_PROCESS를 기준으로 한다. 공개 소스·distribution 실행파일은 PC 전용 GitHub 저장소에서 관리하고, 본인용 developer 실행물은 별도 개인 초안으로 유지한다. 소스 기준 커밋·태그·문서·묶음을 같은 PC 저장소에 연결한다. Node/합성 Electron과 실제 Windows 근거를 구분하고 Android 원본과 기존 릴리스를 변경하지 않는다.
+공동 개발은 CONTRIBUTING, STATUS, ARCHITECTURE, DECISIONS, RELEASE_PROCESS를 기준으로 한다. 공개 소스·distribution 실행파일은 PC 전용 GitHub 저장소에서 관리하고, developer 실행물은 같은 PC 저장소의 지정 collaborator 전용 Draft로 공유한다. 소스 기준 커밋·태그·문서·묶음을 같은 PC 저장소에 연결한다. Node/합성 Electron과 실제 Windows 근거를 구분하고 Android 원본과 기존 릴리스를 변경하지 않는다.
 
 ## 1 기반
 
