@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>의사 이삭 줍기 PC</title>
+  <link rel="stylesheet" href="./style.css">
+  <script src="./app.js" type="module"></script>
+  <script src="./edition-ui.js" defer></script>
+</head>
+<body>
+  <main>
+    <header><div><p class="eyebrow" id="edition">PC 검증용</p><h1 id="app-name">의사 이삭 줍기</h1></div><span id="date"></span></header>
+    <section class="summary" aria-labelledby="summary-title">
+      <h2 id="summary-title">강의 조회</h2>
+      <button id="quick" class="primary" type="button">오늘 한 번에 실행</button><p class="notice">오늘 강의 조회·출석 상태 확인과 켜 둔 자동 기능을 함께 실행해요.</p>
+      <p>① 사이트 열기 → ② 사이트에서 로그인 → ③ 그 창 위쪽의 「로그인 마침 · 이 사이트 조회」를 눌러 주세요.</p>
+      <p class="notice">「로그인 마침」은 브라우저 세션 보관이에요. 아이디·비밀번호를 저장하려면 사이트별 「계정 저장·복구」를 이용해 주세요. 로그인 유지 기간은 사이트 정책을 따라요.</p>
+      <p class="notice">휴대폰과 설정·실행 내역을 공유하지 않아요. 양쪽에서 자동 실행을 켜면 같은 작업이 각각 실행될 수 있어요.</p>
+      <div class="query-controls"><label for="query-date">조회 날짜</label><input id="query-date" type="date"><button id="collect" class="primary" type="button">강의 조회</button><button id="cancel" type="button" disabled>조회 중지</button></div>
+    </section>
+    <p id="message" role="status" aria-live="polite"></p>
+    <p id="progress" role="status" aria-live="polite"></p>
+    <section id="sites" aria-label="사이트 목록"></section>
+    <section class="schedule" aria-labelledby="schedule-title"><div class="section-heading"><h2 id="schedule-title">강의 목록</h2><button id="copy" type="button">간략 목록 복사</button></div><div id="lectures"></div></section>
+    <section class="control" aria-labelledby="control-title">
+      <h2 id="control-title">자동 실행</h2>
+      <p id="automation-state">자동 실행을 중지한 상태예요.</p>
+      <p class="muted">기능을 선택하고 자동 실행을 허용해 주세요. PC가 켜져 있고 이 프로그램이 실행 중이어야 해요. 절전·종료로 기한을 놓친 작업은 몰아서 실행하지 않아요.</p>
+      <div id="features" class="features"></div>
+      <div class="query-controls"><button id="resume" class="primary" type="button">자동 실행 허용</button><button id="stop" type="button">전체 중지</button></div>
+      <h3>자동 입장 사이트</h3><div id="entry-sites" class="features"></div><p class="muted">조회 후 오늘 예약을 갱신해요. 클릭·강의창 이동·재생 확인은 각각 기록해요. 한미는 신청된 강의 시작 기준 10분 간격으로 최대 5회 확인해요.</p>
+    </section>
+    <section class="control section-space"><div class="section-heading"><h2>오늘 출석·퀴즈·브랜드관</h2><button id="daily-check" type="button">상태만 확인</button></div><p id="daily-progress" role="status"></p><div id="daily-results"></div></section>
+    <section class="schedule"><h2>오늘 자동 입장 예약·실행</h2><div id="entry-results"></div><p id="lounge-result" class="muted"></p></section>
+    <footer><span id="version"></span><button id="report" class="text-button" type="button">오류보고 저장</button><button id="quit" type="button">프로그램 종료</button><p>X는 트레이에 숨기기예요. 패치 전에는 프로그램 종료를 눌러 완전히 끝내 주세요.</p></footer>
+  </main>
+  <dialog id="credential-dialog" aria-labelledby="credential-title">
+    <h2 id="credential-title">계정 저장·복구</h2><p id="credential-storage"></p><p id="credential-saved"></p>
+    <form id="credential-form">
+      <label>아이디<input id="credential-id" type="text" autocomplete="username" maxlength="512" required></label>
+      <label>비밀번호<input id="credential-password" type="password" autocomplete="current-password" maxlength="4096" required></label>
+      <label class="feature"><input id="credential-new-automatic" type="checkbox">저장 후 로그인 만료 시 자동 복구 허용</label>
+      <p class="muted">별도의 임시 프로필에서 실제 로그인을 확인해요. 보안 문자·추가 인증·오류가 나오면 저장하지 않아요. 휴대폰·평소 브라우저의 계정은 가져오지 않아요.</p>
+      <button id="credential-save" type="submit" class="primary">로그인 검증 후 저장</button>
+    </form>
+    <hr><label class="feature"><input id="credential-enable" type="checkbox">저장 계정 자동 복구 허용</label>
+    <p class="muted">전체 자동 실행을 허용한 상태에서, 로그인 만료가 확인된 사이트만 복구해요. 비밀번호 오류·결과 미확인은 반복 제출하지 않아요.</p>
+    <div class="query-controls"><button id="credential-recover" type="button">저장 계정으로 로그인</button><button id="credential-remove" type="button">저장 계정 삭제</button><button id="credential-close" type="button">닫기</button></div>
+    <p id="credential-result" role="status" aria-live="polite"></p>
+  </dialog>
+</body>
+</html>

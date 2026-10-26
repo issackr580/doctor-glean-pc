@@ -1,0 +1,27 @@
+{
+  "name": "doctor-glean-pc",
+  "version": "0.1.0-preview.7",
+  "doctorGleanEdition": "developer",
+  "private": true,
+  "type": "module",
+  "main": "src/main.js",
+  "description": "의사 이삭 줍기 Windows 독립 상주 프로그램",
+  "scripts": {
+    "prestart": "node scripts/prepare-development.mjs",
+    "start": "electron .",
+    "test": "node --test test/*.test.js",
+    "check": "node scripts/check.mjs",
+    "engine:sync": "node scripts/sync-engine.mjs",
+    "test:electron": "node scripts/run-electron-tests.mjs",
+    "build:developer": "node scripts/build-windows-preview.mjs --edition=developer",
+    "build:distribution": "node scripts/build-windows-preview.mjs --edition=distribution",
+    "source:pack": "node scripts/export-source.mjs"
+  },
+  "devDependencies": {
+    "electron": "45.0.0"
+  },
+  "engines": {
+    "node": ">=24 <25",
+    "npm": ">=11 <12"
+  }
+}

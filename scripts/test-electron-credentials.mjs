@@ -1,0 +1,129 @@
+// Original login helpers in real isolated Electron pages. Synthetic accounts only.
+import {app,session,BrowserWindow} from 'electron';
+import {mkdtempSync,mkdirSync,readFileSync,writeFileSync,rmSync} from 'node:fs';
+import {join} from 'node:path';
+import {tmpdir} from 'node:os';
+import {randomUUID,randomBytes,createCipheriv,createDecipheriv} from 'node:crypto';
+import assert from 'node:assert/strict';
+import {AutomationPage} from '../src/automation-page.js';
+import {CredentialRunner} from '../src/credential-runner.js';
+import {CredentialAttempts} from '../src/credential-attempts.js';
+import {CredentialManager} from '../src/credential-manager.js';
+import {CREDENTIAL_SITES} from '../src/credential-policy.js';
+import {remotePreferences} from '../src/security.js';
+import {electronCatalogPage} from '../src/electron-catalog-page.js';
+import {initialSettings} from '../vendor/engine/core.js';
+app.on('window-all-closed',()=>{});
+const root=mkdtempSync(join(tmpdir(),'pc-credential-electron-'));app.setPath('userData',root);app.setPath('sessionData',join(root,'browser'));
+const checks=[],check=(name,value)=>{assert.ok(value,name);checks.push(name);},attempts=new CredentialAttempts(join(root,'attempts.json')),posts=[];
+const inputs={
+ doctorville:'<form><input id="identifier" name="identifier"><input type="password" id="password" name="password"><button type="submit">로그인</button></form>',
+ keymedi:'<form><input name="uid"><input type="password" name="password"><button type="submit" data-gtm-event-name="login_click" data-gtm-login-channel="일반 로그인" disabled>로그인</button></form>',
+ hmp:'<form id="loginForm" method="post" action="/login/loginProcess.hm"><input id="memId" name="memId"><input type="password" id="passwd" name="passwd"><button type="button" class="btn_login" onclick="login()">로그인</button></form>',
+ intermd:'<form id="form1" method="post"><input id="memberId" name="memberId"><input type="password" id="memberPw" name="memberPw"><button type="submit" onclick="login();return false;">로그인</button></form>',
+ whodadoc:'<form name="frm" method="post"><input id="userId" name="id"><input type="password" name="password"><input type="button" id="login" value="로그인"></form>',
+ medigate:'<form><input name="userId" aria-label="userId"><input type="password" name="password" aria-label="password"><button type="submit">로그인하기</button></form>',
+ ckd:'<div class="login-form"><input id="r_mbloginid" name="r_mbloginid"><input type="password" id="r_mbpswd" name="r_mbpswd"><button type="button" onclick="verifyRecaptcha()">로그인</button></div>',
+ bluepharm:'<form class="js_login_form" method="post" action="/svc/login/dologin"><input id="login_id" name="login_id"><input type="password" id="login_password" name="login_password"><input type="hidden" name="csrf" value="SYNTHETIC_CSRF"><button type="submit">로그인</button></form>',
+ dtalks:'<form id="loginForm" method="post" action="/member/loginConfirm.do"><input id="USER_ID" name="USER_ID"><input type="password" id="USER_PWD" name="USER_PWD"><button type="submit">로그인</button></form>',
+ docple:'<form><input name="id"><input type="password" name="password"><button type="submit">통합회원 로그인</button></form>'
+};
+const shell=body=>'<!doctype html><html><meta charset="utf-8"><body>'+body+'</body></html>';
+async function run(){
+ await app.whenReady();
+ for(const policy of CREDENTIAL_SITES){
+  const partition='credential-validation-'+randomUUID(),prefs={...remotePreferences(policy.id),partition},profile=session.fromPartition(partition);let accepted=false;
+  await profile.protocol.handle('https',async request=>{
+   const u=new URL(request.url);
+   if(request.method!=='GET'){
+    const record=JSON.parse(readFileSync(join(root,'attempts.json'))).sites[policy.id];assert.equal(record.status,'submitted');
+    const body=await request.text();assert.match(body,/SYNTHETIC_USER/);assert.match(body,/SYNTHETIC_PASSWORD/);posts.push(policy.id);accepted=true;return new Response('{}',{headers:{'content-type':'application/json'}});
+   }
+   assert.doesNotMatch(request.url,/SYNTHETIC_USER|SYNTHETIC_PASSWORD/);
+   if(accepted)return new Response(shell('<main><a href="/logout">로그아웃</a></main>'),{headers:{'content-type':'text/html'}});
+   const route=policy.routes[0],script=`const form=document.querySelector(${JSON.stringify(route.container)});const button=form.querySelector(${JSON.stringify(route.submit)});const send=async()=>{const body=new URLSearchParams();body.set('id',document.querySelector(${JSON.stringify(route.user)}).value);body.set('password',document.querySelector(${JSON.stringify(route.password)}).value);await fetch('/synthetic-login',{method:'POST',body});location.href=${JSON.stringify(policy.entry)};};window.login=send;window.verifyRecaptcha=send;window.emloginCheck=()=>{};window.md5=()=>{};window.gfn_callAjax=()=>{};Object.defineProperty(form,'__reactProps$synthetic',{value:{onSubmit(){}}});if(form.tagName==='FORM')form.addEventListener('submit',event=>{event.preventDefault();if(!['hmp','intermd'].includes(${JSON.stringify(policy.id)}))send();});if(['whodadoc'].includes(${JSON.stringify(policy.id)}))button.onclick=send;if(${JSON.stringify(policy.id)}==='keymedi')form.addEventListener('input',()=>queueMicrotask(()=>button.disabled=false));`;
+   return new Response(shell(inputs[policy.id]+'<script>'+script+'</script>'),{headers:{'content-type':'text/html; charset=utf-8'}});
+  });
+  const controller=new AbortController(),page=new AutomationPage(policy.id,controller.signal,prefs),candidate={id:'SYNTHETIC_USER',password:'SYNTHETIC_PASSWORD'};
+  try{
+   const result=await new CredentialRunner({attempts}).run(policy.id,page,{candidate,validation:true,signal:controller.signal});
+   check(policy.id+' original login validates only after one durable POST and post-submit authentication',result.status==='authenticated'&&result.submitted&&posts.filter(id=>id===policy.id).length===1);
+   const power=await page.root.webContents.executeJavaScript('({node:typeof require,bridge:typeof doctorGlean})');check(policy.id+' validation page cannot reach Node or control IPC',power.node==='undefined'&&power.bridge==='undefined');
+  }finally{candidate.id='';candidate.password='';page.close();}
+ }
+
+ const legacyPartition='legacy-post-'+randomUUID(),legacySession=session.fromPartition(legacyPartition);let legacySent=0;
+ await legacySession.protocol.handle('https',async request=>{
+  const path=new URL(request.url).pathname;
+  if(request.method==='POST'){legacySent++;await new Promise(resolve=>setTimeout(resolve,1400));return Response.redirect('https://www.dtalks.kr/websim/vodList.do',302);}
+  if(path==='/websim/vodList.do')return new Response(shell('<a href="/logout">로그아웃</a>'),{headers:{'content-type':'text/html; charset=utf-8'}});
+  return new Response(shell(inputs.dtalks),{headers:{'content-type':'text/html; charset=utf-8'}});
+ });
+ const legacyPage=new AutomationPage('dtalks',new AbortController().signal,{...remotePreferences('dtalks'),partition:legacyPartition});
+ const legacyResult=await new CredentialRunner({attempts:new CredentialAttempts(join(root,'legacy-attempts.json'))}).run('dtalks',legacyPage,{candidate:{id:'SYNTHETIC_USER',password:'SYNTHETIC_PASSWORD'},validation:true,signal:legacyPage.signal});
+ console.log('ELECTRON_CREDENTIALS_LEGACY:'+JSON.stringify({status:legacyResult.status,submitted:legacyResult.submitted,reads:legacyResult.reads,posts:legacySent}));
+ check('delayed original POST navigation keeps post-submit verification bound to the new document',legacyResult.status==='authenticated'&&legacyResult.submitted&&legacySent===1);legacyPage.close();
+
+ const providerPartition='provider-popup-'+randomUUID(),providerSession=session.fromPartition(providerPartition);let providerPosts=0;
+ await providerSession.protocol.handle('https',async request=>{
+  if(request.method==='POST'){providerPosts++;return new Response('{}',{headers:{'content-type':'application/json'}});}
+  if(new URL(request.url).hostname==='www.doctorville.co.kr'){
+   await new Promise(resolve=>setTimeout(resolve,1200));return new Response(shell('<a href="/logout">로그아웃</a>'),{headers:{'content-type':'text/html; charset=utf-8'}});
+  }
+  return new Response(shell(inputs.doctorville+`<script>const form=document.querySelector('form');Object.defineProperty(form,'__reactProps$synthetic',{value:{onSubmit(){}}});form.onsubmit=async event=>{event.preventDefault();await fetch('/synthetic-login',{method:'POST',body:new URLSearchParams(new FormData(form))});window.open('https://www.doctorville.co.kr/seminar/main','login-result');};</script>`),{headers:{'content-type':'text/html; charset=utf-8'}});
+ });
+ const providerPage=new AutomationPage('doctorville',new AbortController().signal,{...remotePreferences('doctorville'),partition:providerPartition});
+ const providerResult=await new CredentialRunner({attempts:new CredentialAttempts(join(root,'provider-attempts.json'))}).run('doctorville',providerPage,{candidate:{id:'SYNTHETIC_USER',password:'SYNTHETIC_PASSWORD'},validation:true,signal:providerPage.signal});
+ check('the approved provider popup carries the isolated submitted operation to its authenticated destination',providerResult.status==='authenticated'&&providerResult.submitted&&providerPosts===1&&providerPage.windows.length===2);
+ await providerPage.current.webContents.executeJavaScript('window.open("https://outside.example.invalid/","unapproved-auth");void 0');
+ check('authenticated login popups still reject unapproved destinations',providerPage.windows.length===2&&providerPage.diagnostics().popupDenied===1);
+ const providerPowers=await providerPage.current.webContents.executeJavaScript('({node:typeof require,bridge:typeof doctorGlean})');check('the login popup retains the no-Node and no-control-bridge boundary',providerPowers.node==='undefined'&&providerPowers.bridge==='undefined');
+ check('credential traces contain only fixed statuses, counters and booleans',!JSON.stringify(providerResult.trace).match(/https:|SYNTHETIC_|answerNum|identifier|nonce|pageTag/));providerPage.close();
+
+ const stalePartition='stale-credential-'+randomUUID(),staleSession=session.fromPartition(stalePartition);
+ await staleSession.protocol.handle('https',()=>new Response(shell(inputs.dtalks),{headers:{'content-type':'text/html; charset=utf-8'}}));
+ const stalePage=new AutomationPage('dtalks',new AbortController().signal,{...remotePreferences('dtalks'),partition:stalePartition});await stalePage.load('https://www.dtalks.kr/login.do');const oldVersion=stalePage.version;
+ await stalePage.load('https://www.dtalks.kr/login.do');const oldExecute=stalePage.current.webContents.executeJavaScript.bind(stalePage.current.webContents);let credentialEvaluations=0;stalePage.current.webContents.executeJavaScript=(...args)=>{credentialEvaluations++;return oldExecute(...args);};
+ const staleSecret=await stalePage.call('credential-login.js',[{site:'dtalks',mode:'fill',nonce:'synthetic_stale_nonce_1234',pageTag:'1:'+oldVersion,expectedUrl:stalePage.url,id:'SYNTHETIC_STALE_USER',password:'SYNTHETIC_STALE_PASSWORD'}],{navigation:true});
+ check('secrets are never evaluated in a replacement login document',staleSecret.status==='stale'&&credentialEvaluations===0);
+ const staleRead=await stalePage.call('credential-login.js',[{site:'dtalks',mode:'verify',nonce:'synthetic_stale_nonce_1234',pageTag:'1:'+oldVersion,expectedUrl:stalePage.url}]);check('stale credential reads request a fresh observation instead of reporting rejected credentials',staleRead.status==='loading'&&staleRead.documentChanged&&credentialEvaluations===0);stalePage.close();
+ // Full save -> isolated validation -> encrypted test adapter -> active-profile
+ // automatic restoration. The adapter is test-only and is not Windows DPAPI.
+ const key=randomBytes(32),protect={available:()=>true,encrypt:text=>{const iv=randomBytes(12),c=createCipheriv('aes-256-gcm',key,iv),data=Buffer.concat([c.update(text),c.final()]);return Buffer.concat([iv,c.getAuthTag(),data]);},decrypt:bytes=>{const d=createDecipheriv('aes-256-gcm',key,bytes.subarray(0,12));d.setAuthTag(bytes.subarray(12,28));return Buffer.concat([d.update(bytes.subarray(28)),d.final()]).toString();}};
+ const partitions=new Set(),activePartition='synthetic-active-'+randomUUID(),managerDirectory=join(root,'manager');let activeAuthenticated=false,managerPosts=0;
+ const make=async(signal,validation,partition)=>{
+  const prefs={...remotePreferences('dtalks'),partition:validation?partition:activePartition};
+  if(!partitions.has(prefs.partition)){
+   partitions.add(prefs.partition);let accepted=false;
+   await session.fromPartition(prefs.partition).protocol.handle('https',async request=>{
+    if(request.method==='POST'){
+     assert.equal(JSON.parse(readFileSync(join(managerDirectory,'credential-attempts-v1.json'))).sites.dtalks.status,'submitted');
+     managerPosts++;accepted=true;if(!validation)activeAuthenticated=true;return new Response('{}',{headers:{'content-type':'application/json'}});
+    }
+    const authenticated=validation?accepted:activeAuthenticated;
+    const body=authenticated?'<a href="/logout">로그아웃</a>':inputs.dtalks+'<script>document.querySelector("form").onsubmit=async event=>{event.preventDefault();await fetch("/synthetic-login",{method:"POST",body:new URLSearchParams(new FormData(event.target))});location.href="/websim/vodList.do";};</script>';
+    return new Response(shell(body),{headers:{'content-type':'text/html; charset=utf-8'}});
+   });
+  }
+  return new AutomationPage('dtalks',signal,prefs);
+ };
+ const manager=new CredentialManager({directory:managerDirectory,applicationId:'native-test',protect,automaticAllowed:()=>true,isManualOpen:()=>false,createPage:(_site,signal,{validation,partition}={})=>make(signal,validation,partition)});
+ const saved=await manager.save('dtalks','SYNTHETIC_USER','SYNTHETIC_PASSWORD',true);
+ check('manager saves only after an isolated candidate login is verified',saved.status==='saved'&&managerPosts===1&&!activeAuthenticated);
+ check('encrypted account file contains neither username nor password',!/SYNTHETIC_USER|SYNTHETIC_PASSWORD/.test(readFileSync(join(managerDirectory,'credentials-v1.json'),'utf8')));
+ const autoController=new AbortController(),autoPage=manager.wrapPage('dtalks',await make(autoController.signal,false));await autoPage.load('https://www.dtalks.kr/websim/vodList.do');
+ check('an expired task profile is automatically restored with explicit saved-account consent',managerPosts===2&&activeAuthenticated&&(await manager.verifyPage('dtalks',autoPage))==='authenticated');
+ await autoPage.load('https://www.dtalks.kr/websim/vodList.do');check('an already authenticated task does not submit another login',managerPosts===2);
+ manager.setAutomatic('dtalks',false);activeAuthenticated=false;await autoPage.load('https://www.dtalks.kr/websim/vodList.do');check('revoking automatic recovery prevents a new login submission',managerPosts===2&&!activeAuthenticated);autoPage.close();
+ // Same-origin automatic redirects must settle before catalog reading; a true
+ // network failure remains a typed failure. This never retries a login POST.
+ const partition='synthetic-catalog-redirect-'+randomUUID(),prefs={...remotePreferences('doctorville'),partition};
+ await session.fromPartition(partition).protocol.handle('https',request=>new Response(shell(new URL(request.url).search?'로그인<input type="password">':'<script>location.replace("/seminar/main?redirected=1")</script>'),{headers:{'content-type':'text/html'}}));
+ const controller=new AbortController(),reader=electronCatalogPage(initialSettings().profiles.doctorville,controller.signal,prefs);await reader.open();let row;const until=Date.now()+4000;do{row=await reader.read('2026-10-26',null);if(row.status==='loading')await new Promise(resolve=>setTimeout(resolve,60));}while(row.status==='loading'&&Date.now()<until);check('same-site client redirect is read as a login destination instead of connection failure',row.status==='login');reader.close();
+ const worker=new AutomationPage('doctorville',new AbortController().signal,prefs);await worker.load('https://www.doctorville.co.kr/seminar/main');let destination;const readyUntil=Date.now()+4000;do{destination=worker.url;if(!new URL(destination).search)await new Promise(resolve=>setTimeout(resolve,60));}while(!new URL(destination).search&&Date.now()<readyUntil);check('automatic task workers also retain the approved client redirect destination',new URL(destination).search==='?redirected=1');worker.close();
+ check('no account values enter native diagnostics',!/SYNTHETIC_|https:|password|csrf/i.test(JSON.stringify(attempts.snapshot())));
+ check('temporary validation windows are released',BrowserWindow.getAllWindows().length===0);
+ mkdirSync(new URL('../verification/',import.meta.url),{recursive:true});writeFileSync(new URL('../verification/electron-credentials.json',import.meta.url),JSON.stringify({environment:'Linux Electron 45; synthetic HTTPS; immutable Android login assets',checks:checks.length,passed:checks,windowsDpapiVerified:false,actualAccountsVerified:false,posts:posts.length},null,2)+'\n');console.log('ELECTRON_CREDENTIALS_PASS:'+checks.length);app.quit();
+}
+run().catch(error=>{console.error('ELECTRON_CREDENTIALS_FAIL:'+error.stack);for(const w of BrowserWindow.getAllWindows())w.destroy();app.exit(1);});
+app.on('quit',()=>{try{rmSync(root,{recursive:true,force:true});}catch{}});

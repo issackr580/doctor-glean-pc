@@ -1,0 +1,61 @@
+# 구조와 신뢰 경계
+
+기준: PC 0.1.0-preview.7. Electron 45.0.0, JavaScript ES modules, 로컬 파일 저장을 사용한다.
+
+## 디렉터리
+
+| 경로 | 책임 |
+|---|---|
+| `src/main.js`, `src/preload.cjs` | 앱 수명주기·트레이·신뢰된 관리 창의 제한된 IPC |
+| `ui/` | 관리 화면. 사이트 원문이나 저장 비밀번호를 렌더링하지 않음 |
+| `src/security.js`, `src/sites.js` | 고정 사이트·이동·팝업 허용 범위와 원격 창 보안 설정 |
+| `src/catalog-*.js`, `src/electron-catalog-page.js` | 조회 대기열·판독·문서 수명·정규화·같은 날짜 캐시 보존 |
+| `src/credential-*.js` | 준비 폼·시도 제한·별도 계정 검증·암호화 저장·로그인 복구·최소 진단 |
+| `src/automation-controller.js`, `src/*-runner.js` | 출석·퀴즈·브랜드관·입장·자정 작업 조정 |
+| `src/local-state.js`, `src/workflow-store.js` | 외부 동작 전 기록과 기능 설정·작업 이력 |
+| `src/automation-page.js` | 원격 자동 작업 창. 허용된 엔진만 호출 |
+| `editions/` | 개발자 전용 기록기·추가 preload·화면과 배포용 대체 모듈 |
+| `vendor/` | Android에서 명시적으로 가져온 조회·자동 작업·계정 스냅샷과 해시 |
+| `scripts/`, `test/` | 준비·빌드·원본 동기화·합성 검사·소스 묶음 생성 |
+
+## 실행 경로
+
+관리 UI → 제한된 IPC → 주 프로세스 정책/기록 → 전용 사이트 창 → 기존 사이트 처리기 → 관찰한 완료 근거 순서다. 원격 페이지가 관리 IPC를 호출하거나 새 예약을 만들 수 없다. 관리 IPC는 정확한 관리 창·최상위 프레임·로컬 URL을 모두 검사한다.
+
+일반 수동 창과 자동 작업 창은 사이트별 전용 프로필을 공유한다. 수동 창을 조작 중이면 같은 사이트 자동 작업을 양보한다. 후보 계정 검증은 별도 비영속 프로필에서 수행하며 기존 로그인만으로 후보가 맞다고 판정하지 않는다. 새 계정이 검증·암호화 저장된 뒤 자동 복구를 허용한 경우 작업 프로필을 별도로 확인하고 목록을 갱신한다.
+
+팝업은 검토된 부모와 목적지만 허용한다. 원격 창은 Node 없음, sandbox·contextIsolation·webSecurity 켜짐, webview 차단을 유지한다. 로그인 직전의 제출 권한은 새 문서로 넘기지 않는다. 제출 후 결과 읽기는 새 문서의 로딩이 끝나면 URL·세대를 다시 캡처한다.
+
+## 조정과 저장
+
+한 조정기가 입장 기한, 닥터라운지, 한미 준비 확인, 일반 작업을 처리한다. 이미 전송한 요청의 확인은 마친 뒤 양보한다. 새 날짜·절전·종료로 기한을 놓친 작업을 몰아서 실행하지 않는다.
+
+| 파일 | 보관 내용·주의점 |
+|---|---|
+| `state-v1.json` | 기본 중지, 실행 epoch, 제출 전 예약/시도/불확실 잠금 |
+| `catalog-v1.json` | 선택 사이트와 날짜별 안전한 강의 결과 |
+| `workflows-v1.json` | 기능별 기본 꺼짐, 당일 확인·예약·이력 |
+| `credentials-v1.json` | 앱 ID·사이트에 연결한 DPAPI 암호문과 동의. 평문 없음 |
+| `credential-attempts-v1.json` | 시각·고정 상태·거절 잠금. 최근15분·당일 제한 유지 |
+| `developer-diagnostics-v1.json` | 개발자용에서 사용자가 켠 동안만 제한된 로컬 기록 |
+| `browser/` | 해당 에디션의 브라우저 저장소. 다른 기기나 개인 브라우저에서 복사하지 않음 |
+
+사용자 데이터는 `%APPDATA%/DoctorGleanPC-Developer` 또는 `%APPDATA%/DoctorGleanPC`에 있다. 이름·앱 ID·partition을 임의 변경하면 기존 자료를 잃은 것처럼 보일 수 있으므로 호환 변경으로 다룬다. 원자적 쓰기·검증 실패 때 자동 동작을 막으며 잘못된 파일을 자동 초기화하지 않는다.
+
+## 결과와 진단
+
+조회 완료 범위, 로그인 필요, 연결 실패를 구분한다. 세션 flush는 로그인 증거가 아니다. 출석·퀴즈의 최근 완료 증거를 보완적으로 사용하되 더 늦은 로그인 실패를 우선한다. 계정 저장은 별도 검증 결과이며 작업 프로필 로그인·강의 조회와 구분한다.
+
+계정 진단에는 단계, 고정 상태, 문서 버전, 허용 origin 여부, 로그인 폼 여부, 로그인/로그아웃 표시 여부, 차단 개수와 소요 시간만 남긴다. URL·계정값·쿠키·토큰·HTML·정답은 남기지 않는다. 로그인 제출 ACK도 서버의 인증 성공과 구분한다.
+
+## 엔진 스냅샷
+
+원본은 Android v0.7.113이다. 이 저장소에 Android 제품을 합치지 않는다. 일반 PC 개발에 Android 원본은 필요 없다. 갱신할 때만 관리자가 읽기 전용 Android 경로를 지정한다.
+
+```sh
+node scripts/sync-engine.mjs /path/to/webinar-android
+node scripts/sync-automation.mjs /path/to/webinar-android
+node scripts/sync-credentials.mjs /path/to/webinar-android
+```
+
+`vendor/*/manifest.json`의 출처·SHA, 생성물 변경과 관련 회귀 검사를 함께 검토한다. `vendor/`만 손으로 고치거나 PC 변경 때문에 Android 원본의 제품 코드·APK·릴리스를 변경하지 않는다.

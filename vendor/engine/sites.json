@@ -1,0 +1,125 @@
+[
+  {
+    "id": "doctorville",
+    "name": "닥터빌",
+    "short": "닥빌",
+    "host": "doctorville.co.kr",
+    "url": "https://www.doctorville.co.kr/seminar/main",
+    "menu": "라이브세미나",
+    "rowSelector": "a.list_detail[href*=\"seminarDetail?\"]",
+    "timeSelector": ".time .start",
+    "titleSelector": ".tit",
+    "advancedSelector": ".ic_survey",
+    "filter": "all",
+    "crawler": "catalog-v1",
+    "support": "trial"
+  },
+  {
+    "id": "keymedi",
+    "name": "키메디",
+    "short": "키메",
+    "host": "keymedi.com",
+    "url": "https://www.keymedi.com/meditv/live",
+    "menu": "메디TV · P 또는 M 표시",
+    "filter": "pm",
+    "crawler": "keymedi-live-v1",
+    "clientScript": "main.7fb34e30.chunk.js"
+  },
+  {
+    "id": "hmp",
+    "name": "한미 HMP",
+    "short": "한미",
+    "host": "hmp.co.kr",
+    "url": "https://www.hmp.co.kr/symposium/schedulerequest/scheduleList.hm",
+    "menu": "LIVE 심포지엄",
+    "filter": "all",
+    "crawler": "catalog-v2",
+    "support": "trial",
+    "rowSelector": "a.head",
+    "dateSelector": ".top .date",
+    "timeSelector": ".top .time",
+    "titleSelector": ".subject",
+    "singleAtTime": false
+  },
+  {
+    "id": "intermd",
+    "name": "인터엠디",
+    "short": "인터엠디",
+    "host": "intermd.co.kr",
+    "url": "https://www.intermd.co.kr/webinar/list.do",
+    "alternateCatalogUrl": "https://moa.intermd.co.kr/mobile/webinar/list.do",
+    "menu": "웹 세미나",
+    "filter": "all",
+    "crawler": "additional-catalog-v1",
+    "support": "trial"
+  },
+  {
+    "id": "whodadoc",
+    "name": "후다닥의사",
+    "short": "후다닥",
+    "host": "whodadoc.com",
+    "url": "https://hcp.whodadoc.com/hcp/main",
+    "menu": "웨비나",
+    "filter": "all",
+    "crawler": "additional-catalog-v1",
+    "support": "trial",
+    "discoverMenu": true,
+    "menuLabels": [
+      "웨비나",
+      "웹 세미나",
+      "웨비나&학회",
+      "웨비나/학회"
+    ]
+  },
+  {
+    "id": "medigate",
+    "name": "메디게이트",
+    "short": "메겟",
+    "host": "medigate.net",
+    "url": "https://new.medigate.net/symposium",
+    "menu": "웹심포지움",
+    "filter": "all",
+    "crawler": "catalog-v2",
+    "support": "trial"
+  },
+  {
+    "id": "ckd",
+    "name": "종근당",
+    "short": "종근당",
+    "host": "ckdmediview.com",
+    "url": "https://www.ckdmediview.com/hcpapp/webinar/webinar.do",
+    "menu": "웨비나 · Bell 지급",
+    "filter": "bell",
+    "crawler": "ckd-calendar-v1",
+    "support": "trial"
+  },
+  {
+    "id": "bluepharm",
+    "name": "블루팜",
+    "short": "블루팜",
+    "host": "bluepharmkorea.co.kr",
+    "url": "https://bluepharmkorea.co.kr/",
+    "menu": "웹심포지움 · 오프라인 전용 제외",
+    "filter": "all",
+    "crawler": "additional-catalog-v1",
+    "support": "trial",
+    "discoverMenu": true,
+    "menuLabels": [
+      "웹심포지움",
+      "웹심포지엄",
+      "웨비나",
+      "웹 세미나"
+    ]
+  },
+  {
+    "id": "dtalks",
+    "name": "디톡스",
+    "short": "디톡스",
+    "host": "dtalks.kr",
+    "url": "https://www.dtalks.kr/websim/vodList.do",
+    "menu": "웹 심포지엄 · 편성표",
+    "filter": "all",
+    "crawler": "additional-catalog-v1",
+    "support": "trial"
+  }
+]

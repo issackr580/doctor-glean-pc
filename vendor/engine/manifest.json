@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "sourceVersion": "0.7.113",
+  "sourceFiles": {
+    "additional-catalog.js": "890c093041297d2a3e833a611b3ee3c45215f1bdbf975625b0d2401309e22409",
+    "additional-collector.js": "ee5928abb4693b134d555e21fb6ca7c980bf581b004b88299b3a06844f768c2c",
+    "bluepharm-calendar.js": "81ce52437fc7874036d4fe632434cb6fc6e2a4b11c9922519b644b07fc8f806e",
+    "catalog.js": "7e4794bc112c66e28cfea28fb26cdca589488d266687d4d59723693701783627",
+    "ckd.js": "e0220d18a314853f4a9f280731c31eeb3dcf571d51b80f2eb5867aa2ce1891b9",
+    "collector.js": "d39f38613df88ded261f20c193626d9678cecb377e08e851cd53d15da6ae5370",
+    "core.js": "59ade1021d144145b8858960b5610fd91d52a42463898163b1227fc64e91039a",
+    "crawler.js": "8050d820e617f23a81a8cdd9306755ce85a769d80ecaeecc03811c2ac9051fdc",
+    "dtalks.js": "36bcd18ef3a673b7555a34545a22ed4cd307d666806dd7d521e8d3bbb460bce3",
+    "list-controls.js": "f531235a4b46c26d5a8019de496b6224d883cd2e711a5f90a825cfb6b9576fa8",
+    "reader-bundles.js": "c00269eac912477e4ef2a82fa639e00eeaa252f05adce7f9c67cfcacc59deabf",
+    "whodadoc-pages.js": "510963ad376656226ebd16c1e0887761d84be4543b2a2bdcccf536d32ec5d52b"
+  },
+  "outputs": {
+    "reader-keymedi.js": "08f36b875c4851787cddc2fa07e21bb13d39a71ff13225e0eb024f36807910e0",
+    "reader-ckd.js": "04eb6a55c2ef15caef9306b2ea02871cf4c6309483f8459105d16f7d7a51acbb",
+    "reader-catalog.js": "53984501c4b00e5643c98beb834bcf1d9f1c60db3779b422ff2a4f116c34ca69",
+    "reader-additional.js": "cd590764e3279a9064490da6594a04bd05cf3e2f656eb610ff03472c57f7df13",
+    "collect-catalog.js": "a642e01f5d193f4fd6a98f4837760641bc1974160523b0ca8b9f68641b26d58a",
+    "collect-additional.js": "3b1a075c62577c86f9aa18db3cccd723b60ca78d1a26dc0c7b529c8610b0f3b6",
+    "catalog-action.js": "6ea70133213435f003464588ef3f2738d3cabd535c6fb54525469b5b4c46c6d2",
+    "additional-action.js": "db6b12fcb4c0c6b4ac8635470e8c25d52e117affd046c750f0719555ea47bdad",
+    "core.js": "59ade1021d144145b8858960b5610fd91d52a42463898163b1227fc64e91039a",
+    "sites.json": "51ec75f664ada4df506930cbfd129568ae84193cdbc0f3b1461aebd80896c511"
+  }
+}
