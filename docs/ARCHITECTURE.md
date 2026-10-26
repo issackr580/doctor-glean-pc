@@ -1,6 +1,6 @@
 # 구조와 신뢰 경계
 
-기준: PC 0.1.0-preview.8. Electron 45.0.0, JavaScript ES modules, 로컬 파일 저장을 사용한다.
+기준: PC 0.1.0-preview.9. Electron 45.0.0, JavaScript ES modules, 로컬 파일 저장을 사용한다.
 
 ## 디렉터리
 
@@ -59,3 +59,5 @@ node scripts/sync-credentials.mjs /path/to/webinar-android
 ```
 
 `vendor/*/manifest.json`의 출처·SHA, 생성물 변경과 관련 회귀 검사를 함께 검토한다. `vendor/`만 손으로 고치거나 PC 변경 때문에 Android 원본의 제품 코드·APK·릴리스를 변경하지 않는다.
+
+디톡스의 PC 전용 판독은 공개 CSS로 확인한 닫힌 프로필 상자의 정확한 로그아웃 요소와 안전한 목적지/원래 함수 참조를 읽는다. 후보 계정은 실제 요청/정상 응답과 보호 목록 재확인이 함께 필요하다. 원래 함수·접근자를 호출하거나 메뉴/로그아웃을 클릭하지 않는다. 작업 프로필·수동 세션의 읽기 전용 판독도 같은 범위에 묶는다. 수동 목록 열기 실패의1회 로그인 GET 대체는 고정 URL에만 적용하며 중단된 정상 이동이나 다른 사이트에는 적용하지 않는다.

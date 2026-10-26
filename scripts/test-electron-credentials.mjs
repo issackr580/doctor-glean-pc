@@ -65,6 +65,42 @@ async function run(){
   const result=await new CredentialRunner({attempts:new CredentialAttempts(join(root,'post-result-'+authenticated+'.json'))}).run('dtalks',page,{candidate:{id:'SYNTHETIC_USER',password:'SYNTHETIC_PASSWORD'},validation:true,signal:page.signal});
   check(authenticated?'a blank POST result verifies the session with one protected catalog GET and one POST':'a blank result and anonymous catalog do not prove candidate authentication',result.status===(authenticated?'authenticated':'login_required')&&sent===1&&catalogReads===1&&result.trace.some(row=>row.phase==='refresh'));page.close();
  }
+
+ // The reviewed Dtalks header keeps its server logout in a closed profile box.
+ const dtalksHeader=(href='/member/logout.do')=>'<header id="header"><div class="top_wrap"><div class="content_wrap"><div class="my_box" style="display:none"><div class="link_wrap"><a class="logout" href="'+href+'">로그아웃</a></div></div></div></div></header>';
+ const menuPartition='dtalks-menu-'+randomUUID(),menuSession=session.fromPartition(menuPartition);let menuAccepted=false,menuPosts=0,menuCatalogs=0;
+ await menuSession.protocol.handle('https',request=>{
+  const path=new URL(request.url).pathname;
+  if(request.method==='POST'){menuPosts++;menuAccepted=true;return Response.redirect('https://www.dtalks.kr/main.do',302);}
+  if(path==='/login.do'&&menuAccepted)return Response.redirect('https://www.dtalks.kr/main.do',302);
+  if(path==='/websim/vodList.do')menuCatalogs++;
+  return new Response(shell(menuAccepted?dtalksHeader():inputs.dtalks),{headers:{'content-type':'text/html; charset=utf-8'}});
+ });
+ const menuPage=new AutomationPage('dtalks',new AbortController().signal,{...remotePreferences('dtalks'),partition:menuPartition});
+ const menuResult=await new CredentialRunner({attempts:new CredentialAttempts(join(root,'menu-attempts.json'))}).run('dtalks',menuPage,{candidate:{id:'SYNTHETIC_MENU_USER',password:'SYNTHETIC_MENU_PASSWORD'},validation:true,signal:menuPage.signal});
+ check('a closed Dtalks profile menu validates only after the real POST response and one protected catalog read',menuResult.status==='authenticated'&&menuPosts===1&&menuCatalogs===1&&menuResult.trace.some(row=>row.authEvidenceSource==='dtalks_server_logout'&&row.dtalksLogoutVisible===false&&row.credentialHttpStatus===302));
+ check('hidden-menu proof returns fixed booleans without changing visibility or exposing page values',!await menuPage.current.webContents.executeJavaScript('getComputedStyle(document.querySelector(".my_box")).display!=="none"')&&!/SYNTHETIC_MENU_|https:|link_wrap|my_box/.test(JSON.stringify(menuResult)));menuPage.close();
+ const existingMenu=new AutomationPage('dtalks',new AbortController().signal,{...remotePreferences('dtalks'),partition:menuPartition});let menuDecrypts=0;
+ const existingResult=await new CredentialRunner({attempts:new CredentialAttempts(join(root,'menu-existing.json'))}).run('dtalks',existingMenu,{readCredentials:()=>{menuDecrypts++;return {id:'SYNTHETIC_MENU_USER',password:'SYNTHETIC_MENU_PASSWORD'};},signal:existingMenu.signal});
+ check('an already authenticated closed menu requires no decryption or additional login submission',existingResult.status==='authenticated'&&!existingResult.submitted&&menuDecrypts===0&&menuPosts===1);existingMenu.close();
+ const inspectMenu=async(body,path='/websim/vodList.do',overrides={})=>{
+  const partition='menu-proof-'+randomUUID();await session.fromPartition(partition).protocol.handle('https',()=>new Response(shell(body),{headers:{'content-type':'text/html; charset=utf-8'}}));
+  const page=new AutomationPage('dtalks',new AbortController().signal,{...remotePreferences('dtalks'),partition});await page.load('https://www.dtalks.kr'+path);
+  const input={site:'dtalks',mode:'verify',nonce:'synthetic_menu_nonce_1234',pageTag:'1:'+page.version,expectedUrl:page.url,validation:true,validationSubmitted:true,dtalksAuthResponse:true,dtalksProtectedRead:true,...overrides};
+  try{const reply=await page.call('credential-page-state.js',[input]);return {...reply,fixtureCalls:await page.current.webContents.executeJavaScript('window.syntheticLogoutReads??0')};}finally{page.close();}
+ };
+ const missing=[];for(const flag of ['validationSubmitted','dtalksAuthResponse','dtalksProtectedRead'])missing.push(await inspectMenu(dtalksHeader(),undefined,{[flag]:false}));
+ check('a hidden logout alone cannot validate an unsubmitted candidate or replace native response evidence',missing.every(row=>row.status==='unknown'));
+ const foreign=await inspectMenu(dtalksHeader('https://outside.example.invalid/member/logout.do')),foreignBase=await inspectMenu('<base href="https://outside.example.invalid/">'+dtalksHeader());
+ check('hidden menu authentication rejects both foreign logout links and foreign HTML base destinations',foreign.status==='unknown'&&foreignBase.status==='unknown');
+ const conflict=await inspectMenu(dtalksHeader()+inputs.dtalks);
+ check('a visible login form conflicts with hidden logout markup and prevents authentication',conflict.status==='unknown'&&conflict.evidence.dtalksLoginConflict);
+ const callable=await inspectMenu(dtalksHeader('javascript:logout()')+'<script>window.syntheticLogoutReads=0;window.logout=function(){window.syntheticLogoutReads++;};</script>');
+ check('a reviewed zero-argument logout reference is read as evidence without being invoked',callable.status==='authenticated'&&callable.fixtureCalls===0);
+ const getter=await inspectMenu(dtalksHeader('javascript:logout()')+'<script>window.syntheticLogoutReads=0;Object.defineProperty(window,"logout",{get(){window.syntheticLogoutReads++;return function(){};}});</script>');
+ check('a logout getter is never invoked or accepted as a server logout function',getter.status==='unknown'&&getter.fixtureCalls===0);
+ const wrongPage=await inspectMenu(dtalksHeader(),'/login.do');check('the login route cannot authenticate merely by containing a hidden logout template',wrongPage.status==='unknown');
+
  const formatPartition='provider-format-'+randomUUID(),formatSession=session.fromPartition(formatPartition);let formatPosts=0;
  await formatSession.protocol.handle('https',request=>{
   if(request.method==='POST'){formatPosts++;return new Response('{}',{headers:{'content-type':'application/json'}});}

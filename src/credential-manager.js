@@ -51,7 +51,11 @@ export class CredentialManager{
   return this.#operation(site,'recover',async(page,signal,allowed)=>this.runner.run(site,page,{readCredentials:()=>this.vault.read(site,{automatic:options.automatic===true}),automatic:options.automatic===true,signal,allowed}),options);
  }
  async verifyPage(site,page){
-  const reply=await page.call('credential-login.js',[{site,mode:'verify',nonce:'readonly_session_123456789',pageTag:'1:'+Math.max(1,page.version),expectedUrl:page.url,diagnostics:false}]);
+  await page.ready?.();const input={site,mode:'verify',nonce:'readonly_session_123456789',pageTag:'1:'+Math.max(1,page.version),expectedUrl:page.url,diagnostics:false};
+  let reply=await page.call('credential-login.js',[input]);
+  if(site==='dtalks'&&reply.status==='unknown'){
+   const supplement=await page.call('credential-page-state.js',[{...input,validation:false}]);if(supplement.status==='authenticated')reply=supplement;
+  }
   return safeCredentialStatus(reply.status);
  }
  wrapPage(site,page){

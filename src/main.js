@@ -24,6 +24,8 @@ import {DAILY_TASKS} from './automation-policy.js';
 import {watchManualEntry} from './manual-entry-watch.js';
 import {CredentialManager} from './credential-manager.js';
 import {credentialSite,safeCredentialStatus} from './credential-policy.js';
+import {credentialPageState} from './credential-page-state.js';
+import {manualLoadRecovery} from './site-load-policy.js';
 
 const metadata=JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8'));
 const VERSION=metadata.version,EDITION=resolveEdition(metadata.doctorGleanEdition);
@@ -85,17 +87,20 @@ async function inspectSession(window,id){
  const contents=window.webContents,url=contents.getURL(),version=navigationVersions.get(window);
  if(!allowedNavigation(id,url))return;
  let timer;try{
-  const value=await Promise.race([contents.executeJavaScript('('+inspectLoginPage.toString()+')()',false),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('probe_timeout')),3000);})]);
+  const probe='(()=>{const state=('+inspectLoginPage.toString()+')();if('+JSON.stringify(id==='dtalks')+'&&state==="not_confirmed"){const reply=('+credentialPageState.toString()+')('+JSON.stringify({site:id,mode:'verify',expectedUrl:url,validation:false})+');if(reply.status==="authenticated")return "authenticated";}return state;})()';
+  const value=await Promise.race([contents.executeJavaScript(probe,false),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('probe_timeout')),3000);})]);
   if(!window.isDestroyed()&&contents.getURL()===url&&navigationVersions.get(window)===version){sessionChange(id,{login:safeLoginState(value),route:pageRole(url),checkedAt:Date.now()});}
  }catch{}finally{clearTimeout(timer);}
 }
-function navigateSite(window,id,url){
+function navigateSite(window,id,url,allowLoginFallback=true){
  if(!allowedNavigation(id,url))throw Error('invalid_site');
  const request=(loadRequests.get(window)??0)+1;loadRequests.set(window,request);
  sessionChange(id,{load:'loading',lastError:'',login:'loading'});
  if(window.isMinimized())window.restore();window.show();window.focus();
  window.loadURL(url).catch(error=>{
-  if(window.isDestroyed()||loadRequests.get(window)!==request||error.errno===-3)return;
+  if(window.isDestroyed()||loadRequests.get(window)!==request)return;
+  const recovery=manualLoadRecovery(id,url,error,allowLoginFallback);if(recovery==='aborted')return;
+  if(recovery==='login'){browserEvent(id,'login_fallback');navigateSite(window,id,siteById(id).loginUrl,false);return;}
   const reason=loadFailure(error.errno);sessionChange(id,{load:'failed',lastError:reason,login:'not_confirmed'});
   const page='<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'"><style>body{font:18px system-ui;padding:40px;color:#193d35}p{line-height:1.8}</style><h1>사이트를 열지 못했어요</h1><p>이 창 위쪽의 「다시 열기」 또는 「로그인 화면」을 눌러 주세요.</p><p>문제가 계속되면 관리 창에서 오류보고를 저장해 주세요.</p>';
   window.loadURL('data:text/html;charset=utf-8,'+encodeURIComponent(page)).catch(()=>{});

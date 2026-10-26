@@ -4,7 +4,7 @@ import {randomUUID} from 'node:crypto';
 
 const DAY=86_400_000,WINDOW=7*DAY,MAX_BYTES=4_194_304,MAX_EVENTS=2000;
 const AREAS=new Set(['collection','browser','control','process']);
-const PHASES=new Set(['start','finish','phase','document_ready','document_load_failed','navigation_blocked','popup_blocked','window_opened','window_open_failed','session_flushed','session_flush_failed','enable','disable']);
+const PHASES=new Set(['start','finish','phase','document_ready','document_load_failed','navigation_blocked','popup_blocked','window_opened','window_open_failed','login_fallback','session_flushed','session_flush_failed','enable','disable']);
 const SITES=new Set(['','doctorville','keymedi','hmp','intermd','whodadoc','medigate','ckd','bluepharm','dtalks','docple']);
 const REASONS=new Set(['idle','reading','finished','cancelled','suspended','date_mismatch','time_limit','storage_error','manual_view_open']);
 const kstDay=at=>new Date(at+9*3_600_000).toISOString().slice(0,10);
