@@ -1,7 +1,7 @@
 'use strict';
 import {reasonLabels,siteLabel,collectionSummary} from '../src/catalog-presentation.js';
 import {renderAutomation} from './automation-view.js';
-import {setupCredentials,renderCredentials,openCredential,credentialLabel} from './credential-view.js';
+import {setupCredentials,renderCredentials,openCredential,credentialLabel,resultLabel} from './credential-view.js';
 const api=window.doctorGlean,message=document.getElementById('message');let refreshing=false,repeat=false;
 function say(text){message.textContent=text;}
 function node(tag,text,className){const el=document.createElement(tag);if(text!==undefined)el.textContent=text;if(className)el.className=className;return el;}
@@ -45,6 +45,15 @@ async function refresh(){
    if(site.loginEntry){const login=node('button','로그인 화면');login.type='button';login.addEventListener('click',()=>perform(()=>api.openLogin(site.id),'로그인 화면을 열었어요. 로그인 뒤 상단의 「로그인 마침」을 눌러 주세요.'));actions.append(login);}
    if(site.open){const finish=node('button',site.catalog?'로그인 마침 · 조회':'로그인 마침');finish.type='button';finish.addEventListener('click',()=>perform(()=>api.finishLogin(site.id),'세션 저장 요청을 마쳤어요. 조회 결과에서 로그인 상태를 확인해 주세요.'));actions.append(finish);}
    const account=node('button','계정 저장·복구');account.type='button';account.addEventListener('click',()=>openCredential(site.id));actions.append(account);
+   const occupied=!!state.automation?.active||!!state.credentials?.active||state.collection.running||site.open;
+   if(site.catalog){
+    const retry=node('button','이 사이트만 조회');retry.type='button';retry.disabled=occupied;
+    retry.addEventListener('click',()=>perform(()=>api.collectSite(site.id),'이 사이트의 목록을 다시 확인해요.'));actions.append(retry);
+    if(state.results[site.id]?.status==='login'&&state.credentials?.vault.sites.some(row=>row.site===site.id)){
+     const recover=node('button','저장 계정으로 로그인');recover.type='button';recover.disabled=occupied;
+     recover.addEventListener('click',async()=>{try{const r=await api.recoverCredential(site.id);say(resultLabel(r)+(r.ok?' 강의 목록을 다시 확인해요.':''));await refresh();}catch{say('저장 계정의 로그인 상태를 확인하지 못했어요.');}});actions.append(recover);
+    }
+   }
    row.append(info,actions);return row;
   });document.getElementById('sites').replaceChildren(...rows);
   const selected=state.sites.filter(site=>site.selected),events=selected.flatMap(site=>(state.results[site.id]?.events??[]).map(event=>({...event,siteName:site.name,stale:state.results[site.id].stale}))).sort((a,b)=>a.time.localeCompare(b.time)||a.siteName.localeCompare(b.siteName));

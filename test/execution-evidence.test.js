@@ -9,7 +9,7 @@ import {EntryRunner} from '../src/entry-runner.js';
 import {DailyRunner} from '../src/daily-runner.js';
 import {AutomationController} from '../src/automation-controller.js';
 import {DeveloperJournal} from '../editions/developer/developer-journal.js';
-import {dailyEvidenceLabel,entrySummary,entryFailureLabel,entryEvidenceLabel,preflightLabel,entryRunVersion} from '../src/execution-presentation.js';
+import {dailyEvidenceLabel,entrySummary,entrySessionSummary,entryFailureLabel,entryEvidenceLabel,preflightLabel,entryRunVersion} from '../src/execution-presentation.js';
 import {kstDate,kstInstant} from '../src/schedule.js';
 const date=kstDate(),at=time=>kstInstant(date,time);
 function setup(t){
@@ -95,4 +95,31 @@ test('explicit daily status refresh rereads an old completion without using cred
  const s=setup(t);s.store.setFeature('dailyClaim',true);s.store.record(date,'doctorville:attendance',{status:'complete',reason:'today_status',attempted:true});let reads=0,normalPages=0;
  const runner=new DailyRunner({...s,now:s.clock.now,sleep:s.clock.sleep,createPage:async()=>{normalPages++;throw Error('must not recover credentials');},createInspectionPage:async()=>page(async()=>{reads++;return {status:'login',reason:'login_required'};})});
  await runner.run(['doctorville:attendance'],{readOnly:true});assert.equal(reads,1);assert.equal(normalPages,0);assert.equal(s.store.day().daily['doctorville:attendance'].status,'login');assert.equal(s.store.day().daily['doctorville:attendance'].attempted,true);assert.equal(runner.snapshot().readOnly,true);assert.equal(Object.keys(s.ledger.snapshot().jobs).length,0);
+});
+test('a new app session does not count five retained earlier clicks as current execution',()=>{
+ const jobs=[{attempts:Array.from({length:5},(_,i)=>({status:'clicked',checkedAt:100+i}))},{receipt:{status:'clicked',checkedAt:201}},{receipt:{status:'clicked'}}];
+ assert.deepEqual(entrySessionSummary(jobs,200),{currentClicks:1,previousClicks:5,undatedClicks:1});
+ assert.deepEqual(entrySessionSummary(jobs),{currentClicks:0,previousClicks:0,undatedClicks:7});
+});
+function batchController(t,s,createInspectionPage,options={}){
+ const controller=new AutomationController({file:join(s.root,'workflows.json'),ledger:s.ledger,createPage:async()=>{throw Error('unexpected credential or entry action');},createInspectionPage,isManualOpen:()=>false,catalog:()=>({}),catalogBusy:()=>false,queueCatalog(){},yieldCatalog(){},now:s.clock.now,...options});
+ clearInterval(controller.timer);t.after(()=>controller.close());controller.store.setFeature('entry',true);controller.entry.reserveCatalog(date,{medigate:{status:'review',events:[s.event,{...s.event,time:'14:00',title:'두 번째 합성 강의'}]}});return controller;
+}
+test('batch preflight checks upcoming reservations with zero dispatches and unchanged ledger',async t=>{
+ const s=setup(t),pages=[],controller=batchController(t,s,async()=>{const p=page(async()=>({status:'ready',targetMatched:true,entryControls:1}));pages.push(p);return p;});
+ const before=controller.store.entries().map(({key,status,due})=>({key,status,due}));assert.equal((await controller.preflightUpcoming()).ok,true);
+ assert.deepEqual(controller.snapshot().preflight,{running:false,total:2,completed:2,skipped:0,reason:'finished'});
+ assert.deepEqual(controller.store.entries().map(({key,status,due})=>({key,status,due})),before);assert.equal(pages.length,2);assert.ok(pages.every(p=>p.closed));assert.equal(Object.keys(s.ledger.snapshot().jobs).length,0);
+});
+test('a due entry aborts the batch and cannot start its next inspection page',async t=>{
+ const s=setup(t);s.ledger.setPaused(false);let reads=0,deliver;
+ const controller=batchController(t,s,async()=>page(async()=>{reads++;return new Promise(resolve=>{deliver=resolve;});}));
+ const checking=controller.preflightUpcoming();await new Promise(resolve=>setImmediate(resolve));s.clock.set(controller.store.entries()[0].due);controller.tick();controller.closed=true;deliver({status:'ready'});await checking;
+ assert.equal(reads,1);assert.equal(controller.snapshot().preflight.reason,'cancelled');assert.equal(controller.store.entries()[0].preflight.status,'cancelled');assert.equal(controller.store.entries()[1].preflight,undefined);assert.equal(Object.keys(s.ledger.snapshot().jobs).length,0);
+});
+test('manual owners are skipped and batch read budget expires without affecting the next reservation',async t=>{
+ const s=setup(t);let reads=0;
+ const controller=batchController(t,s,async()=>page(async()=>{reads++;s.clock.set(s.clock.now()+120001);return {status:'login'};}));
+ await controller.preflightUpcoming();assert.equal(reads,1);assert.equal(controller.snapshot().preflight.reason,'cancelled');assert.equal(controller.store.entries()[1].preflight,undefined);
+ controller.entry.isManualOpen=()=>true;await controller.preflightUpcoming();assert.equal(controller.snapshot().preflight.skipped,2);assert.equal(reads,1);assert.equal(Object.keys(s.ledger.snapshot().jobs).length,0);
 });

@@ -1,4 +1,5 @@
 import {SITES,validDate,dedupe,timeGroups,hmpTime,hmpSlotStatus,registrationStatus,registrationLabel,endedSlot} from '../vendor/engine/core.js';
+import {collectionSummary,resultGroup,siteLabel} from './catalog-presentation.js';
 
 export function formatPcSchedule(date,selected,results){
  if(!validDate(date)||!Array.isArray(selected)||selected.some(id=>!SITES.some(site=>site.id===id)))throw Error('invalid_schedule');
@@ -23,11 +24,12 @@ export function formatPcSchedule(date,selected,results){
  }
  const complete=selected.filter(id=>results[id]?.status==='ok'&&results[id].coverage&&!results[id].stale).length;
  if(!events.length)lines.push(complete===selected.length?'조건에 맞는 강의 없음':'확인된 강의 없음');
- lines.push('',`확인 완료 ${complete}/${selected.length}`);
+ lines.push('',`확인 완료 ${complete}/${selected.length}`,collectionSummary(results,selected));
  if(complete<selected.length)lines.push('※ 미확인 사이트가 포함된 잠정 일정표입니다.');
  for(const site of SITES.filter(site=>selected.includes(site.id))){
   const row=results[site.id];
   if(row?.stale)lines.push('저장된 목록: '+site.name+' — 최신 조회 미완료');
+  else if(['read','current'].includes(resultGroup(row)))lines.push('범위 확인: '+site.name+' — '+siteLabel(row));
   else if(!row||row.status!=='ok'||!row.coverage)lines.push('미확인: '+site.name);
   else if(!row.events.length)lines.push('강의 없음: '+site.name);
  }

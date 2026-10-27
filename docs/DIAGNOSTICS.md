@@ -1,5 +1,7 @@
 # 공동 개발용 진단 수집
 
+preview.13은 `sites[].inspection`에 달력 확인/상태·선택 날짜/월, 현재 목록 판독, 카드 형식 enum, 추가 목록/페이지 수와 모호성 boolean을 보존한다. 원문 samples·회원·URL·달력 셀 내용은 제외한다. 예전 보고서에 빠진 사실은 소급 복원하지 않으며 새 조회가 필요하다. `automation.preflight`는 이번 일괄 사전 검사의 처리·건너뜀 수와 중단 상태이고, 예약별 실제 결과는 각 `preflight`다. `processStartedAt`과 영속 클릭 시각으로 이전 실행 기록을 구분한다.
+
 preview.12의 예약 검증은 [PC 검증 방법](ENTRY_VALIDATION.md)을 따른다. 개발자 이력에는 `area=automation`의 scheduled/start/inspect/open_detail/dispatch/retry/result/preflight 단계도 포함된다. key/runId는 로컬 익명 식별자이고 appVersion/sourceCommit은 그 실행의 기준이다. due/startedAt/delayMs와 고정 개수·boolean으로 단계와 지연을 대조한다. 기록이 없다는 것만으로 실행이 없었다고 판단하지 않는다. 현재 상태에는 exportedAt·processStartedAt·build·selectedCatalogSites가 추가되며, 예전 기록의 버전을 현재 실행판으로 추정하지 않는다. 배포용에는 추가 이력 기록기가 없다.
 
 `credentialRequestObservationSupported=false`인 사이트는 Network 관찰이 켜져 있어도 검토된 인증 POST 경로의 송신·응답 수를 집계하지 않는다. 이때0은 미전송 증거가 아니다. 이번 추가 사용자의 한미/메디게이트 후보 실패도 이 제한을 구분해 해석한다.

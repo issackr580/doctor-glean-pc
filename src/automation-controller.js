@@ -19,8 +19,8 @@ export class AutomationController{
  allowed(){return !this.closed&&!this.ledger.snapshot().paused&&!this.store.failed;}
  get busy(){return !!this.active||this.daily.busy||this.entry.busy||this.lounge.busy;}
  rearm(){this.boundary=this.now();this.morningAt=nextMorning(this.now());this.loungeAt=nextLoungePreparation(this.now());}
- snapshot(){return {features:this.store.features(),entrySites:this.store.entrySites(),today:this.store.day(),entries:this.store.entries(),daily:this.daily.snapshot(),active:this.active??'',queuedDaily:[...this.pendingDaily],nextMorning:this.store.features().morning?this.morningAt:0,nextLounge:this.store.features().lounge?this.loungeAt:0,storageUnavailable:this.store.failed};}
- diagnostics(){return {...this.store.diagnostics(),daily:this.daily.snapshot(),active:this.active??'',queuedDaily:[...this.pendingDaily],nextMorning:this.morningAt,nextLounge:this.loungeAt};}
+ snapshot(){return {features:this.store.features(),entrySites:this.store.entrySites(),today:this.store.day(),entries:this.store.entries(),daily:this.daily.snapshot(),preflight:this.preflightProgress,active:this.active??'',queuedDaily:[...this.pendingDaily],nextMorning:this.store.features().morning?this.morningAt:0,nextLounge:this.store.features().lounge?this.loungeAt:0,storageUnavailable:this.store.failed};}
+ diagnostics(){return {...this.store.diagnostics(),daily:this.daily.snapshot(),preflight:this.preflightProgress,active:this.active??'',queuedDaily:[...this.pendingDaily],nextMorning:this.morningAt,nextLounge:this.loungeAt};}
  setFeature(key,value){this.store.setFeature(key,value);if(!value){if(key==='entry')this.entry.cancel();if(key==='lounge')this.lounge.cancel();if(['dailyClaim','quizAuto','brand'].includes(key))this.daily.cancel();}this.rearm();if(key==='entry'&&value)this.entry.reserveCatalog(kstDate(this.now()),this.catalog(kstDate(this.now())));this.onChange();this.tick();}
  setEntrySites(ids){this.store.setEntrySites(ids);this.onChange();this.tick();}
  async preflightEntry(key){
@@ -28,6 +28,27 @@ export class AutomationController{
   this.active='preflight';this.onChange();
   try{return await this.entry.preflight(key);}
   finally{this.active=null;this.onChange();this.tick();}
+ }
+ async preflightUpcoming(){
+  if(this.closed||this.busy||this.catalogBusy())return {ok:false,reason:'busy'};
+  const now=this.now(),date=kstDate(now),keys=this.store.entries(date).filter(job=>job.status==='reserved'&&job.start>now&&this.store.entrySites().includes(job.site)).sort((a,b)=>a.start-b.start).slice(0,40).map(job=>job.key);
+  const controller=new AbortController();this.preflightBatch=controller;this.active='preflight';
+  const timer=setTimeout(()=>{controller.abort();this.entry.cancel();},120000);timer.unref?.();
+  const progress={running:true,total:keys.length,completed:0,skipped:0,reason:'running'};this.preflightProgress=progress;this.onChange();
+  try{
+   for(const key of keys){
+    if(this.closed||controller.signal.aborted||kstDate(this.now())!==date||this.now()-now>=120000){progress.reason='cancelled';break;}
+    // The normal scheduler cancels an active read. Also yield between pages,
+    // before it can schedule another read ahead of an already due entry.
+    if(this.allowed()&&this.store.features().entry&&this.entry.due(this.now())){progress.reason='entry_priority';break;}
+    const result=await this.entry.preflight(key);
+    if(controller.signal.aborted){progress.reason='cancelled';break;}
+    if(result.ok)progress.completed++;else progress.skipped++;
+    this.onChange();
+   }
+   if(progress.reason==='running')progress.reason='finished';
+   return {ok:true};
+  }finally{clearTimeout(timer);progress.running=false;this.preflightBatch=null;this.active=null;this.onChange();this.tick();}
  }
  requestDaily({readOnly=false,keys=DAILY_TASKS.map(task=>task.key)}={}){
   if(!readOnly&&!this.allowed())return {ok:false,reason:'paused'};
@@ -43,7 +64,7 @@ export class AutomationController{
   this.onChange();this.tick();
  }
  manualOpened(site){this.daily.manualOpened(site);this.entry.manualOpened(site);this.lounge.manualOpened(site);}
- cancel(reason='cancelled'){this.pendingDaily=[];this.pendingReadOnly=true;this.daily.cancel(reason);this.entry.cancel();this.lounge.cancel();this.onChange();}
+ cancel(reason='cancelled'){this.preflightBatch?.abort();this.pendingDaily=[];this.pendingReadOnly=true;this.daily.cancel(reason);this.entry.cancel();this.lounge.cancel();this.onChange();}
  suspended(){this.cancel('suspended');this.rearm();}
  resumed(){this.rearm();this.tick();}
  async #work(kind,work,{priority=false}={}){
@@ -60,7 +81,7 @@ export class AutomationController{
    if(this.active){
     if((entry||loungeDue)&&this.active==='daily'&&!this.daily.claimPending)this.daily.cancel('entry_priority');
     if(entry&&this.active==='lounge')this.lounge.cancel();
-    if(entry&&this.active==='prepare'||(entry||loungeDue)&&this.active==='preflight')this.entry.cancel();return;
+    if(entry&&this.active==='prepare'||(entry||loungeDue)&&this.active==='preflight'){this.preflightBatch?.abort();this.entry.cancel();}return;
    }
    if(entry){this.#work('entry',()=>this.entry.run(entry),{priority:true});return;}
    if(loungeDue){const at=this.loungeAt;this.loungeAt=nextLoungePreparation(now+1000);this.#work('lounge',()=>this.lounge.run(kstDate(at),at),{priority:true});return;}

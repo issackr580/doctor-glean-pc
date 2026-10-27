@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('doctorGlean',Object.freeze({
   setDate:date=>ipcRenderer.invoke('pc:set-date',date),
   selectSites:ids=>ipcRenderer.invoke('pc:select-sites',ids),
   collect:()=>ipcRenderer.invoke('pc:collect'),
+  collectSite:id=>ipcRenderer.invoke('pc:collect-site',id),
   cancelCollection:()=>ipcRenderer.invoke('pc:cancel-collection'),
   copySchedule:()=>ipcRenderer.invoke('pc:copy-schedule'),
   setPaused:value=>ipcRenderer.invoke('pc:pause',value),
@@ -25,6 +26,7 @@ contextBridge.exposeInMainWorld('doctorGlean',Object.freeze({
   retryEntry:key=>ipcRenderer.invoke('pc:entry-retry',key),
   markManualEntry:key=>ipcRenderer.invoke('pc:entry-manual',key),
   preflightEntry:key=>ipcRenderer.invoke('pc:entry-preflight',key),
+  preflightUpcoming:()=>ipcRenderer.invoke('pc:entry-preflight-upcoming'),
   quit:()=>ipcRenderer.invoke('pc:quit'),
   exportReport:()=>ipcRenderer.invoke('pc:export-report'),
   onChanged:callback=>{

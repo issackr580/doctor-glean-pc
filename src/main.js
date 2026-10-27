@@ -30,6 +30,7 @@ import {manualLoadRecovery} from './site-load-policy.js';
 
 const metadata=JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8'));
 const VERSION=metadata.version,EDITION=resolveEdition(metadata.doctorGleanEdition);
+const PROCESS_STARTED_AT=Math.floor(Date.now()-process.uptime()*1000);
 app.setName(EDITION.name);
 const dataDirectory=join(app.getPath('appData'),EDITION.directory),browserDirectory=join(dataDirectory,'browser');
 mkdirSync(browserDirectory,{recursive:true,mode:0o700});
@@ -52,7 +53,7 @@ function browserEvent(site,kind){
 function validQueryDate(date){try{kstInstant(date,'00:00');const today=kstDate();return date>=today&&date<=kstDate(kstInstant(today,'00:00')+7*86_400_000);}catch{return false;}}
 function notify(){if(control&&!control.isDestroyed())control.webContents.send('pc:changed');}
 const buildState=()=>({
-  version:VERSION,appName:EDITION.name,applicationId:EDITION.appId,edition:EDITION.id,date:validQueryDate(viewDate)?viewDate:(viewDate=kstDate()),today:kstDate(),
+  version:VERSION,processStartedAt:PROCESS_STARTED_AT,appName:EDITION.name,applicationId:EDITION.appId,edition:EDITION.id,date:validQueryDate(viewDate)?viewDate:(viewDate=kstDate()),today:kstDate(),
   maxDate:kstDate(kstInstant(kstDate(),'00:00')+7*86_400_000),paused:state.snapshot().paused,
   sites:SITES.map(({id,name,loginUrl})=>({id,name,open:[...manualOwners.values()].includes(id),loginEntry:!!loginUrl,session:effectiveSession(id),catalog:id!=='docple',selected:catalog.selected().includes(id)})),
   collection:collector.snapshot(),results:catalog.view(validQueryDate(viewDate)?viewDate:kstDate()).results,
@@ -63,7 +64,7 @@ const buildState=()=>({
 
 function diagnosticSnapshot(){
  const snapshot=state.snapshot();
- return {appName:EDITION.name,applicationId:EDITION.appId,edition:EDITION.id,appVersion:VERSION,build:BUILD_INFO,exportedAt:Date.now(),processStartedAt:Math.floor(Date.now()-process.uptime()*1000),date:kstDate(),automationPaused:snapshot.paused,
+ return {appName:EDITION.name,applicationId:EDITION.appId,edition:EDITION.id,appVersion:VERSION,build:BUILD_INFO,exportedAt:Date.now(),processStartedAt:PROCESS_STARTED_AT,date:kstDate(),automationPaused:snapshot.paused,
   runtime:{platform:process.platform,arch:process.arch,electron:process.versions.electron,chromium:process.versions.chrome,osRelease:release()},
   stage:'automation',automationAvailable:true,collection:collector.snapshot(),selectedCatalogSites:catalog.selected(),pendingQueries:catalogQueue?.snapshot()??[],sites:catalog.diagnostics(viewDate),automation:automation?.diagnostics(),
   siteSessions:SITES.map(({id})=>({site:id,open:[...manualOwners.values()].includes(id),...effectiveSession(id)})),credentials:credentials?.snapshot(),browserEvents:[...browserEvents],developerDiagnostics:developerTools?.status(),
@@ -251,6 +252,11 @@ function ipc(){
     catalogQueue.request(viewDate,catalog.selected());
     return {ok:true};
   });
+  registerIPC('pc:collect-site',id=>{
+    if(!SITES.some(site=>site.id===id&&id!=='docple'))return {ok:false,reason:'invalid_site'};
+    if(!validQueryDate(viewDate))return {ok:false,reason:'invalid_date'};
+    catalogQueue.request(viewDate,[id]);return {ok:true};
+  });
   registerIPC('pc:cancel-collection',()=>{catalogQueue.clear();collector.cancel();return {ok:true};});
   registerIPC('pc:copy-schedule',async()=>{await clipboard.writeText(formatPcSchedule(viewDate,catalog.selected(),catalog.view(viewDate).results));return {ok:true};});
   registerIPC('pc:pause',value=>{
@@ -285,6 +291,7 @@ function ipc(){
   registerIPC('pc:entry-retry',key=>({ok:automation.entry.retryJob(key)}));
   registerIPC('pc:entry-manual',key=>({ok:automation.entry.cancelJob(key,true)}));
   registerIPC('pc:entry-preflight',key=>automation.preflightEntry(key));
+  registerIPC('pc:entry-preflight-upcoming',()=>automation.preflightUpcoming());
   registerIPC('pc:quit',()=>{setImmediate(()=>app.quit());return {ok:true};});
   registerIPC('pc:open-site',id=>{
     if(!siteById(id))return {ok:false,reason:'invalid_site'};

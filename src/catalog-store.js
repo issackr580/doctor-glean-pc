@@ -9,7 +9,7 @@ const IDS=new Set(SITES.map(s=>s.id));
 const STATUSES=new Set(['ok','review','login','blocked','error','cancelled','busy']);
 const REASONS=new Set(['list_read','list_unconfirmed','login_required','security_check','network_error','time_limit','cancelled','manual_view_open','invalid_response','date_mismatch','navigation_changed','action_rejected','storage_error','suspended','entry_priority']);
 const MAX_BYTES=4_194_304;
-const STOP_REASONS=new Set(['doctorville_list_exhausted','hmp_list_exhausted','after_target_date','past_target_date','current_list_only','whodadoc_date_checked']);
+const STOP_REASONS=new Set(['doctorville_list_exhausted','hmp_list_exhausted','after_target_date','past_target_date','current_list_only','whodadoc_date_checked','selected_month_calendar']);
 function inspectResult(raw){
  const d=raw?.diagnostics??raw?.inspection??{},out={stopReason:STOP_REASONS.has(d.stopReason)?d.stopReason:'unclassified',listStatus:['checked','read'].includes(d.listDetails?.status??d.listStatus)?d.listDetails?.status??d.listStatus:'unknown'};
  for(const key of ['rows','totalRows','undated','untimed','untitled','pages','expansions','unknown','reads','elapsedMs'])if(Number.isSafeInteger(d[key])&&d[key]>=0&&d[key]<=1000000)out[key]=d[key];
@@ -17,13 +17,25 @@ function inspectResult(raw){
  if(['dns_error','offline','time_limit','certificate_error','load_failed','navigation_cancelled'].includes(d.failure))out.failure=d.failure;
  if(typeof d.calendarAgreement==='boolean')out.calendarAgreement=d.calendarAgreement;
  if(['after_target_date','past_target_date'].includes(d.dateBoundary))out.dateBoundary=d.dateBoundary;
+ for(const key of ['currentListRead','startDatesRead','calendarChecked','calendarEmpty'])if(typeof d[key]==='boolean')out[key]=d[key];
+ if(['checked','unconfirmed','waiting'].includes(d.calendarStatus))out.calendarStatus=d.calendarStatus;
+ if(['selected_day_cell','complete_weekday_month','complete_weekday_grid','calendar_day_unconfirmed'].includes(d.calendarReason))out.calendarReason=d.calendarReason;
+ if(/^\d{4}-\d{2}-\d{2}$/.test(d.calendarDate))out.calendarDate=d.calendarDate;
+ if(/^\d{4}-\d{2}$/.test(d.calendarMonth))out.calendarMonth=d.calendarMonth;
+ if(['intermd_cards','sem_tit','calendar_items','generic'].includes(d.cardLayout))out.cardLayout=d.cardLayout;
+ for(const [key,source] of [['more','continuationMore'],['pagers','continuationPages']]){const n=d.continuation?.[key]??d[source];if(Number.isSafeInteger(n)&&n>=0&&n<=1000)out[source]=n;}
+ const ambiguous=d.continuation?.ambiguous??d.continuationAmbiguous;if(typeof ambiguous==='boolean')out.continuationAmbiguous=ambiguous;
  return out;
 }
-function scopeOf(inspection,coverage){
+function scopeOf(inspection,coverage,site,date){
  if(coverage&&['doctorville_list_exhausted','hmp_list_exhausted'].includes(inspection.stopReason)&&inspection.listStatus==='checked')return 'list_checked';
  if(coverage&&inspection.stopReason==='whodadoc_date_checked'&&inspection.listStatus==='checked')return 'date_range_checked';
  if(coverage&&inspection.calendarAgreement===true&&inspection.unknown===0)return 'calendar_checked';
  if(coverage&&inspection.dateBoundary===inspection.stopReason&&['after_target_date','past_target_date'].includes(inspection.stopReason))return 'date_range_checked';
+ if(site==='dtalks'&&coverage&&inspection.stopReason==='selected_month_calendar'&&inspection.calendarChecked===true&&inspection.calendarStatus==='checked'&&inspection.calendarDate===date&&inspection.calendarMonth===date.slice(0,7))return 'calendar_checked';
+ const fields=inspection.rows>0&&inspection.undated===0&&inspection.untimed===0&&inspection.untitled===0;
+ if(fields&&inspection.currentListRead===true&&inspection.stopReason==='current_list_only'&&(site==='hmp'&&inspection.listStatus==='read'||site==='intermd'&&inspection.cardLayout==='intermd_cards'))return 'current_list_checked';
+ if(fields&&site==='bluepharm'&&inspection.startDatesRead===true&&inspection.cardLayout==='sem_tit'&&inspection.continuationMore===0&&inspection.continuationPages===0&&inspection.continuationAmbiguous===false)return 'current_list_checked';
  return inspection.stopReason==='current_list_only'?'current_page':'unconfirmed';
 }
 const validDate=date=>{try{kstInstant(date,'00:00');return true;}catch{return false;}};
@@ -66,7 +78,7 @@ export function sanitiseResult(site,date,raw,now=Date.now()){
  if(!valid||rejected){status='review';reason='invalid_response';}
  events.sort((a,b)=>a.time.localeCompare(b.time)||a.title.localeCompare(b.title));
  const coverage=valid&&!rejected&&raw.coverage===true,inspection=inspectResult(raw);
- return {site,date,status,reason,coverage,scope:scopeOf(inspection,coverage),inspection,events,checkedAt:now,stale:false};
+ return {site,date,status,reason,coverage,scope:scopeOf(inspection,coverage,site,date),inspection,events,checkedAt:now,stale:false};
 }
 
 function persist(file,data){
@@ -116,7 +128,7 @@ export class CatalogStore{
  view(date){if(!validDate(date))throw Error('invalid_date');return clone(this.#data.snapshots[date]??{date,results:{}});}
  record(site,date,raw,now=Date.now()){
   const fresh=sanitiseResult(site,date,raw,now),old=this.#data.snapshots[date]?.results[site];
-  const verifiedEmpty=fresh.events.length===0&&fresh.coverage&&['ok','review'].includes(fresh.status);
+  const verifiedEmpty=fresh.events.length===0&&fresh.coverage&&(fresh.status==='ok'||fresh.status==='review'&&['list_checked','date_range_checked','calendar_checked'].includes(fresh.scope));
   if(!fresh.events.length&&!verifiedEmpty&&old?.events.length){fresh.events=clone(old.events);fresh.stale=true;fresh.previousCheckedAt=old.previousCheckedAt??old.checkedAt;}
   const next=clone(this.#data);next.snapshots[date]??={date,results:{}};next.snapshots[date].results[site]=fresh;
   const keep=new Set([date,...Object.keys(next.snapshots).filter(day=>day!==date).sort().reverse().slice(0,7)]);
