@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {credentialSite,allowedCredentialPage,safeCredentialStatus} from './credential-policy.js';
+import {credentialSite,allowedCredentialPage,safeCredentialStatus,bareDoctorvilleProvider} from './credential-policy.js';
 import {waitFor} from './async-work.js';
 import {credentialObservation,recordCredentialObservation} from './credential-diagnostics.js';
 import {inspectDocpleSession} from './credential-session.js';
@@ -9,7 +9,7 @@ export class CredentialRunner{
  constructor({attempts,now=Date.now,sleep=waitFor}){Object.assign(this,{attempts,now,sleep});}
  async run(site,page,{candidate,readCredentials,validation=false,automatic=false,signal,allowed=()=>true,onChange=()=>{}}){
   const policy=credentialSite(site),nonce=randomUUID().replace(/-/g,''),began=this.now();let attempted=false,submitted=false,at=0,usedProbe=false,reads=0,ready=0,lastVersion=-1,status='unknown',manualSince=0,submittedVersion=-1,refreshed=false,settledReads=0;
-  let failureCode;
+  let failureCode,providerRead=false;
   const trace=[],observe=(phase,reply)=>recordCredentialObservation(trace,credentialObservation(site,page,phase,reply,this.now()-began));
   const live=()=>!signal.aborted&&allowed()&&!page.closed&&this.now()-began<90000&&(!attempted||this.now()-at<(validation?45000:20000));
   // The original background proof rejects candidate-validation fields, even
@@ -51,6 +51,14 @@ export class CredentialRunner{
    while(live()){
     await page.ready?.();if(!live())break;
     if(page.dialogResult){status=safeCredentialStatus(page.dialogResult.status);break;}
+    if(site==='doctorville'&&!validation&&!attempted&&!providerRead&&bareDoctorvilleProvider(page.url)){
+     providerRead=true;
+     const landing=await page.call('credential-provider-landing.js',[request('verify')]);reads++;observe('provider',landing);
+     if(landing.status!=='ready'){status=landing.status==='loading'?'probe_unready':safeCredentialStatus(landing.status);break;}
+     // Restore only the site's own fixed GET flow; never fill this provider
+     // landing, clear its storage, follow its links or replay a submitted login.
+     observe('refresh',{status:'loading'});await page.load(policy.entry);continue;
+    }
     let reply;
     if(attempted){reply=await verify();}
     else{reply=await page.call('credential-login.js',[request('probe')]);reads++;observe('probe',reply);}

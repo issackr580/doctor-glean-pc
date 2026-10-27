@@ -48,6 +48,35 @@ test('a pre-probe policy refusal retains a fixed failure and callback eligibilit
  const r=await new CredentialRunner({...s,attempts}).run('doctorville',p,{signal:new AbortController().signal,readCredentials:()=>{decrypted++;return account;}});
  assert.equal(r.trace.at(-1).failure,'policy_rejected');assert.equal(r.trace.at(-1).navigationAllowed,false);assert.equal(r.reads,0);assert.equal(decrypted,0);assert.doesNotMatch(JSON.stringify(r.trace),/PRIVATE|https:|wrong/);
 });
+test('Doctorville bare provider recovery rechecks one fixed site GET without decrypting an existing session',async t=>{
+ const s=setup(t),attempts=new CredentialAttempts(join(s.root,'landing.json')),loads=[];let decrypted=0;
+ const page=fakePage('doctorville',async(name)=>name==='credential-provider-landing.js'?{status:'ready',evidence:{providerLanding:true}}:{status:'authenticated'});
+ page.load=async url=>{loads.push(url);page.url=loads.length===1?'https://mims-account.shop.co.kr/':url;page.version++;};
+ const r=await new CredentialRunner({...s,attempts}).run('doctorville',page,{signal:new AbortController().signal,readCredentials:()=>{decrypted++;return {...account};}});
+ assert.equal(r.status,'authenticated');assert.equal(r.attempted,false);assert.equal(decrypted,0);assert.equal(loads[1],credentialSite('doctorville').entry);assert.equal(loads.length,2);assert.equal(attempts.snapshot().sites.length,0);
+});
+test('Doctorville provider barrier and unreviewed paths never navigate to a session refresh or decrypt',async t=>{
+ for(const url of ['https://mims-account.shop.co.kr/','https://mims-account.shop.co.kr/account','https://mims-account.shop.co.kr/login?cb=PRIVATE']){
+  const s=setup(t),attempts=new CredentialAttempts(join(s.root,'barrier.json'));let loads=0,decrypted=0;
+  const page=fakePage('doctorville',async name=>{if(name==='credential-provider-landing.js')return {status:'manual',evidence:{providerBarrier:true}};throw Object.assign(Error('PRIVATE'),{code:'policy_rejected'});});page.load=async()=>{loads++;page.url=url;};
+  const r=await new CredentialRunner({...s,attempts}).run('doctorville',page,{signal:new AbortController().signal,readCredentials:()=>{decrypted++;return {...account};}});
+  assert.ok(['manual','blocked'].includes(r.status));assert.equal(loads,1);assert.equal(decrypted,0);assert.doesNotMatch(JSON.stringify(r.trace),/PRIVATE|https:/);
+ }
+});
+test('a persistent bare provider does not loop and candidate validation cannot use a cached site session',async t=>{
+ for(const validation of [false,true]){
+  const s=setup(t),attempts=new CredentialAttempts(join(s.root,'persistent.json'));let loads=0,landingReads=0;
+  const page=fakePage('doctorville',async name=>{if(name==='credential-provider-landing.js'){landingReads++;return {status:'ready'};}throw Object.assign(Error('not eligible'),{code:'policy_rejected'});});page.load=async()=>{loads++;page.url='https://mims-account.shop.co.kr/';};
+  const r=await new CredentialRunner({...s,attempts}).run('doctorville',page,{candidate:{...account},validation,signal:new AbortController().signal});
+  assert.equal(r.status,'blocked');assert.equal(r.submitted,false);assert.equal(loads,validation?1:2);assert.equal(landingReads,validation?0:1);
+ }
+});
+test('Doctorville never navigates a dispatched uncertain login through the pre-submit landing recovery',async t=>{
+ const s=setup(t),attempts=new CredentialAttempts(join(s.root,'post.json'));let loads=0;
+ const page=fakePage('doctorville',async(_name,[input])=>{if(input.mode==='probe')return {status:'ready'};if(input.mode==='fill'){page.url='https://mims-account.shop.co.kr/';page.version++;return {status:'submitted',submitted:true};}throw Object.assign(Error('policy'),{code:'policy_rejected'});});const load=page.load.bind(page);page.load=async url=>{loads++;await load(url);};
+ const r=await new CredentialRunner({...s,attempts}).run('doctorville',page,{readCredentials:()=>({...account}),signal:new AbortController().signal});
+ assert.equal(r.status,'unknown');assert.equal(r.submitted,true);assert.equal(loads,1);assert.equal(attempts.decision('doctorville',s.now(),false,true),'disabled');
+});
 test('Doctorville loads the working encoded manual entry and retains ready probes and durable submission',async t=>{
  const {siteById}=await import('../src/security.js'),s=setup(t),attempts=new CredentialAttempts(join(s.root,'canonical.json'));let loaded='',probes=0,decrypted=0;
  const p=fakePage('doctorville',async(_name,[input])=>{if(input.mode==='probe'){probes++;return {status:'ready'};}if(input.mode==='fill'){assert.equal(probes,2);return {status:'submitted',submitted:true};}return {status:'authenticated'};});

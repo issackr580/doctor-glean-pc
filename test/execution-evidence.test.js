@@ -43,7 +43,7 @@ test('preflight uses only its separate read-only page and leaves dispatch ledger
  const runner=reserve(s,{createPage:async()=>{loginOrEntry++;throw Error('must not recover');},createInspectionPage:async()=>page(async(name,[job,mode])=>{assert.equal(name,'pc-entry.js');assert.equal(mode,'preflight');inspections++;return {status:'ready',targetMatched:true,matchedTargets:1,entryControls:1};})});
  s.store.setFeature('entry',false);const before=s.store.entries()[0],ledgerBefore=JSON.stringify(s.ledger.snapshot());
  assert.equal((await runner.preflight(before.key)).ok,true);
- const {preflight,...after}=s.store.entries()[0];assert.deepEqual(after,before);assert.equal(preflight.status,'complete');assert.equal(preflight.attempted,false);assert.equal(inspections,2);assert.equal(loginOrEntry,0);assert.equal(JSON.stringify(s.ledger.snapshot()),ledgerBefore);assert.equal(existsSync(join(s.root,'state.json')),false);
+ const {preflight,inspection,...after}=s.store.entries()[0];assert.deepEqual(after,before);assert.equal(inspection.readOnly,true);assert.equal(preflight.status,'complete');assert.equal(preflight.attempted,false);assert.equal(inspections,2);assert.equal(loginOrEntry,0);assert.equal(JSON.stringify(s.ledger.snapshot()),ledgerBefore);assert.equal(existsSync(join(s.root,'state.json')),false);
  assert.equal(new WorkflowStore(join(s.root,'workflows.json')).entries()[0].preflight.status,'complete');
 });
 test('a manual site owner or absent inspection transport cannot trigger preflight login recovery',async t=>{

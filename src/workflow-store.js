@@ -14,6 +14,14 @@ export function cleanReceipt(raw,now=Date.now()){
  if(['not_checked','no_video','requested','playing_observed','gesture_required','play_failed','inaccessible','not_ready','navigation_unconfirmed'].includes(raw?.playback))out.playback=raw.playback;
  return out;
 }
+// Optional entry metadata is outside the stable receipt schema. Older builds
+// ignore this field, retaining their existing data and durable attempt format.
+export function cleanEntryInspection(raw,now=Date.now()){
+ const out={status:raw?.status==='ready'?'ready':STATUSES.has(raw?.status)?raw.status:'unknown',reason:safeReason(raw?.reason),checkedAt:now};
+ for(const key of ['candidateCards','titleMatches','dateMatches','timeMatches','scheduleMatches','matchedTargets','entryControls','identifiedTargets','distinctIdentities','stateVariants'])if(number(raw?.[key]))out[key]=raw[key];
+ for(const key of ['duplicateEquivalent','readOnly'])if(typeof raw?.[key]==='boolean')out[key]=raw[key];
+ return out;
+}
 function valid(data){
  if(!data||data.schemaVersion!==1||Object.keys(data).sort().join('|')!=='days|entries|entrySites|features|schemaVersion'||!Array.isArray(data.entrySites)||data.entrySites.length>6||data.entrySites.some(id=>!ENTRY_SITES.includes(id))||new Set(data.entrySites).size!==data.entrySites.length||!data.features||Object.keys(data.features).sort().join('|')!==Object.keys(DEFAULT_FEATURES).sort().join('|')||Object.values(data.features).some(value=>typeof value!=='boolean')||!data.days||Array.isArray(data.days)||!data.entries||Array.isArray(data.entries)||Object.keys(data.days).length>9||Object.keys(data.entries).length>400)return false;
  const receipt=row=>row&&typeof row==='object'&&!Array.isArray(row)&&number(row.checkedAt)&&JSON.stringify(cleanReceipt(row,row.checkedAt))===JSON.stringify(row);
@@ -22,6 +30,7 @@ function valid(data){
   if(Object.values(row.daily).some(value=>!receipt(value))||['morning','lounge','quizAuto','survey'].some(key=>row[key]!==undefined&&!receipt(row[key])))return false;
  }
  for(const [key,row] of Object.entries(data.entries))if(!/^[a-f0-9]{64}$/.test(key)||row?.key!==key||!ENTRY_SITES.includes(row.site)||!validDate(row.date)||typeof row.title!=='string'||row.title.length>800||!/^([01]\d|2[0-3]):[0-5]\d$/.test(row.time)||!number(row.start)||!number(row.due)||!number(row.deadline)||!STATUSES.has(row.status)||!number(row.nextAt)||!number(row.slot)||row.slot>4||!number(row.retries)||row.retries>4||typeof row.entryAttempted!=='boolean'||!Array.isArray(row.attempts)||row.attempts.length>5||row.attempts.some(item=>!receipt(item))||row.receipt!==undefined&&!receipt(row.receipt)||row.preflight!==undefined&&!receipt(row.preflight)||row.lastStartedAt!==undefined&&!number(row.lastStartedAt)||row.executionFinishedAt!==undefined&&!number(row.executionFinishedAt)||row.executionVersion!==undefined&&!/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(row.executionVersion)||row.sourceCommit!==undefined&&!/^[a-f0-9]{40}$/.test(row.sourceCommit))return false;
+ for(const row of Object.values(data.entries))if(row.inspection!==undefined&&(!row.inspection||!number(row.inspection.checkedAt)||JSON.stringify(cleanEntryInspection(row.inspection,row.inspection.checkedAt))!==JSON.stringify(row.inspection)))return false;
  return true;
 }
 export class WorkflowStore{
@@ -58,5 +67,5 @@ export class WorkflowStore{
  entryKey(event){return hash(JSON.stringify([event.site,event.date,event.site==='hmp'?event.time:'',event.title.replace(/\s+/g,' ').trim()]));}
  putEntry(row){const next=clone(this.data);next.entries[row.key]=clone(row);this.#save(next);}
  updateEntry(key,change){const row=this.data.entries[key];if(!row)return false;const next=clone(this.data);next.entries[key]={...next.entries[key],...clone(change)};this.#save(next);return true;}
- diagnostics(){return {features:this.features(),entrySites:this.entrySites(),today:this.day(),entries:this.entries().map(({key,site,date,time,status,due,deadline,nextAt,slot,retries,attempts,receipt,preflight,lastStartedAt,executionFinishedAt,executionVersion,sourceCommit})=>({key,site,date,time,status,due,deadline,nextAt,slot,retries,attempts:attempts?.map(item=>cleanReceipt(item,item.checkedAt)),receipt:receipt?cleanReceipt(receipt,receipt.checkedAt):undefined,...(preflight?{preflight:cleanReceipt(preflight,preflight.checkedAt)}:{}),...(lastStartedAt!==undefined?{lastStartedAt,executionFinishedAt,executionVersion,...(sourceCommit?{sourceCommit}:{})}:{})})),storageUnavailable:this.failed};}
+ diagnostics(){return {features:this.features(),entrySites:this.entrySites(),today:this.day(),entries:this.entries().map(({key,site,date,time,status,due,deadline,nextAt,slot,retries,attempts,receipt,preflight,inspection,lastStartedAt,executionFinishedAt,executionVersion,sourceCommit})=>({key,site,date,time,status,due,deadline,nextAt,slot,retries,attempts:attempts?.map(item=>cleanReceipt(item,item.checkedAt)),receipt:receipt?cleanReceipt(receipt,receipt.checkedAt):undefined,...(preflight?{preflight:cleanReceipt(preflight,preflight.checkedAt)}:{}),...(inspection?{inspection:cleanEntryInspection(inspection,inspection.checkedAt)}:{}),...(lastStartedAt!==undefined?{lastStartedAt,executionFinishedAt,executionVersion,...(sourceCommit?{sourceCommit}:{})}:{})})),storageUnavailable:this.failed};}
 }
