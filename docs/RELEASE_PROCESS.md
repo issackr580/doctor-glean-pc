@@ -61,3 +61,7 @@ node scripts/build-app-patch.mjs --from=/old/artifact/developer --to=/new/artifa
 ## preview.11 게시 확인
 
 디톡스 수정판도 같은 인증401 조건에서 관리자가 요청한 [수동 runner 작업](https://github.com/issackr580/doctor-glean-pc/actions/runs/40446297112)으로 고정 소스 `aaa022d`과 검증본 해시를 대조해 기존 Draft에만 업로드했다. 전체/10→11 패치/소스 ZIP을 다시 다운로드해 서버 SHA·체크섬·모든 내부 파일을 확인한 후 배포용만 별도 API 동작으로 공개했다. 개발자용은 Draft다. 완료한 일회성 workflow와 보조 스크립트는 제거했으며 자동 게시·예약 실행·개발자 바이너리 공개 Actions artifact는 없다.
+
+## preview.12 게시 확인
+
+[관리자의 수동 runner 실행](https://github.com/issackr580/doctor-glean-pc/actions/runs/40458040865)은 고정 소스 `7e7d224`와 로컬 검증본의 전체 파일 해시·기존 v11 자산 SHA를 대조한 뒤 기존 Draft에만 업로드했다. 임시 도구는 workflow 안에만 포함해 별도 소스 허용 목록을 확장하지 않았다. 전체/11→12 패치/소스 ZIP을 다시 내려받아 서버 SHA·체크섬·모든 내부 파일을 검증한 뒤 배포용만 별도 API 동작으로 공개했다. 개발자용은 Draft다. 독립 웹 조회로 공개/404 접근 경계를 확인했다. 완료한 일회성 workflow는 제거했으며 자동 게시·예약 실행·공개 개발자 artifact는 없다. 과거 릴리스·자산·모바일 저장소는 변경하지 않았다.
