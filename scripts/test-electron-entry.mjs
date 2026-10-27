@@ -52,8 +52,24 @@ async function run(){
  for(const [name,body] of [['different date',doctor('', '2020-01-01')],['end time only',doctor('',date,'00:00')],['duplicate cards',doctor()+doctor()],['login form',doctor()+'<input type="password">']]){
   const result=await inspect('doctorville',body);check('Doctorville rejects '+name,result.status!=='ready');
  }
+ const bareDoctor=`<a class="list_detail" href="/seminar/seminarDetail?seminarId=11"><strong class="tit">${title}</strong>${date.replaceAll('-','.')}<div class="time"><span class="start">${clock}</span> ~ 23:59</div><button>입장하기</button></a>`;
+ await inspect('doctorville',bareDoctor,{work:async(page,posts)=>{
+  const c=await catalog(page,'doctorville'),r=await page.call('pc-entry.js',[job('doctorville'),'preflight']);
+  check('Doctorville collector and entry reader both bind bare date text beside inline elements',c.events.some(e=>e.title===title&&e.time===clock)&&r.status==='ready'&&posts()===0);
+ }});
+ check('Doctorville dedicated start also accepts a hyphenated month/day',(await inspect('doctorville',bareDoctor.replace(date.replaceAll('-','.'),date.slice(5)))).status==='ready');
+ for(const [name,body] of [
+  ['conflicting visible dates',bareDoctor.replace('<div class="time">','<span>2020-01-01</span><div class="time">')],
+  ['missing start',bareDoctor.replace(clock,'00:00')],
+  ['duplicate starts',bareDoctor.replace('</div><button>',`<span class="start">${clock}</span></div><button>`)],
+ ])check('Doctorville dedicated schedule rejects '+name,(await inspect('doctorville',body)).status!=='ready');
  const live=await inspect('medigate',medi(11)+medi(11,'?utm_source=hero#top'));
  check('Medigate equivalent visible cards merge only by one observed lecture identity',live.status==='ready'&&live.duplicateEquivalent&&live.matchedTargets===1);
+ const registered=medi().replace('</h3>','</h3><span>신청완료</span>'),hero=registered.replace(/<button[\s\S]*?<\/button>/,'');
+ check('Medigate same registered hero without an action defers to the single actionable card',(await inspect('medigate',hero+registered)).status==='ready');
+ const unknown=(await inspect('medigate',hero.replace('/symposium/11','/symposium/12')+registered));
+ check('Medigate different identities remain ambiguous with safe diagnostic counts',unknown.status==='ambiguous'&&unknown.identifiedTargets===2&&unknown.distinctIdentities===2&&unknown.entryControls===1);
+ check('Medigate ended hero cannot supply eligibility to a live card',(await inspect('medigate',hero.replace('신청완료','강의종료')+registered)).status==='ambiguous');
  for(const [name,body] of [['different lecture IDs',medi(11)+medi(12)],['unknown query difference',medi(11,'?sessionType=a')+medi(11,'?sessionType=b')],['registration disagreement',medi(11)+medi(11).replace('입장하기','신청하기')]]){
   const result=await inspect('medigate',body);check('Medigate preserves ambiguity for '+name,result.status!=='ready');
  }
@@ -131,6 +147,17 @@ async function run(){
  const hmpRunner=new EntryRunner({ledger:hmpLedger,store:hmpStore,createPage:async(_site,signal)=>new AutomationPage('hmp',signal,hmpPrefs)}),hmpEntry={...entry,...job('hmp')};hmpStore.putEntry(hmpEntry);
  await hmpRunner.run(hmpEntry);const hmpResult=hmpStore.entries()[0];
  check('native Hanmi supplemental click preserves its slot lease and five-slot schedule',hmpPosts===1&&hmpReserved&&hmpResult.receipt.status==='clicked'&&hmpResult.slot===1&&hmpResult.status==='reserved');
+ const blueDir=join(root,'blue-host'),bluePartition='entry-blue-'+randomUUID(),blueLedger=new LocalState(join(blueDir,'state.json')),blueStore=new WorkflowStore(join(blueDir,'workflows.json'));let bluePosts=0,blueLease=false;
+ blueLedger.setPaused(false);blueStore.setFeature('entry',true);
+ const blueBody=blue(`${date} ${clock} ~ ${tomorrow} 23:59`).replace('<h3>','<span class="date">신청기간 2020-01-01</span><h3>');
+ await session.fromPartition(bluePartition).protocol.handle('https',request=>{
+  if(request.method==='POST'){bluePosts++;blueLease=Object.values(JSON.parse(readFileSync(join(blueDir,'state.json'))).jobs).some(row=>row.state==='attempting');return new Response('{}');}
+  return new Response(shell(blueBody),{headers:{'content-type':'text/html; charset=utf-8'}});
+ });
+ const blueRunner=new EntryRunner({ledger:blueLedger,store:blueStore,createPage:async(_site,signal)=>new AutomationPage('bluepharm',signal,{...remotePreferences('bluepharm'),partition:bluePartition})}),blueEntry={...entry,...job('bluepharm')};blueStore.putEntry(blueEntry);
+ await blueRunner.run(blueEntry);
+ check('native Bluepharm timed supplement calls its original ongoing button once after the durable lease',bluePosts===1&&blueLease&&blueStore.entries()[0].status==='clicked');
+ check('Bluepharm inspected schedule survives restart without exposing raw links',new WorkflowStore(join(blueDir,'workflows.json')).diagnostics().entries[0].inspection.timeMatches===1&&!JSON.stringify(blueStore.diagnostics()).includes('https:'));
  check('all inspection and entry windows are released',BrowserWindow.getAllWindows().length===0);
  mkdirSync(new URL('../verification/',import.meta.url),{recursive:true});writeFileSync(new URL('../verification/electron-entry.json',import.meta.url),JSON.stringify({environment:'Linux Electron45; synthetic HTTPS; PC exact entry and read-only preflight',checks:checks.length,passed:checks,actualProviderVerified:false,windowsVerified:false},null,2)+'\n');
  console.log('ELECTRON_ENTRY_PASS:'+checks.length);app.quit();

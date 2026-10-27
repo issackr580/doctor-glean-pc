@@ -56,6 +56,8 @@ v9의 dtalksLogoutPresent·dtalksLogoutVisible·dtalksLogoutSafe·dtalksLoginCon
 
 v15의 닥터빌 provider trace는 고정 origin에서만 `providerPath=login|other`, `callbackState=expected|missing|repeated|mismatch`를 기록한다. 값·주소·query는 남기지 않는다. 제출 전 `policy_rejected`는 blocked이며 계정 복호화·제출 없이 중단한 근거다. 제출을 시작한 뒤의 실패는 unknown과 영속 시도 제한을 유지한다. expected나 정상 로그인 화면 관찰만으로 인증 성공을 표시하지 않는다.
 
+v16은 기본 `/` 경로를 providerPath=home으로 나누고 providerLanding/providerBarrier boolean만 추가한다. 기본 경로의 전용 읽기와 고정 PC 페이지1회 GET은 인증 성공이 아니며 후보 검증·제출 뒤에는 사용하지 않는다. 자동 작업 entry 행의 선택적 inspection은 checkedAt/readOnly·날짜/시각 대조 수·identifiedTargets/distinctIdentities/stateVariants 등 개수만 담는다. 서로 다른 강의 링크의 값이나 원문은 없다. 기존 receipt·외부 시도 형식과 분리해 실제 v15 reader의 되돌려 읽기/저장 호환을 확인했다. 개발자/배포용의 실행 시각과 현재/이전 기록을 합치지 않는다.
+
 작업 중인 v10은 후다닥의 고정 `/auth/login` POST에도 같은 요청/응답 개수·HTTP 상태 관찰을 적용한다. 차단 목적지·본문·헤더는 남기지 않는다. 후다닥의 refresh는 실제 제출 ACK/응답 뒤 원래 PC 페이지를1회 다시 읽은 단계다. 성공 여부는 그 페이지의 인증 근거로 별도 확인한다.
 
 `authEvidenceSource=docple_server_calendar`는 고정 보호 페이지의 현재 토큰으로 정상 출석 calendar 응답을 확인했다는 뜻이다. 토큰·회원·과거 출석 날짜는 내보내지 않는다. 토큰·문서·날짜가 바뀐 이전 응답은 인증 근거로 재사용하지 않는다. 로그인 복구의 성공과 이후 출석 수령·적립은 별개다.

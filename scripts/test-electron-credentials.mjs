@@ -58,6 +58,45 @@ async function run(){
  }
 
 
+ // Reproduce an in-page provider route change: network navigation guards
+ // observe no blocked navigation, but the old generic credential read refuses it.
+ for(const scenario of ['session','flow','persistent','barrier','candidate']){
+  const partition='doctorville-landing-'+randomUUID(),profile=session.fromPartition(partition),file=join(root,'landing-'+scenario+'.json'),a=new CredentialAttempts(file);let sent=0,entries=0,decrypted=0,accepted=false;
+  const headers={'content-type':'text/html; charset=utf-8'},entry=CREDENTIAL_SITES.find(p=>p.id==='doctorville').entry;
+  const login=inputs.doctorville+`<script>const f=document.querySelector('form');Object.defineProperty(f,'__reactProps$synthetic',{value:{onSubmit(){}}});f.addEventListener('submit',async e=>{e.preventDefault();await fetch('/apis/auth/login',{method:'POST',body:new URLSearchParams({id:document.querySelector('#identifier').value,password:document.querySelector('#password').value})});location.href=${JSON.stringify(entry)};});</script>`;
+  await profile.protocol.handle('https',async request=>{
+   const u=new URL(request.url);
+   if(request.method==='POST'){sent++;assert.equal(JSON.parse(readFileSync(file)).sites.doctorville.status,'submitted');accepted=true;return new Response('{}',{headers:{'content-type':'application/json'}});}
+   if(u.hostname==='mims-account.shop.co.kr')return new Response(shell(`<script>history.replaceState(null,'','/')</script>${scenario==='barrier'?'<h2>본인 인증이 필요합니다</h2>':'<main>통합 서비스</main>'}`),{headers});
+   entries++;
+   if(scenario==='session'||accepted)return new Response(shell('<a href="/logout">로그아웃</a>'),{headers});
+   if(scenario==='persistent')return new Response(shell(`<script>location.href=${JSON.stringify(siteById('doctorville').loginUrl)}</script>`),{headers});
+   return new Response(shell(login),{headers});
+  });
+  const controller=new AbortController(),p=new AutomationPage('doctorville',controller.signal,{...remotePreferences('doctorville'),partition});
+  try{
+   if(scenario==='flow'){
+    // The site's normal GET flow restores the reviewed callback entry.
+    await profile.protocol.unhandle('https');
+    let first=true;
+    await profile.protocol.handle('https',async request=>{
+     const u=new URL(request.url);
+     if(request.method==='POST'){sent++;assert.equal(JSON.parse(readFileSync(file)).sites.doctorville.status,'submitted');accepted=true;return new Response('{}',{headers:{'content-type':'application/json'}});}
+     if(u.hostname==='mims-account.shop.co.kr'){const body=first?`<script>history.replaceState(null,'','/')</script><main>통합 서비스</main>`:login;first=false;return new Response(shell(body),{headers});}
+     entries++;return new Response(shell(accepted?'<a href="/logout">로그아웃</a>':`<script>location.href=${JSON.stringify(siteById('doctorville').loginUrl)}</script>`),{headers});
+    });
+   }
+   const validation=scenario==='candidate',r=await new CredentialRunner({attempts:a}).run('doctorville',p,{signal:controller.signal,validation,...(validation?{candidate:{id:'SYNTHETIC_USER',password:'SYNTHETIC_PASSWORD'}}:{readCredentials:()=>{decrypted++;return {id:'SYNTHETIC_USER',password:'SYNTHETIC_PASSWORD'};}})});
+   const expected={session:'authenticated',flow:'authenticated',persistent:'blocked',barrier:'manual',candidate:'blocked'};
+   check('Doctorville bare landing '+scenario+' preserves GET/submission limits',r.status===expected[scenario]&&sent===(scenario==='flow'?1:0)&&decrypted===(scenario==='flow'?1:0)&&entries<=(scenario==='flow'?2:scenario==='session'||scenario==='persistent'?1:0));
+   if(scenario==='session'){
+    await p.load(siteById('doctorville').loginUrl);const base={site:'doctorville',mode:'verify',nonce:'1'.repeat(32),pageTag:'1:'+p.version,expectedUrl:p.url,backgroundRecovery:true,backgroundSubmitted:false};
+    for(const [name,input,navigation] of [['credential-login.js',base,false],['credential-provider-landing.js',{...base,id:'SYNTHETIC_USER'},false],['credential-provider-landing.js',{...base,backgroundSubmitted:true},false],['credential-provider-landing.js',{...base,validation:true},false],['credential-provider-landing.js',base,true]])await assert.rejects(p.call(name,[input],{navigation}));
+    check('bare provider read cannot fill credentials, validate a candidate, navigate or replay a submitted operation',true);
+   }
+  }finally{p.close();}
+ }
+
  // The real Keymedi helper must receive background-only options from the
  // native runner. A visible logout link would conceal a rejected proof call.
  for(const scenario of ['spa','navigation','unauthorized']){

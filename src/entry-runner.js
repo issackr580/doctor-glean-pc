@@ -1,6 +1,6 @@
 import {siteById,allowedNavigation} from './security.js';
 import {entrySchedule,safeReason} from './automation-policy.js';
-import {cleanReceipt} from './workflow-store.js';
+import {cleanReceipt,cleanEntryInspection} from './workflow-store.js';
 import {kstDate,kstInstant} from './schedule.js';
 import {waitFor} from './async-work.js';
 import {randomUUID} from 'node:crypto';
@@ -93,7 +93,7 @@ export class EntryRunner{
    return {ok:true};
   }catch(error){receipt=cleanReceipt({status:controller.signal.aborted?'cancelled':'network',reason:controller.signal.aborted?'cancelled':'network_error',attempted:false},this.now());return {ok:false,reason:receipt.reason};}
   finally{
-   try{if(job.date===kstDate(this.now()))this.store.updateEntry(job.key,{preflight:receipt});this.emit('result',job,{...receipt,runId,readOnly:true,dateMatches:reply.dateMatches,timeMatches:reply.timeMatches});}
+   try{if(job.date===kstDate(this.now()))this.store.updateEntry(job.key,{preflight:receipt,inspection:cleanEntryInspection({...reply,status:receipt.status==='complete'?'ready':receipt.status,reason:receipt.reason,readOnly:true},this.now())});this.emit('result',job,{...receipt,runId,readOnly:true,dateMatches:reply.dateMatches,timeMatches:reply.timeMatches});}
    finally{run.page?.close();this.active=null;this.onChange();}
   }
  }
@@ -114,10 +114,12 @@ export class EntryRunner{
    while(allowed()&&this.now()-began<45000&&(prepare?this.now()<job.start:this.now()<=job.deadline)){
     if(['login','provider'].includes(page.route)){receipt={status:'login',reason:'login_required'};break;}
     let reply=await page.call('auto-entry.js',[{...nativeJob(),detailOpened},'inspect']);adapter='auto-entry.js';
-    if(['doctorville','medigate','keymedi','hmp'].includes(job.site)&&['target_missing','button_missing','ambiguous'].includes(reply.status)){
+    if(['doctorville','medigate','keymedi','hmp','bluepharm'].includes(job.site)&&['target_missing','button_missing','ambiguous'].includes(reply.status)){
      const supplement=await page.call('pc-entry.js',[nativeJob(),'inspect']);
      emit('inspect',{...cleanReceipt(supplement,this.now()),reader:'pc',dateMatches:supplement.dateMatches,timeMatches:supplement.timeMatches,duplicateEquivalent:supplement.duplicateEquivalent});
+     this.store.updateEntry(job.key,{inspection:cleanEntryInspection({...supplement,readOnly:false},this.now())});
      if(supplement.status==='ready'){reply=supplement;adapter='pc-entry.js';}
+     else if(['target_missing','button_missing'].includes(reply.status)&&supplement.status==='target_missing'&&supplement.titleMatches>0)reply=supplement;
     }
     receipt={...reply,reason:safeReason(reply.reason)};emit('inspect',{...cleanReceipt(receipt,this.now()),reader:adapter==='pc-entry.js'?'pc':'original'});
     if(prepare)break;

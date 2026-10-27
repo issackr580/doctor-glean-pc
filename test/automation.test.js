@@ -4,7 +4,7 @@ import {mkdtempSync,rmSync,readFileSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {LocalState} from '../src/local-state.js';
-import {WorkflowStore} from '../src/workflow-store.js';
+import {WorkflowStore,cleanEntryInspection} from '../src/workflow-store.js';
 import {DailyRunner} from '../src/daily-runner.js';
 import {EntryRunner} from '../src/entry-runner.js';
 import {LoungeRunner} from '../src/lounge-runner.js';
@@ -27,6 +27,13 @@ test('new features default off and diagnostics discard provider text and IDs',t=
  const {store}=setup(t);assert.ok(Object.values(store.features()).every(v=>v===false));
  store.record(date,'doctorville:attendance',{status:'complete',reason:'today_status',account:'private',url:'https://private.invalid/',answers:[1],html:'private'});
  const text=JSON.stringify(store.diagnostics());assert.doesNotMatch(text,/private|answers|html|https:/);assert.equal(store.day(date).daily['doctorville:attendance'].status,'complete');
+});
+test('entry inspection metadata persists safely without changing the stable receipt or durable attempts',t=>{
+ const {root,store,clock}=setup(t),key='a'.repeat(64);
+ const raw={status:'ambiguous',reason:'duplicate_target',dateMatches:2,timeMatches:2,identifiedTargets:2,distinctIdentities:1,stateVariants:2,url:'https://PRIVATE/',account:'PRIVATE',html:'PRIVATE'};
+ store.putEntry({key,site:'medigate',date,title:'합성 강의',time:'12:00',start:clock.now(),due:clock.now(),deadline:clock.now()+60000,nextAt:clock.now(),slot:0,retries:0,status:'reserved',attempts:[],entryAttempted:false,inspection:cleanEntryInspection(raw,clock.now())});
+ const reopened=new WorkflowStore(join(root,'workflows.json')),row=reopened.diagnostics().entries[0];
+ assert.equal(reopened.failed,false);assert.equal(row.inspection.stateVariants,2);assert.equal(row.inspection.dateMatches,2);assert.equal(row.receipt,undefined);assert.deepEqual(row.attempts,[]);assert.doesNotMatch(JSON.stringify(row),/PRIVATE|https:|html|account/);
 });
 test('read-only daily check never executes a claim even when it is available',async t=>{
  const {clock,ledger,store}=setup(t);store.setFeature('dailyClaim',true);let writes=0;
