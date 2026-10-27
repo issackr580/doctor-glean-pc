@@ -27,3 +27,11 @@ test('cancelled page cannot evaluate, navigate or reopen',async()=>{
  const page=new CatalogPage(profiles.doctorville,{snapshot:()=>({url:profiles.doctorville.url,version:1}),evaluate:async()=>calls++,load:async()=>calls++,close(){}},controller.signal);
  controller.abort();await assert.rejects(()=>page.read('2026-10-26',null));await assert.rejects(()=>page.act({kind:'scroll'},{}));await assert.rejects(()=>page.open());assert.equal(calls,0);
 });
+test('Whodadoc fixed PC entry load failure reads its original login GET once without weakening TLS',async()=>{
+ for(const failure of ['load_failed','certificate_error','dns_error']){
+  const loads=[],profile=profiles.whodadoc;let url=profile.url;
+  const page=new CatalogPage(profile,{snapshot:()=>({url,version:1}),load:async target=>{loads.push(target);if(loads.length===1)throw Object.assign(Error(),{code:'network_error',failure});url=target;},close(){}},new AbortController().signal);
+  if(failure==='load_failed'){await page.open();assert.deepEqual(loads,[profile.url,'https://hcp.whodadoc.com/auth/login']);assert.equal((await page.read('2026-10-27',null)).status,'login');}
+  else{await assert.rejects(page.open());assert.deepEqual(loads,[profile.url]);}
+ }
+});

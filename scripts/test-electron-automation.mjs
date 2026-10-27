@@ -38,7 +38,7 @@ async function run(){
    }
    let body='';
    if(url.pathname==='/event/attend')body='<main><h2>오늘 출석체크</h2><button class="btn point_down">오늘 출석하기</button></main><script>document.querySelector("button").onclick=async()=>{if(!confirm('+JSON.stringify(mode==='unknown-confirm'?'계정을 탈퇴하시겠습니까?':'출석하시겠습니까?')+'))return;await fetch("/synthetic-attendance-submit",{method:"POST"});document.querySelector("button").textContent="오늘 출석체크 완료";};</script>';
-   if(url.pathname==='/product/main')body=`<main><div class="today_quiz"><span class="date">${date}</span><span class="name">합성 제품</span><a href="/product/productView?pId=123">퀴즈 풀기</a></div></main>`;
+   if(url.pathname==='/product/main')body=`<main><div class="today_quiz"><span class="date">${date}</span><span class="name">합성 제품</span><a href="/product/productView?pId=123">퀴즈 풀기</a><a href="/product/productView?utm_source=desktop&amp;pId=123#quiz">제품 자세히</a>${mode==='quiz-complete'?'<strong class="quiz_complete">참여 완료</strong>':''}</div></main>`;
    if(url.pathname==='/product/productView')body=quizBody;
    if(url.pathname==='/seminar/synthetic')body=`<main><article><h2>합성 입장 강의</h2><p class="date">${date} 13:00</p><button>입장하기</button></article></main>`;
    if(url.pathname==='/brandhall')body='<main><h1>브랜드관</h1><p>브랜드 콘텐츠 목록</p></main>';
@@ -62,6 +62,27 @@ async function run(){
  check('real quiz journey uses the observed product link and original read-only API',quizReads===2);
  check('quiz waits for the delayed provider success receipt',quiz===1&&store.day().quizAuto.status==='complete'&&store.day().quizAuto.reason==='success_receipt');
  await daily.run(['doctorville:quiz']);check('quiz never submits twice on repeated daily checks',quiz===1);
+ mode='quiz-complete';const completedPage=await createPage('doctorville',new AbortController().signal);await completedPage.load('https://www.doctorville.co.kr/product/main');
+ const [quizYear,quizMonth,quizDay]=date.split('-').map(Number);
+ await completedPage.current.webContents.executeJavaScript('document.querySelector(".today_quiz").innerHTML=' + JSON.stringify('<span class="date">'+date+'</span><span class="name">합성 제품</span><table><caption>'+quizYear+'년 '+quizMonth+'월</caption><tbody><tr><td class="today pass"><span class="num">'+quizDay+'</span><i class="ico_comm3 ico_clear" style="display:inline-block;width:10px;height:10px"></i></td></tr></tbody></table>'));
+ const already=await quizRunner.run(completedPage,date,{signal:completedPage.signal,allowed:()=>true});
+ check('provider completion from another device skips product discovery and submission',already.status==='complete'&&already.reason==='already_participated'&&quiz===1);completedPage.close();mode='normal';
+ const duplicatePage=await createPage('doctorville',new AbortController().signal);await duplicatePage.load('https://www.doctorville.co.kr/product/main');
+ const request={phase:'today',date,expectedUrl:duplicatePage.url};
+ check('original desktop reader reproduces the duplicate-link ambiguity',(await duplicatePage.call('doctorville-quiz-journey.js',[request])).reason==='product_link_ambiguous');
+ const selected=await duplicatePage.call('doctorville-quiz-page.js',[request]);
+ check('PC fallback collapses only equivalent observed product links',selected.status==='navigate'&&selected.url==='https://www.doctorville.co.kr/product/productView?pId=123');
+ await duplicatePage.current.webContents.executeJavaScript('document.querySelectorAll(".today_quiz a")[1].href="/product/productView?pId=456"');
+ check('distinct products remain ambiguous without a submit',(await duplicatePage.call('doctorville-quiz-page.js',[request])).status==='stopped'&&quiz===1);
+ await duplicatePage.current.webContents.executeJavaScript('document.querySelector(".today_quiz .date").textContent="2000-01-01"');
+ check('an old calendar cannot supply a fallback quiz target',(await duplicatePage.call('doctorville-quiz-page.js',[request])).status==='stopped');duplicatePage.close();
+ const cardPage=await createPage('doctorville',new AbortController().signal);await cardPage.load('https://www.doctorville.co.kr/product/main');
+ await cardPage.current.webContents.executeJavaScript('document.body.innerHTML='+JSON.stringify('<main><div class="today_quiz"><span class="date">'+date+'</span><span class="name">합성 제품</span></div><article><a href="/product/productView?pId=123"><span class="name">합성 제품</span></a><a href="/product/productView?pId=123#quiz"><span class="name">합성 제품</span></a></article></main>'));
+ const cardRequest={phase:'today',date,expectedUrl:cardPage.url};
+ check('original desktop lookup reproduces equivalent card-link ambiguity',(await cardPage.call('doctorville-quiz-journey.js',[cardRequest])).reason==='product_link_ambiguous');
+ check('dated quiz name resolves equivalent desktop cards without inventing a URL',(await cardPage.call('doctorville-quiz-page.js',[cardRequest])).url==='https://www.doctorville.co.kr/product/productView?pId=123');
+ await cardPage.current.webContents.executeJavaScript('document.querySelector("article").insertAdjacentHTML("afterend",'+JSON.stringify('<article><a href="/product/productView?pId=456"><h3 class="name">합성 제품</h3></a></article>')+')');
+ check('two distinct products with the same name remain unsubmitted',(await cardPage.call('doctorville-quiz-page.js',[cardRequest])).status==='stopped');cardPage.close();
  check('diagnostics never contain fixture product, account, answers or raw URLs',!/https:|합성|questionList|answerNum|quizId/.test(JSON.stringify(store.diagnostics())));
  // Test the immutable lounge helper in a real document. The scheduler's durable
  // batch/clock boundaries are tested independently by automation.test.js.
