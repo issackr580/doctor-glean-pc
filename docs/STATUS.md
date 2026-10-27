@@ -111,3 +111,7 @@ v8 Windows 재보고에서 닥터빌 저장 성공과 기존 작업 프로필 �
 현재 실행파일 접근 기준은 [ACCESS](ACCESS.md)를 따른다. 배포용 v14는 공개 릴리스, 개발자용 v14는 같은 PC 저장소의 지정 collaborator 전용 Draft다. 공개한 배포 자산·소스 태그는 변경하지 않는다.
 
 Codex 작업 시작과 플랫폼 경계는 [CODEX_START](CODEX_START.md), 기준점·인계는 [CODEX_HANDOFF](CODEX_HANDOFF.md)를 따른다. 게시 후 인계 문서 정리에서 제품·vendor·버전과 이미 게시한 자산은 변경하지 않는다.
+
+## preview.15 수동 Draft 업로드 준비
+
+관리자의 게시 요청에 따라 고정 소스를 재현하고 기존 두 Draft에만 파일을 올리는 일회성 workflow_dispatch를 준비했다. 검증본 전체 파일 해시·기존 v14 자산을 대조하며 공개는 다운로드 검증 뒤 배포용에만 별도로 수행한다. 개발자용은 Draft다. 예약·push/PR 실행·공개 Actions artifact는 없고 완료 뒤 workflow를 제거한다.
