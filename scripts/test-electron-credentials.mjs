@@ -12,6 +12,7 @@ import {CredentialManager} from '../src/credential-manager.js';
 import {CREDENTIAL_SITES} from '../src/credential-policy.js';
 import {remotePreferences} from '../src/security.js';
 import {electronCatalogPage} from '../src/electron-catalog-page.js';
+import {CatalogRunner} from '../src/catalog-runner.js';
 import {initialSettings} from '../vendor/engine/core.js';
 import {kstDate} from '../src/schedule.js';
 app.on('window-all-closed',()=>{});
@@ -295,6 +296,35 @@ async function run(){
   assert.equal(result.status,'login');assert.equal(fallbackLogins,1);
   check('Whodadoc catalog load failure reads the fixed original login form once',true);
  }finally{fallbackReader.close();}
+ // Reproduce the Windows failure before any credential recovery: the fixed
+ // unauthenticated Dtalks catalog fails, while its original login still loads.
+ for(const scenario of ['recover','consent-off','challenge','login-failed','entry-still-failed']){
+  const partition='dtalks-catalog-'+randomUUID(),prefs={...remotePreferences('dtalks'),partition},directory=join(root,'dtalks-catalog-'+scenario);
+  const requests=[],rows=[];let authenticated=false,sent=0,recoveries=0;
+  await session.fromPartition(partition).protocol.handle('https',request=>{
+   const path=new URL(request.url).pathname;requests.push([request.method,path]);
+   if(request.method==='POST'){
+    assert.equal(path,'/member/loginConfirm.do');
+    assert.equal(JSON.parse(readFileSync(join(directory,'credential-attempts-v1.json'))).sites.dtalks.status,'submitted');
+    sent++;authenticated=true;return Response.redirect('https://www.dtalks.kr/main.do',302);
+   }
+   if(path==='/websim/vodList.do'&&(!authenticated||scenario==='entry-still-failed'))return Response.error();
+   if(path==='/login.do'&&scenario==='login-failed')return Response.error();
+   const body=authenticated?'<a href="/logout">로그아웃</a><nav><a href="/schedule-a.do">편성표</a><a href="/schedule-b.do">편성표</a></nav>':inputs.dtalks+(scenario==='challenge'?'<label>보안문자<input name="captcha"></label>':'');
+   return new Response(shell(body),{headers:{'content-type':'text/html; charset=utf-8'}});
+  });
+  const credentialManager=new CredentialManager({directory,applicationId:'dtalks-catalog-test',protect,automaticAllowed:()=>true,isManualOpen:()=>false,createPage:async(_site,signal)=>new AutomationPage('dtalks',signal,prefs)});
+  credentialManager.vault.save('dtalks',{id:'SYNTHETIC_USER',password:'SYNTHETIC_PASSWORD'},scenario!=='consent-off');
+  const runner=new CatalogRunner({store:{record:(_site,_date,row)=>rows.push(row)},createPage:(profile,signal)=>electronCatalogPage(profile,signal,prefs),recoverLogin:async(site,signal)=>{recoveries++;return (await credentialManager.recover(site,{automatic:true,signal})).status==='authenticated';},sleep:async()=>new Promise(resolve=>setTimeout(resolve,60))});
+  await runner.start(kstDate(),['dtalks']);
+  console.log('ELECTRON_DTALKS_CATALOG:'+JSON.stringify({scenario,sent,recoveries,rows:rows.map(row=>({status:row.status,reason:row.reason,diagnostics:row.diagnostics})),credentials:credentialManager.snapshot().results.map(row=>({status:row.status,submitted:row.submitted,reads:row.reads}))}));
+  if(scenario==='recover')check('Dtalks failed catalog reaches consented recovery once and resumes the real catalog reader',recoveries===1&&sent===1&&rows.length===1&&rows[0].status==='review'&&rows[0].diagnostics?.stage==='schedule_menu'&&!rows[0].diagnostics.failure);
+  if(scenario==='consent-off')check('Dtalks fallback never submits a saved account without automatic consent',recoveries===1&&sent===0&&rows[0].status==='login');
+  if(scenario==='challenge')check('Dtalks recovered entry preserves a visible security challenge with zero credential submissions',recoveries===1&&sent===0&&rows[0].status==='login'&&credentialManager.snapshot().results[0].status==='challenge');
+  if(scenario==='login-failed')check('Dtalks two failed GETs stop without an account attempt or repeated navigation',recoveries===0&&sent===0&&rows[0].reason==='network_error'&&requests.filter(([method,path])=>method==='GET'&&path==='/login.do').length===1);
+  if(scenario==='entry-still-failed')check('Dtalks persistent entry failure after authentication never loops or repeats the login POST',recoveries===1&&sent===1&&rows[0].status==='login');
+  check('Dtalks '+scenario+' catalog diagnostics exclude account values and request paths',!/SYNTHETIC_|https:|member\/login/.test(JSON.stringify({rows,state:credentialManager.snapshot()})));
+ }
  check('no account values enter native diagnostics',!/SYNTHETIC_|https:|password|csrf/i.test(JSON.stringify(attempts.snapshot())));
  check('temporary validation windows are released',BrowserWindow.getAllWindows().length===0);
  mkdirSync(new URL('../verification/',import.meta.url),{recursive:true});writeFileSync(new URL('../verification/electron-credentials.json',import.meta.url),JSON.stringify({environment:'Linux Electron 45; synthetic HTTPS; immutable Android login assets',checks:checks.length,passed:checks,windowsDpapiVerified:false,actualAccountsVerified:false,posts:posts.length},null,2)+'\n');console.log('ELECTRON_CREDENTIALS_PASS:'+checks.length);app.quit();
