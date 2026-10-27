@@ -18,7 +18,7 @@ test('stale lecture rows remain visible with an explicit saved-list warning',()=
  const text=formatPcSchedule(date,['doctorville'],result);assert.match(text,/1300 닥빌/);assert.match(text,/저장된 목록: 닥터빌/);assert.match(text,/확인 완료 0\/1/);
 });
 test('the copied schedule distinguishes checked dates and current lists from unread or failed sites',()=>{
- const text=formatPcSchedule(date,['doctorville','hmp','whodadoc'],{doctorville:{status:'review',coverage:true,scope:'list_checked',events:[]},hmp:{status:'review',coverage:false,scope:'current_list_checked',events:[]},whodadoc:{status:'login',coverage:false,events:[]}});
+ const text=formatPcSchedule(date,['doctorville','hmp','whodadoc'],{doctorville:{status:'review',reason:'list_unconfirmed',coverage:true,scope:'list_checked',events:[]},hmp:{status:'review',reason:'list_unconfirmed',coverage:false,scope:'current_list_checked',events:[]},whodadoc:{status:'login',coverage:false,events:[]}});
  assert.match(text,/목록·날짜 확인 1곳.*현재 목록만 확인 1곳.*로그인 필요 1곳/);
  assert.match(text,/범위 확인: 닥터빌/);assert.match(text,/미확인: 후다닥/);assert.doesNotMatch(text,/미확인: 닥터빌/);
 });
