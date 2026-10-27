@@ -5,8 +5,9 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import assert from 'node:assert/strict';
-import {kstDate} from '../src/schedule.js';
+import {kstDate,kstInstant} from '../src/schedule.js';
 import {resolveEdition} from '../src/edition.js';
+import {WorkflowStore} from '../src/workflow-store.js';
 
 const application=resolve(process.env.DOCTOR_GLEAN_PC_TEST_ROOT??fileURLToPath(new URL('../',import.meta.url)));
 const appMetadata=JSON.parse(readFileSync(join(application,'package.json'),'utf8')),edition=resolveEdition(appMetadata.doctorGleanEdition);
@@ -16,6 +17,8 @@ mkdirSync(browserDirectory,{recursive:true});app.setPath('appData',temporary);ap
 const resultFile=new URL('../verification/electron-edition-'+edition.id+'.json',import.meta.url);
 const modes={doctorville:'normal',keymedi:'normal',whodadoc:'normal',dtalks:'entry-error'},requests=[],checks=[];
 const today=kstDate(),tomorrow=kstDate(Date.parse(today+'T12:00:00+09:00')+86_400_000);
+const seededStore=new WorkflowStore(join(dataDirectory,'workflows-v1.json')),seededEvent={site:'doctorville',date:today,time:'13:00',title:'합성 닥터빌 강의 1'},seededKey=seededStore.entryKey(seededEvent),seededStart=kstInstant(today,'13:00');
+seededStore.putEntry({key:seededKey,...seededEvent,start:seededStart,due:seededStart-3000000,deadline:seededStart+600000,nextAt:seededStart-3000000,status:'reserved',slot:0,retries:0,attempts:[],entryAttempted:false});
 const check=(name,condition)=>{assert.ok(condition,name);checks.push(name);};
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(fn,ms=25_000){const end=Date.now()+ms;while(Date.now()<end){const v=await fn();if(v)return v;await pause(80);}throw Error('wait_timeout');}
@@ -33,7 +36,8 @@ for(const id of ['doctorville','keymedi','whodadoc','dtalks']){
   requests.push({site:id,method:request.method});
   if(request.method!=='GET')return new Response('not allowed',{status:405});
   if(id==='dtalks'&&(modes.dtalks==='all-error'||modes.dtalks==='entry-error'&&new URL(request.url).pathname!=='/login.do'))return Response.error();
-  const ready=(id==='doctorville'?doctorCards:id==='keymedi'?keyCards:'<main>웨비나</main>')+'<a href="/logout">로그아웃</a>';
+  const doctorReady=modes.doctorville==='entry-ready'?doctorCards.replaceAll('</a>','<button onclick="fetch(\'/synthetic-entry\',{method:\'POST\'})">입장하기</button></a>'):doctorCards;
+  const ready=(id==='doctorville'?doctorReady:id==='keymedi'?keyCards:'<main>웨비나</main>')+'<a href="/logout">로그아웃</a>';
   const body=modes[id]==='login'?login:`<script>document.write(localStorage.getItem('synthetic-login')==='ready'?${JSON.stringify(ready)}:${JSON.stringify(login)});const b=document.getElementById('synthetic-login');if(b)b.onclick=()=>{localStorage.setItem('synthetic-login','ready');location.reload();};</script>`;
   return new Response(shell(body),{headers:{'content-type':'text/html; charset=utf-8'}});
  });
@@ -149,6 +153,16 @@ try{
  await evaluate('window.doctorGlean.copySchedule()');
  check('real clipboard receives compact schedule',(await clipboard.readText()).includes('1300 닥빌 키메'));
  check('copy omits deselected sites',!(await clipboard.readText()).includes('미확인: 한미'));
+ modes.doctorville='entry-ready';
+ const entryBefore=(await state()).automation.entries.find(row=>row.key===seededKey);
+ const preflight=await evaluate('window.doctorGlean.preflightEntry('+JSON.stringify(seededKey)+')');
+ const checked=(await state()).automation.entries.find(row=>row.key===seededKey);
+ check('real control IPC provides a read-only entry preflight',preflight.ok&&checked.preflight?.status==='complete'&&!checked.preflight.attempted);
+ check('preflight preserves the reservation and never dispatches its provider button',checked.status===entryBefore.status&&checked.attempts.length===0&&requests.every(request=>request.method==='GET'));
+ check('control shows entry evidence and the read-only inspection result',await evaluate('document.getElementById("entry-results").textContent.includes("실제 클릭 없음")'));
+ modes.doctorville='login';await evaluate('window.doctorGlean.preflightEntry('+JSON.stringify(seededKey)+')');
+ check('preflight reports login need without credential submission',(await state()).automation.entries.find(row=>row.key===seededKey).preflight.status==='login'&&requests.every(request=>request.method==='GET'));
+ modes.doctorville='normal';
  await evaluate('window.doctorGlean.exportReport()');
  const diagnostic=readFileSync(report,'utf8');
  check('report omits raw session, URLs and lecture titles',!/synthetic-login|https:|합성 .*강의/.test(diagnostic));
@@ -160,6 +174,7 @@ try{
   await evaluate('window.doctorGleanDeveloper.export()');
   const exported=JSON.parse(readFileSync(developerReport,'utf8'));
   check('developer opt-in records collection milestones',exported.events.some(row=>row.area==='collection'));
+  check('developer opt-in also records the entry preflight timeline',exported.events.some(row=>row.area==='automation'&&row.phase==='preflight'&&row.readOnly===true));
   check('developer journal excludes URLs and lecture titles',!/https:|합성 .*강의|outside.example.invalid|synthetic-login/.test(JSON.stringify(exported)));
  }else check('distribution report has no developer recorder state',!Object.hasOwn(JSON.parse(diagnostic),'developerDiagnostics'));
  modes.doctorville='login';modes.keymedi='login';

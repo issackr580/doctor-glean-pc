@@ -3,8 +3,10 @@ import {kstDate,kstInstant} from './schedule.js';
 import {taskHash} from './task-ticket.js';
 import {safeReason} from './automation-policy.js';
 import {waitFor} from './async-work.js';
+import {executionEvent} from './build-info.js';
+import {cleanReceipt} from './workflow-store.js';
 export class LoungeRunner{
- constructor({ledger,store,createPage,isManualOpen=()=>false,onChange=()=>{},now=Date.now,sleep=waitFor}){Object.assign(this,{ledger,store,createPage,isManualOpen,onChange,now,sleep});this.active=null;}
+ constructor({ledger,store,createPage,isManualOpen=()=>false,onChange=()=>{},onEvent=()=>{},now=Date.now,sleep=waitFor}){Object.assign(this,{ledger,store,createPage,isManualOpen,onChange,onEvent,now,sleep});this.active=null;}
  get busy(){return !!this.active;}
  cancel(){this.active?.controller.abort();this.active?.page?.close();}
  manualOpened(site){if(site==='keymedi')this.cancel();}
@@ -12,12 +14,14 @@ export class LoungeRunner{
   if(this.active||this.store.day(date).lounge)return false;
   const opensAt=kstInstant(date,'00:01:02'),closesAt=opensAt+20000,verifyAt=closesAt+12000,controller=new AbortController();
   const run={controller,page:null},lease=date+':'+randomUUID();this.active=run;
+  const runId=randomUUID().replace(/-/g,''),emit=(phase,detail={})=>executionEvent(this.onEvent,{area:'automation',phase,site:'keymedi',kind:'lounge',runId,due:opensAt,...detail});
   let row={status:'running',reason:'running',startedAt:this.now(),opensAt,alarmDelayMs:Math.max(0,this.now()-scheduledAt),attemptMask:0,sentMask:0,successMask:0},fresh=false,refreshes=0,lastRefresh=0,lastSent=0;
   const valid=()=>!controller.signal.aborted&&!this.ledger.snapshot().paused&&this.store.features().lounge&&kstDate(this.now())===date&&this.now()<verifyAt&&!this.store.failed;
   let saved='';const save=()=>{const signature=JSON.stringify(row);if(signature===saved)return;this.store.record(date,'lounge',row,this.now());saved=signature;this.onChange();};
   try{
    if(!valid())return false;
    save();
+   emit('start',{startedAt:row.startedAt,delayMs:row.alarmDelayMs});
    if(this.isManualOpen('keymedi')){row.status='busy';row.reason='manual_view_open';return false;}
    run.page=await this.createPage('keymedi',controller.signal);const page=run.page;
    const reload=async()=>{await page.load('https://www.keymedi.com/drlounge');lastRefresh=this.now();if(lastRefresh>=opensAt){fresh=true;refreshes++;}row.firstPageReadyAt??=this.now();};
@@ -46,6 +50,7 @@ export class LoungeRunner{
        row.firstEligibleAt??=this.now();row.attemptMask|=safeMask;save();
        if(!valid()||this.now()>=closesAt||!this.ledger.beginDispatchBatch(tickets,this.now()))throw Error('scope_changed');
        row.firstClaimAt??=this.now();row.lastClaimAt=this.now();save();
+       emit('dispatch',{attempted:true,attemptMask:row.attemptMask});
        const reply=await page.call('keymedi-lounge.js',[{mode:'claim',mask:safeMask,lease,opensAt,closesAt,requireFreshDocument:true}]);
        row.sentMask|=(reply.sentMask??0)&safeMask;lastSent=this.now();
        for(const ticket of tickets)this.ledger.finish(ticket,'unknown',this.now());save();
@@ -59,7 +64,7 @@ export class LoungeRunner{
    }
    if(row.status==='running'){row.status='unknown';row.reason=controller.signal.aborted?'cancelled':'provider_result_unconfirmed';}
   }catch(error){row.status='unknown';row.reason=safeReason(controller.signal.aborted?'cancelled':error.code??error.message);}
-  finally{run.page?.close();this.active=null;if(row.status==='running'){row.status='unknown';row.reason='cancelled';}row.finishedAt=this.now();save();}
+  finally{run.page?.close();this.active=null;if(row.status==='running'){row.status='unknown';row.reason='cancelled';}row.finishedAt=this.now();save();emit('result',{...cleanReceipt(row,this.now()),attempted:row.attemptMask!==0,evidence:row.status==='complete'?row.attemptMask?'observed_after_pc_action':'existing_observed':'unconfirmed'});}
   return true;
  }
 }

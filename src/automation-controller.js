@@ -7,10 +7,10 @@ import {DAILY_TASKS} from './automation-policy.js';
 import {kstDate,kstInstant,nextLoungePreparation} from './schedule.js';
 function nextMorning(now){const today=kstDate(now),at=kstInstant(today,'08:10');return at>now?at:kstInstant(kstDate(now+86400000),'08:10');}
 export class AutomationController{
- constructor({file,ledger,createPage,isManualOpen,catalog,catalogBusy,queueCatalog,yieldCatalog,onChange=()=>{},onError=()=>{},now=Date.now}){
+ constructor({file,ledger,createPage,createInspectionPage,isManualOpen,catalog,catalogBusy,queueCatalog,yieldCatalog,onChange=()=>{},onEvent=()=>{},onError=()=>{},now=Date.now}){
   Object.assign(this,{ledger,createPage,isManualOpen,catalog,catalogBusy,queueCatalog,yieldCatalog,onChange,onError,now});this.store=new WorkflowStore(file);this.active=null;this.pendingDaily=[];this.pendingReadOnly=true;this.closed=false;
   this.store.recover();
-  const common={ledger,store:this.store,createPage,isManualOpen,onChange:()=>{onChange();},now};
+  const common={ledger,store:this.store,createPage,createInspectionPage,isManualOpen,onChange:()=>{onChange();},onEvent,now};
   this.quiz=new DoctorvilleQuizRunner(common);
   this.daily=new DailyRunner({...common,quiz:this.quiz,shouldYield:()=>this.allowed()&&!!this.entry.due(this.now())});
   this.entry=new EntryRunner(common);this.entry.recover();this.lounge=new LoungeRunner(common);
@@ -23,6 +23,12 @@ export class AutomationController{
  diagnostics(){return {...this.store.diagnostics(),daily:this.daily.snapshot(),active:this.active??'',queuedDaily:[...this.pendingDaily],nextMorning:this.morningAt,nextLounge:this.loungeAt};}
  setFeature(key,value){this.store.setFeature(key,value);if(!value){if(key==='entry')this.entry.cancel();if(key==='lounge')this.lounge.cancel();if(['dailyClaim','quizAuto','brand'].includes(key))this.daily.cancel();}this.rearm();if(key==='entry'&&value)this.entry.reserveCatalog(kstDate(this.now()),this.catalog(kstDate(this.now())));this.onChange();this.tick();}
  setEntrySites(ids){this.store.setEntrySites(ids);this.onChange();this.tick();}
+ async preflightEntry(key){
+  if(this.closed||typeof key!=='string'||!/^[a-f0-9]{64}$/.test(key)||this.busy||this.catalogBusy())return {ok:false,reason:'busy'};
+  this.active='preflight';this.onChange();
+  try{return await this.entry.preflight(key);}
+  finally{this.active=null;this.onChange();this.tick();}
+ }
  requestDaily({readOnly=false,keys=DAILY_TASKS.map(task=>task.key)}={}){
   if(!readOnly&&!this.allowed())return {ok:false,reason:'paused'};
   this.pendingDaily=[...new Set([...this.pendingDaily,...keys])];this.pendingReadOnly=this.pendingReadOnly&&readOnly;this.onChange();this.tick();return {ok:true};
@@ -54,7 +60,7 @@ export class AutomationController{
    if(this.active){
     if((entry||loungeDue)&&this.active==='daily'&&!this.daily.claimPending)this.daily.cancel('entry_priority');
     if(entry&&this.active==='lounge')this.lounge.cancel();
-    if(entry&&this.active==='prepare')this.entry.cancel();return;
+    if(entry&&this.active==='prepare'||(entry||loungeDue)&&this.active==='preflight')this.entry.cancel();return;
    }
    if(entry){this.#work('entry',()=>this.entry.run(entry),{priority:true});return;}
    if(loungeDue){const at=this.loungeAt;this.loungeAt=nextLoungePreparation(now+1000);this.#work('lounge',()=>this.lounge.run(kstDate(at),at),{priority:true});return;}
