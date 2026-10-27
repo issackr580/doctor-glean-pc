@@ -41,7 +41,7 @@ export function pcEntryPage(job,mode='preflight'){
    // between inline elements; a querySelector leaf cannot see those nodes.
    const starts=all('.time .start',root);if(starts.length!==1)return false;
    const copy=root.cloneNode(true),nodes=Array.from(root.querySelectorAll('*')),clones=Array.from(copy.querySelectorAll('*'));
-   nodes.forEach((node,i)=>{if(!visible(node)||node.matches('.tit,.ico_secret,button,[role="button"],.time .start,script,style,template,noscript'))clones[i].remove();});
+   nodes.forEach((node,i)=>{if(!visible(node)||node.matches('.tit,h1,h2,h3,h4,.ico_secret,button,[role="button"],.time .start,script,style,template,noscript'))clones[i].remove();});
    copy.querySelectorAll('br,span,div,p,time,em,strong').forEach(node=>node.after(document.createTextNode(' ')));
    const raw=copy.textContent.replace(/\s+/g,' ').trim(),full=[...raw.matchAll(/(?:^|[^\d])(20\d{2})\s*[.\-/년]\s*(\d{1,2})\s*[.\-/월]\s*(\d{1,2})(?:일)?\s*\.?\s*(?:\(([월화수목금토일])(?:요일)?\))?(?!\d)/g)];
    const values=full.length?full:[...raw.matchAll(/(?:^|[^\d])(\d{1,2})\s*[.\-/월]\s*(\d{1,2})(?:일)?\s*\.?\s*(?:\(([월화수목금토일])(?:요일)?\))?(?!\d)/g)].map(m=>[m[0],job.date.slice(0,4),m[1],m[2],m[3]]);
