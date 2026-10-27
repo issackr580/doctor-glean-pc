@@ -57,3 +57,7 @@ node scripts/build-app-patch.mjs --from=/old/artifact/developer --to=/new/artifa
 ## Windows 확인
 
 최소 확인은 시작·트레이 복원·명시적 종료, 업데이트 후 기존 데이터, 계정 저장/복호화, 로그인 만료 복구, 전체 중지, 재시작 중복 제출 방지다. 사이트별로 실제 입장·목적지·재생·적립을 따로 확인한다. Linux 검사 통과를 Windows·실계정 성공으로 확대하지 않는다.
+
+## preview.11 게시 확인
+
+디톡스 수정판도 같은 인증401 조건에서 관리자가 요청한 [수동 runner 작업](https://github.com/issackr580/doctor-glean-pc/actions/runs/40446297112)으로 고정 소스 `aaa022d`과 검증본 해시를 대조해 기존 Draft에만 업로드했다. 전체/10→11 패치/소스 ZIP을 다시 다운로드해 서버 SHA·체크섬·모든 내부 파일을 확인한 후 배포용만 별도 API 동작으로 공개했다. 개발자용은 Draft다. 완료한 일회성 workflow와 보조 스크립트는 제거했으며 자동 게시·예약 실행·개발자 바이너리 공개 Actions artifact는 없다.
