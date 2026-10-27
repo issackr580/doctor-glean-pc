@@ -47,8 +47,20 @@ export function pcEntryPage(job,mode='preflight'){
     copy.querySelectorAll('br,span,b,strong,em,time,p,div,li,dt,dd').forEach(node=>node.after(document.createTextNode(' ')));
     return copy.textContent.replace(/\s+/g,' ').trim();
    };
-   const metadata=all('.sem_detail,.sem_detail_action,.sci_detail',root),fields=metadata.filter(e=>!metadata.some(other=>other!==e&&other.contains(e))).map(clean).filter(value=>/^(?:일\s*시\s*[:：]?\s*)?\d/.test(value));
+   const labelled=e=>/^일\s*시\s*[:：]?\s*\d/.test(clean(e));
+   let fields=all('span,p,li,div,dd',root).filter(e=>labelled(e)&&!Array.from(e.children).some(labelled)).map(clean);
+   if(!fields.length)for(const icon of all('.ico_date',root)){
+    let value=icon.nextElementSibling;
+    if(value&&/^일\s*시\s*[:：]?\s*$/.test(text(value)))value=value.nextElementSibling;
+    if(value&&visible(value)&&!value.matches('.sem_action,.sem_dday,.sem_tit')&&/^(?:일\s*시\s*[:：]?\s*)?\d/.test(clean(value)))fields.push(clean(value));
+   }
+   if(!fields.length){
+    const metadata=all('.sem_detail,.sem_detail_action,.sci_detail',root),candidates=metadata.flatMap(e=>[e,...all('li,p,dd,span,div,time',e)]).filter(e=>!e.closest('.sem_action,.sem_dday,.sem_badges,.sem_tit')&&/^(?:일\s*시\s*[:：]?\s*)?\d/.test(clean(e)));
+    fields=candidates.filter(e=>!candidates.some(other=>other!==e&&other.contains(e))).map(clean);
+   }
+   fields=[...new Set(fields)];
    if(fields.length){
+    if(fields.length!==1)return false;
     const dateHead=(value,start='')=>{
      const m=value.match(/^(?:(20\d{2})\s*[.\/년-]\s*)?(\d{1,2})\s*[.\/월-]\s*(\d{1,2})(?:일)?(?!\d)/);if(!m)return null;
      let year=m[1]?+m[1]:start?+start.slice(0,4):+job.date.slice(0,4);
@@ -92,30 +104,48 @@ export function pcEntryPage(job,mode='preflight'){
   // The PC collector supports adjacent two-column date groups. Share only a
   // visible date label within that exact sibling group, resetting at every
   // gap/hidden/ambiguous row. A global heading or a calendar month is no date.
-  const seeds=all('.subject').filter(e=>!e.querySelector('.subject')&&!e.closest('header,footer,nav,aside,[role="dialog"]')),parents=new Map();
+  const outside=element=>{
+   if(element.closest('header,footer,nav,aside,[role="dialog"],[aria-modal="true"]'))return true;
+   for(let e=element;e&&e!==document.body;e=e.parentElement){
+    if(/(?:^|[\s_-])(?:replay|vod|recording)(?:$|[\s_-])/i.test((e.getAttribute('class')||'')+' '+(e.id||'')))return true;
+    if(e.matches('section')&&/다시\s*보기|녹화|\bVOD\b|replay/i.test(text(e.querySelector('h1,h2,h3'))))return true;
+   }return false;
+  };
+  const seeds=all('.subject').filter(e=>!e.querySelector('.subject')&&!outside(e)),parents=new Map();
+  const titles=root=>all('.subject',root).filter(e=>!e.querySelector('.subject')&&!outside(e));
+  const clockFields='time,span,em,p,div,strong,small,b,i,h1,h2,h3,h4,h5,h6,a',clockPattern=/^(?:(오전|오후)\s*)?([01]?\d|2[0-3]):([0-5]\d)(?:\s*[~～∼–—-]\s*(?:[01]?\d|2[0-3]):[0-5]\d)?$/;
+  const hasLegacyClocks=all('.top .time').some(e=>!e.closest('.subject'));
   for(const seed of seeds)for(let row=seed.parentElement,depth=0;row&&row!==document.body&&depth<7;row=row.parentElement,depth++){
-   if(!visible(row)||all('.subject',row).length!==1)break;
-   const parent=row.parentElement;if(!parent||!parent.matches('div,ul,ol')||parent.children.length<2||parent.children.length>400||all('.subject',parent).length<=1)continue;
+   if(!visible(row)||outside(row)||titles(row).length!==1)break;
+   const parent=row.parentElement;if(!parent||!parent.matches('div,ul,ol')||parent.children.length<2||parent.children.length>400||titles(parent).length<=1)continue;
    if(!row.matches('div,li,article'))break;
    if(!parents.has(parent))parents.set(parent,new Map());parents.get(parent).set(row,seed);break;
   }
   const parseDate=element=>{
    if(!visible(element)||element.querySelector('.subject,input,textarea,select'))return '';
-   const value=text(element),m=value.match(/^(?:(20\d{2})\s*[.\/년-]\s*)?(\d{1,2})\s*[.\/월-]\s*(\d{1,2})(?:일)?\s*\.?\s*(?:\(([월화수목금토일])(?:요일)?\))?\s*\.?$/);
+   const value=text(element).replace(/^(?:일시|일정|날짜|강의일|방송일)\s*[:：]?\s*/,''),m=value.match(/^(?:(20\d{2})\s*[.\/년-]\s*)?(\d{1,2})\s*[.\/월-]\s*(\d{1,2})(?:일)?\s*\.?\s*(?:\(([월화수목금토일])(?:요일)?\))?\s*\.?$/);
    if(!m||!m[1]&&!m[4])return '';
    const date=dateValue(m[1]||job.date.slice(0,4),m[2],m[3]);if(m[4]&&new Date(date+'T00:00:00Z').getUTCDay()!=='일월화수목금토'.indexOf(m[4]))return '';return date;
   };
   for(const [parent,known] of parents){let date='';for(const row of Array.from(parent.children)){
    const seed=known.get(row),children=Array.from(row.children).filter(visible);
-   if(!visible(row)||!seed||children.length!==row.children.length||children.length<1||children.length>2||text(row).length>1600||row.querySelectorAll('*').length>200){date='';continue;}
-   const content=children.at(-1);if(!content.contains(seed)||all('.subject',content).length!==1){date='';continue;}
+   if(!visible(row)||!seed||outside(row)||children.length!==row.children.length||children.length<1||children.length>2||text(row).length>1600||row.querySelectorAll('*').length>200){date='';continue;}
+   const content=children.at(-1);if(!content.contains(seed)||titles(content).length!==1){date='';continue;}
    if(children.length===2&&(text(children[0])||children[0].querySelector('input,textarea,select')))date=parseDate(children[0]);
-   const times=all('.top .time',content).filter(e=>!e.closest('.subject')),clock=times.length===1?text(times[0]).match(/^([01]?\d|2[0-3]):([0-5]\d)(?:\s*[~～∼–—-]\s*(?:[01]?\d|2[0-3]):[0-5]\d)?$/):null;
-   const explicit=all('.date,[data-date]',content).filter(e=>text(e)).map(e=>parseDate(e));
+   let times=all('.top .time',content).filter(e=>!e.closest('.subject'));
+   if(!hasLegacyClocks){
+    const labels=all(clockFields,content).filter(e=>!outside(e)&&!e.closest('.subject')&&!e.contains(seed)&&clockPattern.test(text(e))&&!!(e.compareDocumentPosition(seed)&Node.DOCUMENT_POSITION_FOLLOWING));
+    times=labels.filter(e=>!labels.some(other=>other!==e&&e.contains(other)));
+   }
+   const clock=times.length===1?text(times[0]).match(clockPattern):null;
+   const datePattern=/^(?:(?:일시|일정|날짜|강의일|방송일)\s*[:：]?\s*)?(?:(?:20\d{2})\s*(?:[.\/-]|년)\s*)?\d{1,2}\s*(?:[.\/-]|월)\s*\d{1,2}(?:일)?(?:\s*\(?[월화수목금토일](?:요일)?\)?)?(?:\s*(?:[|·,:：]\s*)?(?:오전|오후)?\s*(?:[01]?\d|2[0-3]):[0-5]\d(?:\s*[~～∼–—-]\s*(?:[01]?\d|2[0-3]):[0-5]\d)?)?\s*\.?$/;
+   const dated=all(clockFields,content).filter(e=>!outside(e)&&!e.closest('.subject')&&!e.contains(seed)&&text(e).length<=90&&datePattern.test(text(e)));
+   const explicit=dated.filter(e=>!dated.some(other=>other!==e&&e.contains(other))).map(e=>{const m=text(e).replace(/^(?:일시|일정|날짜|강의일|방송일)\s*[:：]?\s*/,'').match(/^(?:(20\d{2})\s*(?:[.\/-]|년)\s*)?(\d{1,2})\s*(?:[.\/-]|월)\s*(\d{1,2})/);return m?dateValue(m[1]||job.date.slice(0,4),m[2],m[3]):'';});
    if(!date||!clock||explicit.some(value=>!value||value!==date)||all('a,span,p,button',content).some(e=>/^(?:VOD|녹화|replay|on demand)$/i.test(text(e)))){date='';continue;}
    if(!sameTitle(text(seed))&&!all('strong',seed).some(e=>sameTitle(text(e))))continue;
    diag.titleMatches++;if(date!==job.date)continue;diag.dateMatches++;
-   if(clock[1].padStart(2,'0')+':'+clock[2]!==job.time)continue;diag.timeMatches++;roots.push(row);
+   let hour=+clock[2];if(clock[1]){if(hour<1||hour>12){date='';continue;}hour=hour%12+(clock[1]==='오후'?12:0);}
+   if(String(hour).padStart(2,'0')+':'+clock[3]!==job.time)continue;diag.timeMatches++;roots.push(row);
   }}
  }
  // A separate hero/detail can repeat a listed lecture. Its own bounded region

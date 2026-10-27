@@ -48,6 +48,28 @@ test('a pre-probe policy refusal retains a fixed failure and callback eligibilit
  const r=await new CredentialRunner({...s,attempts}).run('doctorville',p,{signal:new AbortController().signal,readCredentials:()=>{decrypted++;return account;}});
  assert.equal(r.trace.at(-1).failure,'policy_rejected');assert.equal(r.trace.at(-1).navigationAllowed,false);assert.equal(r.reads,0);assert.equal(decrypted,0);assert.doesNotMatch(JSON.stringify(r.trace),/PRIVATE|https:|wrong/);
 });
+test('Doctorville loads the working encoded manual entry and retains ready probes and durable submission',async t=>{
+ const {siteById}=await import('../src/security.js'),s=setup(t),attempts=new CredentialAttempts(join(s.root,'canonical.json'));let loaded='',probes=0,decrypted=0;
+ const p=fakePage('doctorville',async(_name,[input])=>{if(input.mode==='probe'){probes++;return {status:'ready'};}if(input.mode==='fill'){assert.equal(probes,2);return {status:'submitted',submitted:true};}return {status:'authenticated'};});
+ p.load=async url=>{loaded=url;p.url=url;p.version++;};
+ const result=await new CredentialRunner({...s,attempts}).run('doctorville',p,{signal:new AbortController().signal,readCredentials:()=>{decrypted++;assert.equal(attempts.data.sites.doctorville.status,'submitted');return {...account};}});
+ assert.equal(loaded,siteById('doctorville').loginUrl);assert.equal(allowedCredentialPage('doctorville',loaded),true);assert.equal(result.status,'authenticated');assert.equal(decrypted,1);assert.equal(result.submitted,true);
+});
+test('Doctorville callback diagnostics distinguish only bounded URL shapes and never export their values',async()=>{
+ const {credentialObservation}=await import('../src/credential-diagnostics.js');
+ for(const [suffix,expected] of [['','missing'],['?cb=PRIVATE','mismatch'],['?cb=PRIVATE&cb=OTHER','repeated']]){
+  const row=credentialObservation('doctorville',{url:'https://mims-account.shop.co.kr/login'+suffix,route:'provider'},'open',{status:'ready'},1);
+  assert.equal(row.providerPath,'login');assert.equal(row.callbackState,expected);assert.doesNotMatch(JSON.stringify(row),/PRIVATE|OTHER|https:/);
+ }
+});
+test('a policy refusal before submission is blocked while a dispatched refusal stays uncertain',async t=>{
+ for(const submitted of [false,true]){
+  const s=setup(t),attempts=new CredentialAttempts(join(s.root,'refusal.json'));let decrypted=0;
+  const p=fakePage('doctorville',async(_name,[input])=>{if(submitted&&input.mode==='probe')return {status:'ready'};throw Object.assign(Error('PRIVATE'),{code:'policy_rejected'});});
+  const r=await new CredentialRunner({...s,attempts}).run('doctorville',p,{signal:new AbortController().signal,readCredentials:()=>{decrypted++;return {...account};}});
+  assert.equal(r.status,submitted?'unknown':'blocked');assert.equal(decrypted,submitted?1:0);assert.equal(r.trace.at(-1).failure,'policy_rejected');
+ }
+});
 test('readiness is awaited before capturing the redirected verification URL',async t=>{const s=setup(t),a=new CredentialAttempts(join(s.root,'a.json'));let filled=false,settled=false;const p=fakePage('dtalks',async(_name,[input])=>{if(input.mode==='probe')return {status:'ready'};if(input.mode==='fill'){filled=true;return {status:'submitted',submitted:true};}assert.equal(settled,true);assert.equal(input.expectedUrl,'https://www.dtalks.kr/websim/vodList.do');return {status:'authenticated'};});p.ready=async()=>{if(filled&&!settled){p.url='https://www.dtalks.kr/websim/vodList.do';p.version++;settled=true;}};const r=await new CredentialRunner({...s,attempts:a}).run('dtalks',p,{candidate:account,validation:true,signal:new AbortController().signal});assert.equal(r.status,'authenticated');});
 
 test('a settled Dtalks POST result reads the fixed protected catalog once without another POST',async t=>{
