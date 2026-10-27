@@ -5,8 +5,9 @@ export function resultGroup(result){
  if(result.status==='busy')return 'open';
  if(result.status==='blocked')return 'blocked';
  if(result.status==='ok'&&result.coverage&&!result.stale)return 'complete';
- if(result.status==='review'&&result.coverage&&!result.stale&&['list_checked','date_range_checked','calendar_checked'].includes(result.scope))return 'read';
- if(result.status==='review'&&!result.stale&&result.scope==='current_list_checked')return 'current';
+ const finishedRead=['list_read','list_unconfirmed'].includes(result.reason);
+ if(finishedRead&&result.status==='review'&&result.coverage&&!result.stale&&['list_checked','date_range_checked','calendar_checked'].includes(result.scope))return 'read';
+ if(finishedRead&&result.status==='review'&&!result.stale&&result.scope==='current_list_checked')return 'current';
  if(result.reason==='list_unconfirmed'||result.reason==='list_read')return 'partial';
  return 'failed';
 }

@@ -29,3 +29,9 @@ test('only the observed current list is counted separately and its remaining con
  assert.equal(resultGroup({...row,stale:true}),'partial');
  assert.equal(resultGroup({...row,status:'login'}),'login');
 });
+test('a connection failure or cancelled scan cannot be hidden by previously collected current-list facts',()=>{
+ for(const scope of ['current_list_checked','calendar_checked'])for(const reason of ['network_error','cancelled','time_limit','entry_priority']){
+  const row={...partial(3),coverage:true,scope,reason};assert.equal(resultGroup(row),'failed');
+  assert.doesNotMatch(collectionSummary({hmp:row},['hmp']),/목록만 확인|목록·날짜 확인/);
+ }
+});
