@@ -1,6 +1,6 @@
 import {spawn} from 'node:child_process';
 import {createRequire} from 'node:module';
-import {mkdirSync,openSync,closeSync} from 'node:fs';
+import {mkdirSync,openSync,closeSync,readFileSync} from 'node:fs';
 import {resolve,dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..'),args=process.argv.slice(2);
@@ -24,7 +24,7 @@ async function xvfb(){
 }
 async function run(name){
  const script=known[name],flags=['--disable-gpu',...(noSandbox?['--no-sandbox']:[]),join(root,'scripts',script)];
- const file=openSync(join(root,'verification',script.replace('test-','').replace('.mjs','.log')),'w');
+ const logfile=join(root,'verification',script.replace('test-','').replace('.mjs','.log')),file=openSync(logfile,'w');
  const child=spawn(electron,flags,{cwd:root,env,stdio:['ignore',file,file],detached:process.platform!=='win32'});closeSync(file);
  const result=await new Promise((done,fail)=>{
   const timer=setTimeout(()=>{
@@ -34,7 +34,9 @@ async function run(name){
   },180000);
   child.once('error',error=>{clearTimeout(timer);fail(error);});child.once('exit',code=>{clearTimeout(timer);done(code);});
  });if(result!==0)throw Error(name+' failed with exit '+result+'; inspect verification/'+script.replace('test-','').replace('.mjs','.log'));
- console.log('PASS Electron '+name+' (synthetic HTTPS; no live accounts)');
+ const marker=readFileSync(logfile,'utf8').match(new RegExp('^ELECTRON_'+name.toUpperCase()+'_PASS:([1-9][0-9]*)$','m'));
+ if(!marker)throw Error(name+' exited without a completed verification result; inspect '+logfile);
+ console.log('PASS Electron '+name+' '+marker[1]+' (synthetic HTTPS; no live accounts)');
 }
 try{
  if(process.platform==='linux'&&!env.DISPLAY)await xvfb();

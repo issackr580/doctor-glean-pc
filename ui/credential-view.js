@@ -3,7 +3,7 @@ labels.stale='로그인 화면이 바뀌어 입력·제출을 중단했어요. �
 labels.login_required='로그인 화면이 남아 성공을 확인하지 못했어요. 사이트 화면과 추가 안내를 직접 확인해 주세요.';
 let currentSite='',state=null,api,refresh,busy=false;
 const dialog=()=>document.getElementById('credential-dialog');
-function resultLabel(result){
+export function resultLabel(result){
  if(result?.detail==='input_format')return '닥터빌 화면의 비밀번호 형식 안내를 확인해 주세요. 입력한 계정은 저장하지 않았어요.';
  if(result?.status==='saved')return result.profileStatus==='authenticated'?'계정 저장과 작업용 로그인 확인을 마쳤어요. 강의 목록도 다시 확인해요.':'계정은 저장됐어요. 「저장 계정으로 로그인」을 누르면 작업용 로그인과 강의 목록을 확인해요.';
  if(result?.status==='blocked'&&result.submitted)return '로그인 제출 후 이동한 화면에서 완료 여부를 확인하지 못했어요. 입력한 계정은 저장하지 않았어요.';

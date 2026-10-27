@@ -23,3 +23,9 @@ test('an engine review with checked list evidence is distinguished from an uncon
  assert.equal(resultGroup({...read,scope:'unconfirmed'}),'partial');
  assert.equal(resultGroup({...read,coverage:false}),'partial');
 });
+test('only the observed current list is counted separately and its remaining controls stay visible',()=>{
+ const row={...partial(3),scope:'current_list_checked',inspection:{continuationMore:1}};
+ assert.equal(collectionSummary({hmp:row},['hmp']),'현재 목록만 확인 1곳');assert.match(siteLabel(row),/현재 목록만 확인.*전체 범위 미확인.*다음 목록 남음/);
+ assert.equal(resultGroup({...row,stale:true}),'partial');
+ assert.equal(resultGroup({...row,status:'login'}),'login');
+});

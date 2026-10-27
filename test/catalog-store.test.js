@@ -59,3 +59,30 @@ test('review status preserves bounded list evidence without promoting unknown co
  const unknown=store.record('doctorville',date,{status:'review',coverage:true,events:[event]},now+1);
  assert.equal(unknown.scope,'unconfirmed');
 });
+test('a checked Dtalks calendar retains only bounded facts and binds its selected date across restart',t=>{
+ const {file,store}=setup(t),diagnostics={stopReason:'selected_month_calendar',calendarChecked:true,calendarStatus:'checked',calendarDate:date,calendarMonth:date.slice(0,7),calendarReason:'selected_day_cell',calendarDetails:{parts:['PRIVATE']},selectedEvents:[{title:'PRIVATE'}],continuation:{more:0,pagers:0,ambiguous:false}};
+ const row=store.record('dtalks',date,{status:'review',coverage:true,events:[],diagnostics},now);
+ assert.equal(row.scope,'calendar_checked');assert.equal(row.inspection.continuationPages,0);
+ assert.equal(new CatalogStore(file).view(date).results.dtalks.scope,'calendar_checked');assert.doesNotMatch(JSON.stringify(store.diagnostics(date)),/PRIVATE|parts|selectedEvents/);
+ for(const patch of [{calendarChecked:false},{calendarStatus:'waiting'},{calendarDate:'2026-10-27'},{calendarMonth:'2026-11'}])assert.equal(sanitiseResult('dtalks',date,{status:'review',coverage:true,events:[],diagnostics:{...diagnostics,...patch}},now).scope,'unconfirmed');
+});
+test('Hanmi and InterMD current-list evidence never becomes whole-catalog coverage',()=>{
+ const diagnostics={stopReason:'current_list_only',currentListRead:true,listStatus:'read',rows:16,undated:0,untimed:0,untitled:0,continuation:{more:1,pagers:0,ambiguous:false}};
+ const row=sanitiseResult('hmp',date,{status:'review',coverage:false,events:[],diagnostics},now);
+ assert.equal(row.scope,'current_list_checked');assert.equal(row.coverage,false);assert.equal(row.inspection.continuationMore,1);
+ assert.equal(sanitiseResult('intermd',date,{status:'review',coverage:true,events:[],diagnostics:{...diagnostics,cardLayout:'intermd_cards'}},now).scope,'current_list_checked');
+ assert.equal(sanitiseResult('hmp',date,{status:'review',coverage:false,events:[],diagnostics:{...diagnostics,untimed:1}},now).scope,'current_page');
+});
+test('coverage of an unresolved or only current empty list cannot erase previously read lectures',t=>{
+ const {store}=setup(t);store.record('doctorville',date,{status:'ok',coverage:true,events:[event]},now);
+ const unresolved=store.record('doctorville',date,{status:'review',coverage:true,events:[]},now+1);
+ assert.equal(unresolved.events.length,1);assert.equal(unresolved.stale,true);
+ const checked=store.record('doctorville',date,{status:'review',coverage:true,events:[],diagnostics:{stopReason:'doctorville_list_exhausted',listStatus:'checked'}},now+2);
+ assert.equal(checked.events.length,0);assert.equal(checked.stale,false);
+});
+test('Bluepharm observed start dates require complete current-card facts and no unresolved continuation',()=>{
+ const diagnostics={rows:9,undated:0,untimed:0,untitled:0,startDatesRead:true,cardLayout:'sem_tit',continuation:{more:0,pagers:0,ambiguous:false}};
+ const make=patch=>sanitiseResult('bluepharm',date,{status:'review',coverage:true,events:[],diagnostics:{...diagnostics,...patch}},now);
+ assert.equal(make({}).scope,'current_list_checked');
+ assert.equal(make({continuation:{more:1,pagers:0,ambiguous:false}}).scope,'unconfirmed');assert.equal(make({startDatesRead:false}).scope,'unconfirmed');
+});

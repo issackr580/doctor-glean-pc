@@ -35,6 +35,13 @@ export function entryEvidenceLabel(job){
  return click+' → '+navigation+' → '+video+' · 출석·적립 미확인';
 }
 export function entryRunVersion(job){return job.receipt?.checkedAt===job.executionFinishedAt?job.executionVersion??'':'';}
+export function entrySessionSummary(entries,startedAt){
+ const counts={currentClicks:0,previousClicks:0,undatedClicks:0};
+ for(const job of entries)for(const r of job.attempts?.length?job.attempts:job.receipt?[job.receipt]:[])if(r.status==='clicked'){
+  if(!Number.isSafeInteger(startedAt)||!Number.isSafeInteger(r.checkedAt))counts.undatedClicks++;
+  else if(r.checkedAt>=startedAt)counts.currentClicks++;else counts.previousClicks++;
+ }return counts;
+}
 export function preflightLabel(receipt){
  if(!receipt)return '';
  if(receipt.status==='complete')return '대상·입장 버튼 확인 · 실제 클릭 없음';

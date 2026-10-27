@@ -7,7 +7,7 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import assert from 'node:assert/strict';
 import {kstDate,kstInstant} from '../src/schedule.js';
 import {resolveEdition} from '../src/edition.js';
-import {WorkflowStore} from '../src/workflow-store.js';
+import {WorkflowStore,cleanReceipt} from '../src/workflow-store.js';
 
 const application=resolve(process.env.DOCTOR_GLEAN_PC_TEST_ROOT??fileURLToPath(new URL('../',import.meta.url)));
 const appMetadata=JSON.parse(readFileSync(join(application,'package.json'),'utf8')),edition=resolveEdition(appMetadata.doctorGleanEdition);
@@ -19,6 +19,8 @@ const modes={doctorville:'normal',keymedi:'normal',whodadoc:'normal',dtalks:'ent
 const today=kstDate(),tomorrow=kstDate(Date.parse(today+'T12:00:00+09:00')+86_400_000);
 const seededStore=new WorkflowStore(join(dataDirectory,'workflows-v1.json')),seededEvent={site:'doctorville',date:today,time:'13:00',title:'합성 닥터빌 강의 1'},seededKey=seededStore.entryKey(seededEvent),seededStart=kstInstant(today,'13:00');
 seededStore.putEntry({key:seededKey,...seededEvent,start:seededStart,due:seededStart-3000000,deadline:seededStart+600000,nextAt:seededStart-3000000,status:'reserved',slot:0,retries:0,attempts:[],entryAttempted:false});
+const historicalEvent={site:'hmp',date:today,time:'00:00',title:'합성 이전 실행 강의'},historicalAt=Date.now()-120000;
+seededStore.putEntry({key:seededStore.entryKey(historicalEvent),...historicalEvent,start:kstInstant(today,'00:00'),due:kstInstant(today,'00:00'),deadline:kstInstant(today,'00:00')+90000,nextAt:0,status:'clicked',slot:4,retries:0,entryAttempted:true,attempts:Array.from({length:5},(_,slot)=>cleanReceipt({status:'clicked',attempted:true,slot,playback:'inaccessible'},historicalAt+slot))});
 const check=(name,condition)=>{assert.ok(condition,name);checks.push(name);};
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(fn,ms=25_000){const end=Date.now()+ms;while(Date.now()<end){const v=await fn();if(v)return v;await pause(80);}throw Error('wait_timeout');}
@@ -36,6 +38,7 @@ for(const id of ['doctorville','keymedi','whodadoc','dtalks']){
   requests.push({site:id,method:request.method});
   if(request.method!=='GET')return new Response('not allowed',{status:405});
   if(id==='dtalks'&&(modes.dtalks==='all-error'||modes.dtalks==='entry-error'&&new URL(request.url).pathname!=='/login.do'))return Response.error();
+  if(id==='dtalks'&&modes.dtalks==='calendar')return new Response(shell(`<div class="calendar_wrap"><div class="btn_month_wrap active"><span class="date_txt">${today.slice(0,7).replace('-','.')}</span></div><div class="calendar_box active"><div class="calendar_grid"><div class="day" data-date="${today}"><div class="day_txt">${Number(today.slice(8))}</div><div class="day_box"><div class="time">13:00</div><div class="memo">합성 디톡스 강의</div></div></div></div></div></div>`),{headers:{'content-type':'text/html; charset=utf-8'}});
   const doctorReady=modes.doctorville==='entry-ready'?doctorCards.replaceAll('</a>','<button onclick="fetch(\'/synthetic-entry\',{method:\'POST\'})">입장하기</button></a>'):doctorCards;
   const ready=(id==='doctorville'?doctorReady:id==='keymedi'?keyCards:'<main>웨비나</main>')+'<a href="/logout">로그아웃</a>';
   const body=modes[id]==='login'?login:`<script>document.write(localStorage.getItem('synthetic-login')==='ready'?${JSON.stringify(ready)}:${JSON.stringify(login)});const b=document.getElementById('synthetic-login');if(b)b.onclick=()=>{localStorage.setItem('synthetic-login','ready');location.reload();};</script>`;
@@ -163,6 +166,9 @@ try{
  modes.doctorville='login';await evaluate('window.doctorGlean.preflightEntry('+JSON.stringify(seededKey)+')');
  check('preflight reports login need without credential submission',(await state()).automation.entries.find(row=>row.key===seededKey).preflight.status==='login'&&requests.every(request=>request.method==='GET'));
  modes.doctorville='normal';
+ check('control separates retained clicks from this app session',await evaluate('document.getElementById("entry-results").textContent.includes("이번 프로그램 실행 후 PC 클릭 0회 · 시작 전 기록 5회")'));
+ const batchResult=await evaluate('window.doctorGlean.preflightUpcoming()');
+ check('batch inspection IPC and visible action remain read-only',batchResult.ok&&(await state()).automation.preflight.running===false&&requests.every(r=>r.method==='GET')&&await evaluate('document.getElementById("entry-results").textContent.includes("예정 예약 일괄 사전 검사")'));
  await evaluate('window.doctorGlean.exportReport()');
  const diagnostic=readFileSync(report,'utf8');
  check('report omits raw session, URLs and lecture titles',!/synthetic-login|https:|합성 .*강의/.test(diagnostic));
@@ -177,6 +183,12 @@ try{
   check('developer opt-in also records the entry preflight timeline',exported.events.some(row=>row.area==='automation'&&row.phase==='preflight'&&row.readOnly===true));
   check('developer journal excludes URLs and lecture titles',!/https:|합성 .*강의|outside.example.invalid|synthetic-login/.test(JSON.stringify(exported)));
  }else check('distribution report has no developer recorder state',!Object.hasOwn(JSON.parse(diagnostic),'developerDiagnostics'));
+ check('single-site catalog action rejects non-catalog or arbitrary destinations',!(await evaluate('window.doctorGlean.collectSite("docple")')).ok&&!(await evaluate('window.doctorGlean.collectSite("https://outside.example.invalid")')).ok);
+ const beforeDtalks=await state();modes.dtalks='calendar';
+ await evaluate('window.doctorGlean.collectSite("dtalks")');
+ const dtalksDone=await until(async()=>{const s=await state();return !s.collection.running&&s.results.dtalks?.checkedAt?s:null;});
+ check('real Dtalks calendar reader retains checked date evidence through storage and IPC',dtalksDone.results.dtalks.scope==='calendar_checked'&&dtalksDone.results.dtalks.inspection.calendarDate===today&&dtalksDone.results.dtalks.events.length===1);
+ check('retrying one site does not change selection or rerun previously checked sites',JSON.stringify(dtalksDone.sites.filter(s=>s.selected).map(s=>s.id))===JSON.stringify(beforeDtalks.sites.filter(s=>s.selected).map(s=>s.id))&&dtalksDone.results.doctorville.checkedAt===beforeDtalks.results.doctorville.checkedAt&&dtalksDone.results.keymedi.checkedAt===beforeDtalks.results.keymedi.checkedAt);
  modes.doctorville='login';modes.keymedi='login';
  await evaluate('window.doctorGlean.collect()');
  const failed=await until(async()=>{const s=await state();return !s.collection.running&&s.results.keymedi.status==='login'?s:null;});
