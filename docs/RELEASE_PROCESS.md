@@ -81,3 +81,7 @@ node scripts/build-app-patch.mjs --from=/old/artifact/developer --to=/new/artifa
 ## preview.17 게시 확인
 
 [수동 runner](https://github.com/issackr580/doctor-glean-pc/actions/runs/40511855754)는 고정 소스 `38e10e9`와 검증본 전체 파일 해시·기존 v16 자산 SHA를 대조해 기존 두 Draft에만 업로드했다. 전체/16→17 패치/소스를 다시 다운로드해 서버 SHA·체크섬·ZIP 내부 파일 전체를 검증한 뒤 배포용만 별도 API 동작으로 공개했다. 개발자용은 Draft이며 독립 웹 조회로 공개/404 경계를 확인했다. 완료한 일회성 workflow는 제거했고 자동 게시·예약 실행·공개 개발자 artifact는 없다. 이전 릴리스·자산·모바일은 변경하지 않았다.
+
+## preview.18 게시 확인
+
+[수동 runner](https://github.com/issackr580/doctor-glean-pc/actions/runs/40520597729)는 고정 소스 `39e21a1`와 검증본 전체 파일 해시·기존 v17 자산 SHA를 대조해 기존 두 Draft에만 업로드했다. 전체/17→18 패치/소스를 다시 다운로드해 서버 SHA·체크섬·ZIP 내부 파일 전체를 검증한 뒤 배포용만 별도 API 동작으로 공개했다. 개발자용은 Draft이며 독립 웹 조회로 공개/404 경계를 확인했다. 완료한 일회성 workflow는 제거했고 자동 게시·예약 실행·공개 개발자 artifact는 없다. 이전 릴리스·자산·모바일은 변경하지 않았다.
