@@ -26,10 +26,10 @@ export class CatalogPage{
   try{await this.transport.load(this.profile.url,this.signal);}
   catch(error){
    this.#current();const site=siteById(this.profile.id);
-   // The fixed Whodadoc PC catalog can fail while its original login GET
+   // The fixed Whodadoc/Dtalks PC catalog can fail while its original login GET
    // remains available. Let the host read that form and recover once; never
    // turn an arbitrary failed navigation or a TLS failure into a login retry.
-   if(this.profile.id!=='whodadoc'||site?.url!==this.profile.url||!site.loginUrl||error.code!=='network_error'||error.failure!=='load_failed')throw error;
+   if(!['whodadoc','dtalks'].includes(this.profile.id)||site?.url!==this.profile.url||!site.loginUrl||error.code!=='network_error'||error.failure!=='load_failed')throw error;
    await this.transport.load(site.loginUrl,this.signal);
   }
   this.#current();

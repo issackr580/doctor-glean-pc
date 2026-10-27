@@ -27,11 +27,23 @@ test('cancelled page cannot evaluate, navigate or reopen',async()=>{
  const page=new CatalogPage(profiles.doctorville,{snapshot:()=>({url:profiles.doctorville.url,version:1}),evaluate:async()=>calls++,load:async()=>calls++,close(){}},controller.signal);
  controller.abort();await assert.rejects(()=>page.read('2026-10-26',null));await assert.rejects(()=>page.act({kind:'scroll'},{}));await assert.rejects(()=>page.open());assert.equal(calls,0);
 });
-test('Whodadoc fixed PC entry load failure reads its original login GET once without weakening TLS',async()=>{
- for(const failure of ['load_failed','certificate_error','dns_error']){
-  const loads=[],profile=profiles.whodadoc;let url=profile.url;
+test('reviewed fixed PC entry failures read only their original login GET without weakening TLS',async()=>{
+ for(const site of ['whodadoc','dtalks'])for(const failure of ['load_failed','certificate_error','dns_error','offline','time_limit','navigation_cancelled']){
+  const loads=[],profile=profiles[site];let url=profile.url;
   const page=new CatalogPage(profile,{snapshot:()=>({url,version:1}),load:async target=>{loads.push(target);if(loads.length===1)throw Object.assign(Error(),{code:'network_error',failure});url=target;},close(){}},new AbortController().signal);
-  if(failure==='load_failed'){await page.open();assert.deepEqual(loads,[profile.url,'https://hcp.whodadoc.com/auth/login']);assert.equal((await page.read('2026-10-27',null)).status,'login');}
+  if(failure==='load_failed'){await page.open();assert.deepEqual(loads,[profile.url,site==='dtalks'?'https://www.dtalks.kr/login.do':'https://hcp.whodadoc.com/auth/login']);assert.equal((await page.read('2026-10-27',null)).status,'login');}
   else{await assert.rejects(page.open());assert.deepEqual(loads,[profile.url]);}
  }
+});
+test('Dtalks fallback stops when the fixed login GET also fails or collection is cancelled',async()=>{
+ for(const cancelled of [false,true]){
+  const controller=new AbortController(),loads=[],profile=profiles.dtalks;
+  const page=new CatalogPage(profile,{snapshot:()=>({url:profile.url,version:1}),load:async url=>{loads.push(url);if(cancelled)controller.abort();throw Object.assign(Error(),{code:'network_error',failure:'load_failed'});},close(){}},controller.signal);
+  await assert.rejects(page.open());assert.deepEqual(loads,cancelled?[profile.url]:[profile.url,'https://www.dtalks.kr/login.do']);
+ }
+});
+test('a replaced Dtalks profile entry never turns a failed arbitrary URL into a login attempt',async()=>{
+ const loads=[],profile={...profiles.dtalks,url:'https://www.dtalks.kr/other.do'};
+ const page=new CatalogPage(profile,{snapshot:()=>({url:profile.url,version:1}),load:async url=>{loads.push(url);throw Object.assign(Error(),{code:'network_error',failure:'load_failed'});},close(){}},new AbortController().signal);
+ await assert.rejects(page.open());assert.deepEqual(loads,[profile.url]);
 });
