@@ -1,0 +1,34 @@
+name: PC preview.10 manual Draft assets
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: pc-preview-10-draft-assets
+  cancel-in-progress: false
+jobs:
+  stage:
+    if: github.repository == 'issackr580/doctor-glean-pc' && github.actor == 'issackr580'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: tooling
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: 2aef5b3235f5875196983c5b6581c7731418f30f
+          path: source
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.19.0
+      - name: Reproduce frozen PC source and stage existing Drafts
+        working-directory: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DOCTOR_GLEAN_ELECTRON_CACHE: ${{ runner.temp }}/pc-electron-cache
+        run: python3 ../tooling/scripts/stage-v10-draft-assets.py
