@@ -61,6 +61,7 @@ try{
  await until(()=>evaluate('document.querySelectorAll("#features input").length===6'));
  check('control offers feature settings and a visible full quit button',await evaluate('!!document.querySelector("#quit")&&document.querySelectorAll("#entry-sites input").length===6'));
  check('edition metadata and application ID match',initial.edition===edition.id&&initial.applicationId===edition.appId&&initial.appName===edition.name);
+ check('manual login retry gap matches the built edition while automatic and daily caps remain',initial.credentials.attempts.policy.manualGapMs===(edition.developer?3000:10000)&&initial.credentials.attempts.policy.automaticWindowLimit===3&&initial.credentials.attempts.policy.dailyLimit===10);
  check('another edition did not supply cached results',Object.keys(initial.results).length===0);
  const hasDeveloper=await evaluate('typeof window.doctorGleanDeveloper!=="undefined"');
  check('developer bridge matches the built edition',hasDeveloper===edition.developer);

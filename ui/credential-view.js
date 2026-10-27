@@ -1,4 +1,4 @@
-const labels={saved:'로그인 검증 후 계정을 암호화 저장했어요.',authenticated:'현재 로그인된 상태를 확인했어요.',rejected:'아이디·비밀번호가 거절됐어요. 계정을 확인해 다시 저장해 주세요.',challenge:'사이트에서 추가 인증을 직접 진행해 주세요.',manual:'로그인 화면이나 추가 안내를 직접 확인해 주세요.',unknown:'로그인 결과를 확인하지 못했어요. 다시 제출하지 않았어요.',time_limit:'확인 시간이 지났어요. 로그인 결과는 직접 확인해 주세요.',cooldown:'최근 로그인 시도가 있어 잠시 기다린 뒤 다시 시도해 주세요.',daily_limit:'오늘 로그인 시도 제한에 도달했어요.',disabled:'자동 복구가 꺼져 있거나 거절된 계정이에요.',busy:'이 사이트의 열린 창이나 진행 중인 작업을 마친 뒤 다시 시도해 주세요.',not_saved:'저장된 계정이 없어요.',storage_unavailable:'Windows 계정 보호 저장소를 사용할 수 없어 계정을 저장하거나 읽지 않았어요.',storage_error:'계정 저장소를 읽거나 쓰지 못했어요. 기존 파일을 지우지 말고 오류보고를 저장해 주세요.',network_error:'사이트 연결을 마치지 못했어요.',cancelled:'계정 작업을 중지했어요.',blocked:'허용된 로그인 화면과 입력값을 확인하지 못했어요.',removed:'저장된 계정을 삭제했어요.'};
+const labels={saved:'로그인 검증 후 계정을 암호화 저장했어요.',authenticated:'현재 로그인된 상태를 확인했어요.',rejected:'아이디·비밀번호가 거절됐어요. 계정을 확인해 다시 저장해 주세요.',challenge:'사이트에서 추가 인증을 직접 진행해 주세요.',manual:'로그인 화면이나 추가 안내를 직접 확인해 주세요.',unknown:'로그인 결과를 확인하지 못했어요. 다시 제출하지 않았어요.',time_limit:'확인 시간이 지났어요. 로그인 결과는 직접 확인해 주세요.',cooldown:'로그인 요청 사이의 대기 시간이에요. 표시된 시각에 직접 다시 시도할 수 있어요.',daily_limit:'오늘 로그인 시도 제한에 도달했어요.',disabled:'자동 복구가 꺼져 있거나 거절된 계정이에요.',busy:'이 사이트의 열린 창이나 진행 중인 작업을 마친 뒤 다시 시도해 주세요.',not_saved:'저장된 계정이 없어요.',storage_unavailable:'Windows 계정 보호 저장소를 사용할 수 없어 계정을 저장하거나 읽지 않았어요.',storage_error:'계정 저장소를 읽거나 쓰지 못했어요. 기존 파일을 지우지 말고 오류보고를 저장해 주세요.',network_error:'사이트 연결을 마치지 못했어요.',cancelled:'계정 작업을 중지했어요.',blocked:'허용된 로그인 화면과 입력값을 확인하지 못했어요.',removed:'저장된 계정을 삭제했어요.'};
 labels.stale='로그인 화면이 바뀌어 입력·제출을 중단했어요. 계정은 저장하지 않았어요.';
 labels.login_required='로그인 화면이 남아 성공을 확인하지 못했어요. 사이트 화면과 추가 안내를 직접 확인해 주세요.';
 let currentSite='',state=null,api,refresh,busy=false;
@@ -9,8 +9,8 @@ export function resultLabel(result){
  if(result?.status==='blocked'&&result.submitted)return '로그인 제출 후 이동한 화면에서 완료 여부를 확인하지 못했어요. 입력한 계정은 저장하지 않았어요.';
  if(result?.status==='cancelled'&&result.submitted)return '로그인 제출 후 확인 작업이 중지됐어요. 성공 여부를 확인하지 못해 계정을 저장하지 않았어요.';
  if(result?.status==='cooldown'&&result.retryAt>0&&result.retryAt<=Date.now())return '재시도 대기 시간이 끝났어요. 이전 로그인 결과를 확인한 뒤 다시 시도해 주세요.';
- const text=labels[result?.status]??(result?.ok?'계정 설정을 저장했어요.':'계정 작업을 완료하지 못했어요.');
- return ['cooldown','daily_limit'].includes(result?.status)&&result.retryAt>Date.now()?text+' 다음 시도 가능 '+new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(result.retryAt):text;
+ const text=result?.automatic&&result.status==='cooldown'?'자동 복구의 반복 제한으로 대기 중이에요. 저장 계정으로 로그인에서 직접 확인할 수 있어요.':labels[result?.status]??(result?.ok?'계정 설정을 저장했어요.':'계정 작업을 완료하지 못했어요.');
+ return ['cooldown','daily_limit'].includes(result?.status)&&result.retryAt>Date.now()?text+(result.automatic?' 자동 복구 재개 가능 ':' 직접 재시도 가능 ')+new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(result.retryAt):text;
 }
 export function credentialLabel(site,snapshot){
  const saved=snapshot?.vault.sites.find(row=>row.site===site),result=snapshot?.results.find(row=>row.site===site),attempt=snapshot?.attempts.sites.find(row=>row.site===site);
@@ -22,7 +22,7 @@ function display(){
  if(!currentSite||!state)return;const site=state.sites.find(row=>row.id===currentSite),snapshot=state.credentials,saved=snapshot?.vault.sites.find(row=>row.site===currentSite);
  document.getElementById('credential-title').textContent=site.name+' 계정 저장·복구';
  document.getElementById('credential-storage').textContent=snapshot?.vault.available?'Windows 계정 보호로 암호화해 이 PC에 저장해요. 로그인 검증을 통과한 계정만 저장해요.':'Windows 계정 보호 저장소를 사용할 수 없어요. 계정·비밀번호를 저장하거나 복구하지 않아요.';
- document.getElementById('credential-saved').textContent=saved?'검증된 계정이 저장되어 있어요. 아래 입력은 기존 계정을 바꿀 때만 필요해요.':'저장된 계정이 없어요.';
+ document.getElementById('credential-saved').textContent=(saved?'검증된 계정이 저장되어 있어요. 아래 입력은 기존 계정을 바꿀 때만 필요해요.':'저장된 계정이 없어요.')+(snapshot?.attempts.policy?' 직접 재시도 간격 '+snapshot.attempts.policy.manualGapMs/1000+'초 · 사이트별 하루 '+snapshot.attempts.policy.dailyLimit+'회. 대기 중에도 현재 로그인 상태는 확인할 수 있어요.':'');
  document.getElementById('credential-save').disabled=busy||!snapshot?.vault.available;
  document.getElementById('credential-recover').disabled=busy||!saved||!snapshot?.vault.available;
  document.getElementById('credential-remove').disabled=busy||!saved;

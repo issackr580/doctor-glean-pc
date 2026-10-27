@@ -329,7 +329,7 @@ else{
       if(developerTools.available!==EDITION.developer)throw Error('edition_mismatch');
       developerTools.event({area:'process',phase:'start',site:''});
       preload=fileURLToPath(new URL('./'+developerTools.preloadName,import.meta.url));
-      credentials=new CredentialManager({directory:dataDirectory,applicationId:EDITION.appId,
+      credentials=new CredentialManager({directory:dataDirectory,applicationId:EDITION.appId,developer:EDITION.developer,
        protect:{available:()=>process.platform==='win32'&&safeStorage.isEncryptionAvailable(),encrypt:text=>safeStorage.encryptString(text),decrypt:bytes=>safeStorage.decryptString(bytes)},
        automaticAllowed:()=>!state.snapshot().paused,isManualOpen:id=>[...manualOwners.values()].includes(id),
        createPage:async(id,signal,{validation,partition}={})=>{

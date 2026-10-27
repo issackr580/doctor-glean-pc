@@ -6,8 +6,8 @@ import {credentialSite,credentialInput,safeCredentialStatus} from './credential-
 import {join} from 'node:path';
 import {inspectDocpleSession} from './credential-session.js';
 export class CredentialManager{
- constructor({directory,applicationId,protect,createPage,automaticAllowed,isManualOpen,onChange=()=>{},now=Date.now}){
-  Object.assign(this,{createPage,automaticAllowed,isManualOpen,onChange,now});this.vault=new CredentialVault(join(directory,'credentials-v1.json'),applicationId,protect);this.attempts=new CredentialAttempts(join(directory,'credential-attempts-v1.json'));this.runner=new CredentialRunner({attempts:this.attempts,now});this.active=null;this.last=new Map();
+ constructor({directory,applicationId,protect,createPage,automaticAllowed,isManualOpen,onChange=()=>{},now=Date.now,developer=false}){
+  Object.assign(this,{createPage,automaticAllowed,isManualOpen,onChange,now});this.vault=new CredentialVault(join(directory,'credentials-v1.json'),applicationId,protect);this.attempts=new CredentialAttempts(join(directory,'credential-attempts-v1.json'),{developer});this.runner=new CredentialRunner({attempts:this.attempts,now});this.active=null;this.last=new Map();
  }
  get busy(){return !!this.active;}
  snapshot(){return {vault:this.vault.snapshot(),attempts:this.attempts.snapshot(),active:this.active?{site:this.active.site,kind:this.active.kind}:null,results:[...this.last].map(([site,result])=>({site,...result}))};}
@@ -20,8 +20,8 @@ export class CredentialManager{
   if(!this.vault.available())return {status:'storage_unavailable'};
   if(automatic&&(!this.automaticAllowed()||!this.vault.enabled(site)))return {status:'disabled'};
   const decision=this.attempts.decision(site,this.now(),kind==='save',automatic);
-  if(decision!=='ready'){
-   const result={status:decision,at:this.now(),attempted:false,submitted:false,retryAt:this.attempts.retryAt(site,this.now()),kind};
+  if(decision!=='ready'&&!(kind==='recover'&&['cooldown','daily_limit'].includes(decision))){
+   const result={status:decision,at:this.now(),attempted:false,submitted:false,retryAt:this.attempts.retryAt(site,this.now(),{automatic}),kind,automatic};
    const old=this.last.get(site);if(old?.submitted&&old.trace)result.previous={status:old.status,at:old.at,kind:old.kind,submitted:true,attempted:old.attempted===true,reads:old.reads,elapsedMs:old.elapsedMs,trace:old.trace};
    else if(old?.previous)result.previous=old.previous;
    this.last.set(site,result);this.onChange();return result;
@@ -34,8 +34,8 @@ export class CredentialManager{
    result=await work(run.page,controller.signal,()=>!controller.signal.aborted&&(!automatic||this.automaticAllowed()&&this.vault.enabled(site)));
    if(kind==='recover'&&result.status==='authenticated')await run.page.flushSession?.();
   }catch(error){result={status:safeCredentialStatus(controller.signal.aborted?'cancelled':error.code??error.message)};}
-  finally{run.page?.close();signal?.removeEventListener('abort',abort);if(this.active===run)this.active=null;this.last.set(site,{status:result.status,at:this.now(),kind,attempted:result.attempted===true,submitted:result.submitted===true,retryAt:this.attempts.retryAt(site,this.now()),...(result.detail==='input_format'?{detail:'input_format'}:{}),...(Array.isArray(result.trace)?{trace:result.trace}:{}),...(Number.isSafeInteger(result.reads)?{reads:result.reads,elapsedMs:result.elapsedMs}:{})});this.onChange();}
-  return result;
+  finally{run.page?.close();signal?.removeEventListener('abort',abort);if(this.active===run)this.active=null;this.last.set(site,{status:result.status,at:this.now(),kind,automatic,attempted:result.attempted===true,submitted:result.submitted===true,retryAt:this.attempts.retryAt(site,this.now(),{automatic}),...(result.detail==='input_format'?{detail:'input_format'}:{}),...(Array.isArray(result.trace)?{trace:result.trace}:{}),...(Number.isSafeInteger(result.reads)?{reads:result.reads,elapsedMs:result.elapsedMs}:{})});this.onChange();}
+  return {...result,retryAt:this.attempts.retryAt(site,this.now(),{automatic})};
  }
  async save(site,id,password,automatic){
   let candidate={id,password};id='';password='';

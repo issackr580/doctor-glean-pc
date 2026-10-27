@@ -33,6 +33,28 @@ const inputs={
 const shell=body=>'<!doctype html><html><meta charset="utf-8"><body>'+body+'</body></html>';
 async function run(){
  await app.whenReady();
+ for(const scenario of ['cached','restore','post','stuck','wrong_callback','candidate']){
+  const partition='doctorville-settle-'+randomUUID(),profile=session.fromPartition(partition),file=join(root,'settle-'+scenario+'.json'),a=new CredentialAttempts(file),entry=CREDENTIAL_SITES.find(p=>p.id==='doctorville').entry,headers={'content-type':'text/html; charset=utf-8'};let sent=0,decrypted=0;
+  const direct='/login/direct?ot=SYNTHETIC_PRIVATE_TOKEN';
+  const handler=`const form=document.querySelector('form');Object.defineProperty(form,'__reactProps$synthetic',{value:{onSubmit(){}}});form.addEventListener('submit',async e=>{e.preventDefault();await fetch('/apis/auth/login',{method:'POST',body:new URLSearchParams({id:document.querySelector('#identifier').value,password:document.querySelector('#password').value})});history.replaceState(null,'',${JSON.stringify(direct)});setTimeout(()=>location.href=${JSON.stringify(entry)},700);});`;
+  await profile.protocol.handle('https',async request=>{
+   if(request.method==='POST'){sent++;assert.equal(JSON.parse(readFileSync(file)).sites.doctorville.status,'submitted');return new Response('{}',{headers:{'content-type':'application/json'}});}
+   const u=new URL(request.url);
+   if(u.hostname!=='mims-account.shop.co.kr')return new Response(shell('<main><a href="/logout">로그아웃</a></main><script>window.open("/notice")</script>'),{headers});
+   if(scenario==='post')return new Response(shell(inputs.doctorville+'<script>'+handler+'</script>'),{headers});
+   let script=`history.replaceState(null,'',${JSON.stringify(scenario==='wrong_callback'?'/login?cb=SYNTHETIC_PRIVATE_TOKEN':direct)});`;
+   if(['cached','candidate'].includes(scenario))script+=`setTimeout(()=>location.href=${JSON.stringify(entry)},700);`;
+   if(scenario==='restore')script+=`setTimeout(()=>{history.replaceState(null,'',${JSON.stringify(siteById('doctorville').loginUrl)});document.body.innerHTML=${JSON.stringify(inputs.doctorville)};${handler}},700);`;
+   return new Response(shell('<main>통합 로그인 이동 중</main><script>'+script+'</script>'),{headers});
+  });
+  const controller=new AbortController(),p=new AutomationPage('doctorville',controller.signal,{...remotePreferences('doctorville'),partition}),began=Date.now();
+  try{
+   const validation=scenario==='candidate',r=await new CredentialRunner({attempts:a}).run('doctorville',p,{signal:controller.signal,validation,...(validation?{candidate:{id:'SYNTHETIC_USER',password:'SYNTHETIC_PASSWORD'}}:{readCredentials:()=>{decrypted++;return {id:'SYNTHETIC_USER',password:'SYNTHETIC_PASSWORD'};}})});
+   const submitted=['restore','post'].includes(scenario),expected=['cached','restore','post'].includes(scenario)?'authenticated':'blocked';
+   check('passive Doctorville SPA transition '+scenario+' preserves candidate and one-POST boundaries',r.status===expected&&sent===(submitted?1:0)&&decrypted===(submitted?1:0)&&(!['candidate','wrong_callback'].includes(scenario)||Date.now()-began<4000));
+   assert.doesNotMatch(JSON.stringify(r.trace),/SYNTHETIC_PRIVATE_TOKEN|https:|\?ot=/);
+  }finally{p.close();}
+ }
  for(const policy of CREDENTIAL_SITES){
   const partition='credential-validation-'+randomUUID(),prefs={...remotePreferences(policy.id),partition},profile=session.fromPartition(partition);let accepted=false,firstProviderCanonical;
   await profile.protocol.handle('https',async request=>{
