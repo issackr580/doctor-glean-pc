@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {credentialSite,allowedCredentialPage,safeCredentialStatus,bareDoctorvilleProvider} from './credential-policy.js';
+import {credentialSite,allowedCredentialPage,safeCredentialStatus,bareDoctorvilleProvider,settlingDoctorvilleProvider} from './credential-policy.js';
 import {waitFor} from './async-work.js';
 import {credentialObservation,recordCredentialObservation} from './credential-diagnostics.js';
 import {inspectDocpleSession} from './credential-session.js';
@@ -9,7 +9,7 @@ export class CredentialRunner{
  constructor({attempts,now=Date.now,sleep=waitFor}){Object.assign(this,{attempts,now,sleep});}
  async run(site,page,{candidate,readCredentials,validation=false,automatic=false,signal,allowed=()=>true,onChange=()=>{}}){
   const policy=credentialSite(site),nonce=randomUUID().replace(/-/g,''),began=this.now();let attempted=false,submitted=false,at=0,usedProbe=false,reads=0,ready=0,lastVersion=-1,status='unknown',manualSince=0,submittedVersion=-1,refreshed=false,settledReads=0;
-  let failureCode,providerRead=false;
+  let failureCode,providerRead=false,providerWaits=0,lastUrl='';
   const trace=[],observe=(phase,reply)=>recordCredentialObservation(trace,credentialObservation(site,page,phase,reply,this.now()-began));
   const live=()=>!signal.aborted&&allowed()&&!page.closed&&this.now()-began<90000&&(!attempted||this.now()-at<(validation?45000:20000));
   // The original background proof rejects candidate-validation fields, even
@@ -51,6 +51,12 @@ export class CredentialRunner{
    while(live()){
     await page.ready?.();if(!live())break;
     if(page.dialogResult){status=safeCredentialStatus(page.dialogResult.status);break;}
+    if(site==='doctorville'&&(!validation||submitted)&&settlingDoctorvilleProvider(page.url)){
+     // A provider SPA can replace its route before its asynchronous SSO flow
+     // reaches the site. Observe only; no script, secret, navigation or POST.
+     ready=0;lastVersion=-1;lastUrl='';
+     if(providerWaits<20){providerWaits++;observe('provider',{status:'loading',evidence:{providerSettling:true}});await this.sleep(400,signal);continue;}
+    }
     if(site==='doctorville'&&!validation&&!attempted&&!providerRead&&bareDoctorvilleProvider(page.url)){
      providerRead=true;
      const landing=await page.call('credential-provider-landing.js',[request('verify')]);reads++;observe('provider',landing);
@@ -103,7 +109,7 @@ export class CredentialRunner{
      if(status==='login_required'&&this.now()-at>4000)break;await this.sleep(350,signal);continue;
     }
     if(status==='ready'&&allowedCredentialPage(site,page.url)){
-     ready=lastVersion===page.version?ready+1:1;lastVersion=page.version;
+     ready=lastVersion===page.version&&lastUrl===page.url?ready+1:1;lastVersion=page.version;lastUrl=page.url;
      if(ready<2){await this.sleep(250,signal);continue;}
      if(!live()){status='cancelled';break;}
      const permit=this.attempts.reserve(site,this.now(),{validation,automatic});if(permit!=='ready'){status=permit;break;}
