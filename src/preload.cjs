@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('doctorGlean',Object.freeze({
   cancelEntry:key=>ipcRenderer.invoke('pc:entry-cancel',key),
   retryEntry:key=>ipcRenderer.invoke('pc:entry-retry',key),
   markManualEntry:key=>ipcRenderer.invoke('pc:entry-manual',key),
+  preflightEntry:key=>ipcRenderer.invoke('pc:entry-preflight',key),
   quit:()=>ipcRenderer.invoke('pc:quit'),
   exportReport:()=>ipcRenderer.invoke('pc:export-report'),
   onChanged:callback=>{

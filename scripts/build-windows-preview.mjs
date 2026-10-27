@@ -40,7 +40,7 @@ if(edition.developer){
  cpSync(join(root,'editions/developer/developer-journal.js'),join(application,'src/developer-journal.js'));
  writeFileSync(join(application,'src/preload-developer.cjs'),readFileSync(join(root,'src/preload.cjs'),'utf8')+'\n'+readFileSync(join(root,'editions/developer/preload-extra.cjs'),'utf8'));
 }
-writeFileSync(join(application,'package.json'),JSON.stringify({name:pkg.name,productName:edition.name,doctorGleanEdition:edition.id,version:pkg.version,type:'module',main:'src/main.js'},null,2)+'\n');
+writeFileSync(join(application,'package.json'),JSON.stringify({name:pkg.name,productName:edition.name,doctorGleanEdition:edition.id,version:pkg.version,sourceCommit:workingTreeClean?sourceCommit:null,type:'module',main:'src/main.js'},null,2)+'\n');
 if(!edition.developer){
  for(const area of ['src','ui'])for(const name of readdirSync(join(application,area)))if(/\.(?:c?js|html)$/.test(name)){
   const text=readFileSync(join(application,area,name),'utf8');
@@ -76,7 +76,15 @@ const guide=`${edition.name} ${pkg.version} — Windows x64 검증판
 - 오전08:10 실행과 평일00:01:02 닥터라운지는 켠 뒤 다음 준비 시각부터 적용돼요. 자정 60초 전 준비하고 기한 내 실제 포인트 버튼만 실행해요.
 - 클릭·강의창 이동·영상 진행 관찰·사이트 완료를 구분해요. 불확실 응답을 완료로 바꾸지 않아요.
 
-이번 로그인 복구와 퀴즈 수정
+예약 검증과 PC 실행 결과
+- 오늘 예약 수·대기·PC 클릭 강의/회차·확인 필요를 나눠 표시해요. 예약 생성·PC 클릭·강의창 이동·영상 진행·출석/적립은 각각 다른 단계예요.
+- 예약의 사전 검사 · 클릭 없음은 현재 대상과 버튼을 읽기만 해요. 로그인 계정 제출·입장 클릭·재생·예약 변경을 하지 않으며 정시 작업이 시작되면 양보해요.
+- 기존 출석·퀴즈 완료 확인은 PC의 새 제출 성공으로 표시하지 않아요. 다른 기기의 기여는 완료 상태만으로 구분할 수 없어요.
+- 개발자용은 켠 뒤의 자동 작업 시간순 이력도 로컬 진단에 남겨요. 현재 실행판을 과거 기록의 버전으로 소급하지 않아요.
+- 같은 카드의 보이는 날짜·시작 시각·제목과 안전한 원래 버튼을 확인하는 PC 보완 판독을 추가했어요. 실제 Windows의 입장 성공은 업데이트 후 재확인이 필요해요.
+- 미신청·보안 확인·실패한 로그인·서로 다른 강의는 계속 중단해요. 기존 계정과 시도 기록을 삭제하지 마세요.
+
+이전 로그인 복구와 퀴즈 수정
 - 이전 Windows 진단에서 디톡스를 포함한 10사이트의 저장 계정 항목과 디톡스 작업 프로필 복구를 확인했어요. 이번 수정 뒤 실제 Windows 계정 복구와 신규 퀴즈 제출은 재확인이 필요해요.
 - 키메디는 저장 계정으로 로그인한 뒤 인증 상태를 확인하지 못하던 연결을 보완했어요.
 - 후다닥은 원래 PC 목록이 열리지 않으면 로그인 화면을 한 번 열어요. 로그인 뒤 화면 이동이 막히면 원래 PC 페이지에서 로그인 상태를 다시 확인해요.

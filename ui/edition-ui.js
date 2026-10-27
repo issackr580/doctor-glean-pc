@@ -8,7 +8,7 @@
  const result=document.createElement('p');result.setAttribute('role','status');
  const actions=document.createElement('div');actions.className='query-controls';
  let enabled=false;
- async function update(){const state=await tools.status();enabled=state.enabled;status.textContent=(state.unavailable?'진단 기록을 확인하지 못했어요.':enabled?'7일 진단 켜짐':'7일 진단 꺼짐')+' · 기록 '+state.eventCount+'개';toggle.textContent=enabled?'진단 끄기':'7일 진단 켜기';}
+ async function update(){const state=await tools.status();enabled=state.enabled;status.textContent=(state.unavailable?'진단 기록을 확인하지 못했어요.':enabled?'7일 진단 켜짐':'7일 진단 꺼짐')+' · 기록 '+state.eventCount+'개'+(state.dailyLimitReached?' · 오늘 기록 한도 도달 · 이후 이력이 누락될 수 있어요.':'');toggle.textContent=enabled?'진단 끄기':'7일 진단 켜기';}
  function button(label,fn){const b=document.createElement('button');b.type='button';b.textContent=label;b.onclick=async()=>{b.disabled=true;try{await fn();await update();}catch{result.textContent='진단 도구를 실행하지 못했어요.';}finally{b.disabled=false;}};actions.append(b);return b;}
  const toggle=button('7일 진단 켜기',async()=>{const r=await tools.setEnabled(!enabled);result.textContent=r.ok?'진단 설정을 저장했어요.':'진단 설정을 저장하지 못했어요.';});
  button('진단 파일 저장',async()=>{const r=await tools.export();result.textContent=r.ok?r.cancelled?'저장을 취소했어요.':'진단 파일을 저장했어요.':'진단 파일을 저장하지 못했어요.';});

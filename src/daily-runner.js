@@ -2,8 +2,11 @@ import {DAILY_TASKS,taskByKey,actionAllowed,dailyDialog,safeReason} from './auto
 import {dailyTicket} from './task-ticket.js';
 import {kstDate} from './schedule.js';
 import {waitFor} from './async-work.js';
+import {randomUUID} from 'node:crypto';
+import {executionEvent} from './build-info.js';
+import {cleanReceipt} from './workflow-store.js';
 export class DailyRunner{
- constructor({ledger,store,createPage,isManualOpen=()=>false,quiz,onChange=()=>{},shouldYield=()=>false,now=Date.now,sleep=waitFor}){Object.assign(this,{ledger,store,createPage,isManualOpen,quiz,onChange,shouldYield,now,sleep});this.active=null;this.last={running:false,reason:'idle',key:'',progress:''};}
+ constructor({ledger,store,createPage,createInspectionPage,isManualOpen=()=>false,quiz,onChange=()=>{},onEvent=()=>{},shouldYield=()=>false,now=Date.now,sleep=waitFor}){Object.assign(this,{ledger,store,createPage,createInspectionPage,isManualOpen,quiz,onChange,onEvent,shouldYield,now,sleep});this.active=null;this.last={running:false,reason:'idle',key:'',progress:''};}
  snapshot(){return {...this.last};}
  get busy(){return !!this.active;}
  get claimPending(){return !!this.active?.claimSent;}
@@ -14,7 +17,7 @@ export class DailyRunner{
   const date=kstDate(this.now()),controller=new AbortController(),run={date,controller,page:null,site:'',key:'',claimSent:false,remaining:[...new Set(keys)].filter(key=>taskByKey(key)),reason:'finished'};
   this.active=run;const began=this.now();let completed=0;
   const allowed=()=>this.active===run&&!controller.signal.aborted&&date===kstDate(this.now())&&!this.store.failed;
-  const publish=progress=>{this.last={running:true,date,key:run.key,site:run.site,completed,total:keys.length,reason:'running',progress};this.onChange(this.snapshot());};
+  const publish=progress=>{this.last={running:true,date,key:run.key,site:run.site,completed,total:keys.length,reason:'running',progress,readOnly};this.onChange(this.snapshot());};
   try{
    while(run.remaining.length&&allowed()){
     if(this.now()-began>540000)throw Error('time_limit');
@@ -24,7 +27,7 @@ export class DailyRunner{
     if(task.kind.startsWith('brand')&&!features.brand)continue;
     if(this.isManualOpen(task.site)){this.store.record(date,key,{status:'busy',reason:'manual_view_open'});completed++;continue;}
     const old=this.store.day(date).daily[key];
-    if((old?.status==='complete'||task.kind.startsWith('brand')&&['ended','none'].includes(old?.status))&&task.kind!=='quiz'){completed++;continue;}
+    if(!readOnly&&(old?.status==='complete'||task.kind.startsWith('brand')&&['ended','none'].includes(old?.status))&&task.kind!=='quiz'){completed++;continue;}
     if(key==='keymedi:brand2'){
      const first=this.store.day(date).daily['keymedi:brand1'];
      if(first?.status!=='complete'||first.reason!=='brand_reward_success'){
@@ -33,14 +36,16 @@ export class DailyRunner{
      }
     }
     let receipt={status:'unknown',reason:'unknown_result'},taskBegan=this.now(),reads=0,navigations=0,tickets=[],claimAt=0;
+    const runId=randomUUID().replace(/-/g,''),emit=(phase,detail={})=>executionEvent(this.onEvent,{area:'automation',phase,site:task.site,kind:task.kind,runId,readOnly,...detail});emit('start');
     const mayAct=()=>!readOnly&&!this.ledger.snapshot().paused&&(task.kind.startsWith('brand')?this.store.features().brand:this.store.features().dailyClaim)&&allowed();
     publish(task.label+' 확인 중');
     try{
-     run.page=await this.createPage(task.site,controller.signal,{onDialog:message=>dailyDialog(task,message,run.claimSent)});
+     const create=readOnly&&this.createInspectionPage?this.createInspectionPage:this.createPage;
+     run.page=await create(task.site,controller.signal,{onDialog:message=>dailyDialog(task,message,run.claimSent)});
      const page=run.page;
      const quizAllowed=()=>!readOnly&&!this.ledger.snapshot().paused&&this.store.features().quizAuto&&allowed();
      if(task.key==='doctorville:quiz'&&quizAllowed()){
-      receipt=await this.quiz.run(page,date,{signal:controller.signal,allowed:quizAllowed,onProgress:publish,onSubmit:()=>{run.claimSent=true;}});
+      receipt=await this.quiz.run(page,date,{signal:controller.signal,allowed:quizAllowed,onProgress:publish,onSubmit:()=>{run.claimSent=true;emit('dispatch',{attempted:true});}});
      }else{
       await page.load(task.url);const menuMarkers=new Set();
       while(allowed()&&this.now()-taskBegan<150000){
@@ -59,6 +64,7 @@ export class DailyRunner{
          tickets.push(ticket);run.claimSent=true;claimAt=this.now();
          this.store.record(date,key,{status:'unknown',reason:'claim_started',attempted:true,confirmationAttempted:reply.action.type==='claim_confirm'});
          if(reply.action.type==='claim_confirm')page.allowPopups(false);
+         emit('dispatch',{attempted:true});
         }else{
          const marker=JSON.stringify([page.url,reply.action.selector,reply.action.label]);if(menuMarkers.has(marker)||++navigations>3){receipt={status:'unknown',reason:'task_limit'};break;}menuMarkers.add(marker);
         }
@@ -77,13 +83,14 @@ export class DailyRunner{
     }catch(error){receipt={status:'unknown',reason:safeReason(controller.signal.aborted?run.reason==='finished'?'cancelled':run.reason:error.code??error.message)};}
     finally{
      for(const ticket of tickets)this.ledger.finish(ticket,receipt.status==='complete'?'confirmed':'unknown',this.now());
+     emit('result',{...cleanReceipt(receipt,this.now()),attempted:receipt.submitted===true||tickets.length>0,elapsedMs:Math.max(0,this.now()-taskBegan),evidence:receipt.status==='complete'?receipt.submitted===true||tickets.length>0?'observed_after_pc_action':'existing_observed':'unconfirmed'});
      receipt={...receipt,attempted:receipt.submitted===true||tickets.length>0||old?.attempted===true,reads,navigations,elapsedMs:Math.max(0,this.now()-taskBegan)};
      this.store.record(date,key,receipt);run.claimSent=false;run.page?.close();run.page=null;completed++;publish(task.label+' 확인 종료');
     }
    }
   }finally{
    run.page?.close();if(this.active===run)this.active=null;
-   this.last={running:false,date,key:run.key,site:run.site,completed,total:keys.length,reason:controller.signal.aborted?run.reason==='finished'?'cancelled':run.reason:run.reason,progress:'오늘 출석·퀴즈 확인 종료',remaining:[...run.remaining]};this.onChange(this.snapshot());
+   this.last={running:false,date,key:run.key,site:run.site,completed,total:keys.length,reason:controller.signal.aborted?run.reason==='finished'?'cancelled':run.reason:run.reason,progress:'오늘 출석·퀴즈 확인 종료',readOnly,remaining:[...run.remaining]};this.onChange(this.snapshot());
   }
   return this.snapshot();
  }

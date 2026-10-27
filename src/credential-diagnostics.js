@@ -12,6 +12,7 @@ export function credentialObservation(site,page,phase,reply,elapsedMs){
  if(evidenceSources.has(reply?.evidence?.authEvidenceSource))result.authEvidenceSource=reply.evidence.authEvidenceSource;
  const native=page.diagnostics?.();for(const key of ['navigationBlocked','popupDenied','mainFrameFailures','consoleErrors','credentialRequests','credentialResponses','credentialHttpStatus','credentialNetworkFailures'])if(Number.isSafeInteger(native?.[key])&&native[key]>=0&&native[key]<=1000)result[key]=native[key];
  if(typeof native?.credentialNetworkEnabled==='boolean')result.credentialNetworkEnabled=native.credentialNetworkEnabled;
+ if(typeof native?.credentialRequestObservationSupported==='boolean')result.credentialRequestObservationSupported=native.credentialRequestObservationSupported;
  return result;
 }
 export function recordCredentialObservation(trace,row){

@@ -12,6 +12,7 @@ import {kstInstant} from './schedule.js';
 import {CatalogStore} from './catalog-store.js';
 import {CatalogRunner} from './catalog-runner.js';
 import {electronCatalogPage} from './electron-catalog-page.js';
+import {BUILD_INFO} from './build-info.js';
 import {formatPcSchedule} from './catalog-format.js';
 import {resolveEdition} from './edition.js';
 import {createDeveloperTools} from './developer-tools.js';
@@ -62,9 +63,9 @@ const buildState=()=>({
 
 function diagnosticSnapshot(){
  const snapshot=state.snapshot();
- return {appName:EDITION.name,applicationId:EDITION.appId,edition:EDITION.id,appVersion:VERSION,date:kstDate(),automationPaused:snapshot.paused,
+ return {appName:EDITION.name,applicationId:EDITION.appId,edition:EDITION.id,appVersion:VERSION,build:BUILD_INFO,exportedAt:Date.now(),processStartedAt:Math.floor(Date.now()-process.uptime()*1000),date:kstDate(),automationPaused:snapshot.paused,
   runtime:{platform:process.platform,arch:process.arch,electron:process.versions.electron,chromium:process.versions.chrome,osRelease:release()},
-  stage:'automation',automationAvailable:true,collection:collector.snapshot(),pendingQueries:catalogQueue?.snapshot()??[],sites:catalog.diagnostics(viewDate),automation:automation?.diagnostics(),
+  stage:'automation',automationAvailable:true,collection:collector.snapshot(),selectedCatalogSites:catalog.selected(),pendingQueries:catalogQueue?.snapshot()??[],sites:catalog.diagnostics(viewDate),automation:automation?.diagnostics(),
   siteSessions:SITES.map(({id})=>({site:id,open:[...manualOwners.values()].includes(id),...effectiveSession(id)})),credentials:credentials?.snapshot(),browserEvents:[...browserEvents],developerDiagnostics:developerTools?.status(),
   attempts:Object.values(snapshot.jobs).map(({site,kind,date,slot,state,updatedAt})=>({site,kind,date,slot,state,updatedAt}))};
 }
@@ -283,6 +284,7 @@ function ipc(){
   registerIPC('pc:entry-cancel',key=>({ok:automation.entry.cancelJob(key)}));
   registerIPC('pc:entry-retry',key=>({ok:automation.entry.retryJob(key)}));
   registerIPC('pc:entry-manual',key=>({ok:automation.entry.cancelJob(key,true)}));
+  registerIPC('pc:entry-preflight',key=>automation.preflightEntry(key));
   registerIPC('pc:quit',()=>{setImmediate(()=>app.quit());return {ok:true};});
   registerIPC('pc:open-site',id=>{
     if(!siteById(id))return {ok:false,reason:'invalid_site'};
@@ -305,7 +307,7 @@ function ipc(){
 if(!app.requestSingleInstanceLock())app.quit();
 else{
   app.on('second-instance',()=>{if(state)showControl();});
-  app.on('before-quit',()=>{quitting=true;try{catalogQueue?.close();automation?.close();credentials?.cancel();collector?.cancel();developerTools?.close();}catch{}});
+  app.on('before-quit',()=>{quitting=true;try{developerTools?.event({area:'process',phase:'quit',site:''});catalogQueue?.close();automation?.close();credentials?.cancel();collector?.cancel();developerTools?.close();}catch{}});
   app.on('window-all-closed',()=>{});
   app.whenReady().then(()=>{
     try{
@@ -318,6 +320,7 @@ else{
           await writeFile(selected.filePath,JSON.stringify(content,null,2)+'\n',{encoding:'utf8',mode:0o600});return {ok:true};
         }});
       if(developerTools.available!==EDITION.developer)throw Error('edition_mismatch');
+      developerTools.event({area:'process',phase:'start',site:''});
       preload=fileURLToPath(new URL('./'+developerTools.preloadName,import.meta.url));
       credentials=new CredentialManager({directory:dataDirectory,applicationId:EDITION.appId,
        protect:{available:()=>process.platform==='win32'&&safeStorage.isEncryptionAvailable(),encrypt:text=>safeStorage.encryptString(text),decrypt:bytes=>safeStorage.decryptString(bytes)},
@@ -335,6 +338,7 @@ else{
       catalogQueue=new CatalogQueue({start:async(date,ids)=>{await collector.start(date,ids);automation?.catalogFinished(date,ids,collector.snapshot());},busy:()=>collector.snapshot().running||!!automation?.busy||credentials.busy,validDate:validQueryDate,onChange:notify});
       automation=new AutomationController({file:join(dataDirectory,'workflows-v1.json'),ledger:state,
        createPage:(site,signal,options)=>credentials.wrapPage(site,new AutomationPage(site,signal,prepareSession(site),options)),
+       createInspectionPage:(site,signal,options)=>new AutomationPage(site,signal,prepareSession(site),options),onEvent:event=>developerTools.event(event),
        isManualOpen:id=>[...manualOwners.values()].includes(id)||credentials.active?.site===id,catalog:date=>catalog.view(date).results,catalogBusy:()=>collector.snapshot().running||credentials.busy,
        queueCatalog:date=>{viewDate=date;catalogQueue.request(date,catalog.selected());},
        yieldCatalog:()=>{const current=collector.snapshot();if(current.running){catalogQueue.request(current.date,catalog.selected());collector.cancel('entry_priority');}},
@@ -345,8 +349,8 @@ else{
       app.quit();return;
     }
     ipc();
-    powerMonitor.on('suspend',()=>{try{catalogQueue.clear();collector.cancel('suspended');automation.suspended();credentials.cancel();}catch{}});
-    powerMonitor.on('resume',()=>automation.resumed());
+    powerMonitor.on('suspend',()=>{try{developerTools.event({area:'process',phase:'suspend',site:''});catalogQueue.clear();collector.cancel('suspended');automation.suspended();credentials.cancel();}catch{}});
+    powerMonitor.on('resume',()=>{developerTools.event({area:'process',phase:'resume',site:''});automation.resumed();});
     tray=new Tray(nativeImage.createFromPath(fileURLToPath(new URL('../ui/tray.png',import.meta.url))));
     tray.setToolTip(EDITION.name);tray.on('double-click',showControl);updateTray();showControl();
   }).catch(()=>app.quit());

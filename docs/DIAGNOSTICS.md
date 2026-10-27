@@ -1,5 +1,9 @@
 # 공동 개발용 진단 수집
 
+preview.12의 예약 검증은 [PC 검증 방법](ENTRY_VALIDATION.md)을 따른다. 개발자 이력에는 `area=automation`의 scheduled/start/inspect/open_detail/dispatch/retry/result/preflight 단계도 포함된다. key/runId는 로컬 익명 식별자이고 appVersion/sourceCommit은 그 실행의 기준이다. due/startedAt/delayMs와 고정 개수·boolean으로 단계와 지연을 대조한다. 기록이 없다는 것만으로 실행이 없었다고 판단하지 않는다. 현재 상태에는 exportedAt·processStartedAt·build·selectedCatalogSites가 추가되며, 예전 기록의 버전을 현재 실행판으로 추정하지 않는다. 배포용에는 추가 이력 기록기가 없다.
+
+`credentialRequestObservationSupported=false`인 사이트는 Network 관찰이 켜져 있어도 검토된 인증 POST 경로의 송신·응답 수를 집계하지 않는다. 이때0은 미전송 증거가 아니다. 이번 추가 사용자의 한미/메디게이트 후보 실패도 이 제한을 구분해 해석한다.
+
 개발자용에는 **7일 로컬 기록기와 JSON 내보내기**가 있다. 별도 서버, 자동 업로드, 사용자 화면 녹화는 사용하지 않는다. 배포용에는 추가 기록기·전용 IPC·개발자 화면이 포함되지 않는다. 공동작업자는 소스에서 개발자용을 실행하거나 직접 빌드한다. 개발자 실행파일은 지정 collaborator 전용 Draft로 공유하며 공개 릴리스에 올리지 않는다. [접근 권한](ACCESS.md)을 확인한다.
 
 ## 재현 전에
