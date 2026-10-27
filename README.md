@@ -2,7 +2,7 @@
 
 # 의사 이삭 줍기 PC
 
-Windows PC를 켜두고 사용하는 독립형 상주 프로그램. 기준 버전은 **0.1.0-preview.11**이다. 운영 서버·유료 API·모바일 동기화·자체 원격 조작·절전 해제를 사용하지 않는다.
+Windows PC를 켜두고 사용하는 독립형 상주 프로그램. 기준 버전은 **0.1.0-preview.12**이다. 운영 서버·유료 API·모바일 동기화·자체 원격 조작·절전 해제를 사용하지 않는다.
 
 ## 공동 개발 시작
 
@@ -13,7 +13,7 @@ PC 전용 [공개 소스 저장소](https://github.com/issackr580/doctor-glean-p
 3. [구조](docs/ARCHITECTURE.md): 모듈·신뢰 경계·저장 형식·엔진 동기화
 4. [개발 방침](docs/DEVELOPMENT_POLICY.md)과 [결정 기록](docs/DECISIONS.md): 확정 범위
 5. [개발자 로그 수집](docs/DIAGNOSTICS.md): 재현 전 기록 켜기·JSON 내보내기·공유 기준
-6. [배포 절차](docs/RELEASE_PROCESS.md)와 [이번 기록](docs/releases/0.1.0-preview.11.md): 소스 기준점·검증·릴리스
+6. [배포 절차](docs/RELEASE_PROCESS.md)와 [이번 기록](docs/releases/0.1.0-preview.12.md): 소스 기준점·검증·릴리스
 
 ```sh
 npm ci
@@ -29,18 +29,19 @@ Node24/npm11을 사용한다. Windows에서는 Electron 검사를 그대로 실�
 
 - 9사이트 강의 조회, 날짜·사이트 선택, 캐시·목록 복사·취소·로그인 마침 대기열.
 - 출석·캡슐, 닥터빌 퀴즈 하루1회 제출, 인터엠디 퀴즈 상태 확인, 키메디 브랜드관 최대2회.
+- 클릭 없는 예약 사전 검사, PC 실행·이동·영상·사이트 완료 구분, 상태만 새로 확인.
 - 6사이트 자동 입장, 한미 시작10분 전 준비·시작부터10분 간격 최대5회·종료 중단.
 - 오전08:10과 평일00:01:02 닥터라운지. PC·프로그램이 실행 중인 조건에서 정해진 기한만 처리.
 - 별도 후보 검증 후 Windows DPAPI 계정 저장·동의한 만료 복구, 시도 전 기록·불확실 재전송 제한.
 - 개발자/배포용의 저장소·코드 분리, 수동 전체/작은 패치, 자동 전송 없는 최소 진단.
 
-기능은 기본 꺼짐이다. 클릭·목적지·영상 진행·적립 완료를 구분한다. 지속 영상 재생은 보류, 종근당 매일 새 로그인과 닥터빌 설문은 별도 검증 단계다. 사이트별 실제 성공 범위는 STATUS를 기준으로 한다.
+기능은 기본 꺼짐이다. 클릭·목적지·영상 진행·적립 완료를 구분한다. 지속 영상 재생은 보류, 종근당 매일 새 로그인과 닥터빌 설문은 별도 검증 단계다. 사이트별 실제 성공 범위는 STATUS를 기준으로 한다. 모바일과 함께 사용할 때는 [PC 검증 방법](docs/ENTRY_VALIDATION.md)으로 새 실행 시각과 근거를 확인한다.
 
 ## 실행과 업데이트
 
-[Windows 안내](docs/WINDOWS_PREVIEW.md)를 따른다. 배포용 실행물은 이 저장소의 [공개 검증판](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.11), 개발자용 실행물은 지정 collaborator가 GitHub 로그인 후 같은 [Releases 목록](https://github.com/issackr580/doctor-glean-pc/releases)의 **preview.11 협업자 전용 Draft**에서 받는다. 접근 권한은 [배포·협업 권한 기준](docs/ACCESS.md)을 따른다. 개발자용 실행파일을 공개 릴리스에 첨부하지 않는다.
+[Windows 안내](docs/WINDOWS_PREVIEW.md)를 따른다. 배포용 실행물은 이 저장소의 [공개 검증판](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.12), 개발자용 실행물은 지정 collaborator가 GitHub 로그인 후 같은 [Releases 목록](https://github.com/issackr580/doctor-glean-pc/releases)의 **preview.12 협업자 전용 Draft**에서 받는다. 접근 권한은 [배포·협업 권한 기준](docs/ACCESS.md)을 따른다. 개발자용 실행파일을 공개 릴리스에 첨부하지 않는다.
 
-preview.10 사용자는 같은 에디션의 **10→11 작은 패치**를 받는다. 완전 종료 → 기존 resources/app 백업 → 패치 app 전체 교체 → 하단 버전 확인 순서다. X는 트레이 숨김이다. 로그인·계정·시도는 별도 데이터 폴더에 유지된다. 첫 설치·다른 버전·runtime 변경은 전체 ZIP이다.
+preview.11 사용자는 같은 에디션의 **11→12 작은 패치**를 받는다. 완전 종료 → 기존 resources/app 백업 → 패치 app 전체 교체 → 하단 버전 확인 순서다. X는 트레이 숨김이다. 로그인·계정·시도는 별도 데이터 폴더에 유지된다. 첫 설치·다른 버전·runtime 변경은 전체 ZIP이다.
 
 계정 저장 후 자동 복구를 허용하면 작업 프로필도 확인하고 해당 사이트 목록을 갱신한다. 이미 저장한 계정은 다시 입력할 필요 없이 **저장 계정으로 로그인**으로 확인한다. 최근 실패의 제한은 지우지 않으며 다음 가능 시각을 표시한다. 개인정보·원문·계정 파일은 Git에 넣지 않는다.
 
