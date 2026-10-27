@@ -5,6 +5,13 @@ const evidenceSources=new Set(['none','visible_logout','hmp_server_member','inte
 export function credentialObservation(site,page,phase,reply,elapsedMs){
  let originAllowed=false;try{originAllowed=credentialSite(site)?.origins.includes(new URL(page.url).origin)===true;}catch{}
  const result={phase:phases.has(phase)?phase:'finish',status:safeCredentialStatus(reply?.status),elapsedMs:Math.min(90000,Math.max(0,Math.round(elapsedMs))),originAllowed,navigationAllowed:allowedNavigation(site,page.url),loginRoute:allowedCredentialPage(site,page.url),documentChanged:reply?.documentChanged===true};
+ if(site==='doctorville')try{
+  const u=new URL(page.url),policy=credentialSite(site),expected=policy.routes[0].query.cb[0];
+  if(u.origin==='https://mims-account.shop.co.kr'){
+   result.providerPath=u.pathname==='/login'?'login':'other';
+   const values=u.searchParams.getAll('cb');result.callbackState=values.length>1?'repeated':!values.length?'missing':values[0]===expected?'expected':'mismatch';
+  }
+ }catch{}
  if(['policy_rejected','invalid_response','page_changed','time_limit','network_error','cancelled','worker_closed','navigation_changed','stale','scope_changed'].includes(reply?.failure))result.failure=reply.failure;
  if(['provider','login','catalog','daily','lounge','brand','quiz','home','other'].includes(page.route))result.route=page.route;
  try{if(site==='doctorville'&&new URL(page.url).pathname==='/mims/directLogin')result.route='callback';}catch{}

@@ -10,7 +10,7 @@ import {CredentialRunner} from '../src/credential-runner.js';
 import {CredentialAttempts} from '../src/credential-attempts.js';
 import {CredentialManager} from '../src/credential-manager.js';
 import {CREDENTIAL_SITES} from '../src/credential-policy.js';
-import {remotePreferences} from '../src/security.js';
+import {remotePreferences,siteById} from '../src/security.js';
 import {electronCatalogPage} from '../src/electron-catalog-page.js';
 import {CatalogRunner} from '../src/catalog-runner.js';
 import {initialSettings} from '../vendor/engine/core.js';
@@ -34,9 +34,10 @@ const shell=body=>'<!doctype html><html><meta charset="utf-8"><body>'+body+'</bo
 async function run(){
  await app.whenReady();
  for(const policy of CREDENTIAL_SITES){
-  const partition='credential-validation-'+randomUUID(),prefs={...remotePreferences(policy.id),partition},profile=session.fromPartition(partition);let accepted=false;
+  const partition='credential-validation-'+randomUUID(),prefs={...remotePreferences(policy.id),partition},profile=session.fromPartition(partition);let accepted=false,firstProviderCanonical;
   await profile.protocol.handle('https',async request=>{
    const u=new URL(request.url);
+   if(policy.id==='doctorville'&&u.hostname==='mims-account.shop.co.kr'&&u.pathname==='/login'&&firstProviderCanonical===undefined)firstProviderCanonical=u.href===siteById('doctorville').loginUrl;
    if(policy.id==='docple'&&u.pathname==='/api/season2/mission/attendance/calendar')return new Response(JSON.stringify({data:{yearMonth:kstDate().slice(0,7).replace('-',''),attendedDates:[]}}),{status:accepted?200:401,headers:{'content-type':'application/json'}});
    if(request.method!=='GET'){
     const record=JSON.parse(readFileSync(join(root,'attempts.json'))).sites[policy.id];assert.equal(record.status,'submitted');
@@ -51,6 +52,7 @@ async function run(){
   try{
    const result=await new CredentialRunner({attempts}).run(policy.id,page,{candidate,validation:true,signal:controller.signal});
    check(policy.id+' original login validates only after one durable POST and post-submit authentication',result.status==='authenticated'&&result.submitted&&posts.filter(id=>id===policy.id).length===1);
+   if(policy.id==='doctorville')check('Doctorville automation uses exactly the reviewed manual login entry',firstProviderCanonical===true&&result.trace.some(row=>row.callbackState==='expected'&&row.navigationAllowed));
    const power=await page.root.webContents.executeJavaScript('({node:typeof require,bridge:typeof doctorGlean})');check(policy.id+' validation page cannot reach Node or control IPC',power.node==='undefined'&&power.bridge==='undefined');
   }finally{candidate.id='';candidate.password='';page.close();}
  }

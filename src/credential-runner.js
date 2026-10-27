@@ -3,6 +3,7 @@ import {credentialSite,allowedCredentialPage,safeCredentialStatus} from './crede
 import {waitFor} from './async-work.js';
 import {credentialObservation,recordCredentialObservation} from './credential-diagnostics.js';
 import {inspectDocpleSession} from './credential-session.js';
+import {siteById} from './security.js';
 const terminal=new Set(['challenge','rejected','blocked','stale']);
 export class CredentialRunner{
  constructor({attempts,now=Date.now,sleep=waitFor}){Object.assign(this,{attempts,now,sleep});}
@@ -44,7 +45,9 @@ export class CredentialRunner{
   page.credentialDialog=true;
   try{
    if(!policy||!live())return {status:'cancelled',attempted:false,submitted:false};
-   await page.load(policy.url);await page.enableCredentialDiagnostics?.();observe('open',{status:'ready'});
+   // Use the same reviewed, encoded provider entry as the working manual
+   // login window. The snapshot route/query and all credential checks remain.
+   await page.load(site==='doctorville'?siteById(site).loginUrl:policy.url);await page.enableCredentialDiagnostics?.();observe('open',{status:'ready'});
    while(live()){
     await page.ready?.();if(!live())break;
     if(page.dialogResult){status=safeCredentialStatus(page.dialogResult.status);break;}
@@ -117,7 +120,7 @@ export class CredentialRunner{
     await this.sleep(350,signal);
    }
    if(!live())status=signal.aborted||!allowed()?'cancelled':'time_limit';
-  }catch(error){status=safeCredentialStatus(signal.aborted?'cancelled':error.code??error.message);failureCode=signal.aborted?'cancelled':error.code??error.message;}
+  }catch(error){failureCode=signal.aborted?'cancelled':error.code??error.message;status=!attempted&&failureCode==='policy_rejected'?'blocked':safeCredentialStatus(failureCode);}
   finally{
    page.credentialDialog=false;
    // Candidate authentication cannot unlock an older saved account. Only the

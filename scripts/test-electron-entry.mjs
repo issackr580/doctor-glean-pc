@@ -11,6 +11,8 @@ import {WorkflowStore} from '../src/workflow-store.js';
 import {LocalState} from '../src/local-state.js';
 import {remotePreferences} from '../src/security.js';
 import {kstDate} from '../src/schedule.js';
+import {CatalogPage} from '../src/catalog-page.js';
+import {initialSettings} from '../vendor/engine/core.js';
 app.on('window-all-closed',()=>{});
 const root=mkdtempSync(join(tmpdir(),'pc-entry-electron-'));app.setPath('userData',root);app.setPath('sessionData',join(root,'browser'));
 const date=kstDate(),checks=[],check=(name,value)=>{assert.ok(value,name);checks.push(name);},shell=body=>'<!doctype html><html><meta charset="utf-8"><body>'+body+'</body></html>';
@@ -29,6 +31,16 @@ async function inspect(site,body,options={}){
 }
 const doctor=(extra='',when=date,at=clock)=>`<a class="list_detail" href="/seminar/seminarDetail?seminarId=11"><strong class="tit">${title}</strong>${extra}<span>${when}</span><div class="time"><span class="start">${at}</span> ~ 23:59</div><button onclick="window.syntheticClicks=(window.syntheticClicks||0)+1">입장하기</button></a>`;
 const medi=(id=11,extra='')=>`<article><h3>${title}</h3><p class="date">${date} ${clock} ~ 23:59</p><a href="/symposium/${id}${extra}">상세보기</a><button onclick="window.syntheticClicks=(window.syntheticClicks||0)+1">입장하기</button></article>`;
+async function catalog(page,site){
+ const reader=new CatalogPage(initialSettings().profiles[site],{snapshot:()=>({url:page.url,version:page.version,loading:false}),load:url=>page.load(url),evaluate:script=>page.current.webContents.executeJavaScript(script,false),close(){}},page.signal);
+ let previous,result;
+ for(let i=0;i<18;i++){
+  result=await reader.read(date,previous);previous=result.state;
+  if(result.done)return result;
+  if(result.action)await reader.act(result.action,previous);
+  await new Promise(resolve=>setTimeout(resolve,600));
+ }return result;
+}
 async function run(){
  await app.whenReady();
  const corrected=doctor('<span class="detail_date" hidden>2020-01-01</span>');
@@ -59,6 +71,26 @@ async function run(){
  await inspect('hmp',grouped(),{work:async(page,posts)=>{const r=await page.call('pc-entry.js',[job('hmp'),'preflight']);check('Hanmi preflight binds the collector-style adjacent date group with no submit',r.status==='ready'&&r.targetMatched&&posts()===0);}});
  await inspect('hmp',grouped(),{work:async(page,posts)=>{const r=await page.call('pc-entry.js',[{...job('hmp'),hmpSlot:5},'click'],{navigation:true});check('Hanmi supplemental click refuses an invalid repetition slot',r.status==='blocked'&&posts()===0);}});
  for(const [name,body] of [['wrong weekday',grouped(date+'('+wrongWeekday+')')],['hidden gap',grouped(undefined,'<div hidden>다른 날짜 영역</div>')],['conflicting row date',grouped(undefined,'','<span class="date">2020-01-01</span>')]])check('Hanmi date group rejects '+name,(await inspect('hmp',body)).status!=='ready');
+ const plainGrouped=grouped().replaceAll(`<div class="top"><span class="time">${clock} ~ 23:59</span></div>`,'').replaceAll('<div class="subject">',`<span>${clock} ~ 23:59</span><div class="subject">`),parity={};
+ await inspect('hmp',plainGrouped,{work:async(page,posts)=>{
+  const c=await catalog(page,'hmp'),r=await page.call('pc-entry.js',[job('hmp'),'preflight']);parity.hmpCatalog=c.events.some(e=>e.title===title&&e.time===clock);parity.hmpEntry=r.status==='ready'&&posts()===0;
+ }});
+ const mixedBlue=`<article><h3 class="sem_tit">${title}</h3><div class="sem_detail"><p>일시 <span>${date} ${clock} ~ 23:59</span></p><p>연자 합성 강연자</p><p>포인트 제공</p></div><span class="W_status ongoing">진행 중</span><button>참여하기</button></article>`;
+ await inspect('bluepharm',mixedBlue,{work:async(page,posts)=>{
+  const read=readFileSync(new URL('../vendor/engine/collect-additional.js',import.meta.url),'utf8'),profile={...initialSettings().profiles.bluepharm,rowSelector:'article',titleSelector:'.sem_tit',validated:true,allowNoPagination:true};
+  const c=await page.current.webContents.executeJavaScript(`(${read})(${JSON.stringify(profile)},${JSON.stringify(date)})`),r=await page.call('pc-entry.js',[job('bluepharm'),'preflight']);parity.blueCatalog=c.events.some(e=>e.title===title&&e.time===clock);parity.blueEntry=r.status==='ready'&&posts()===0;
+ }});
+ console.log('COLLECTOR_ENTRY_PARITY:'+JSON.stringify(parity));
+ check('Hanmi classless clocks are accepted by both the original collector and PC entry reader',parity.hmpCatalog&&parity.hmpEntry);
+ check('Bluepharm labelled schedule stays separate from speaker metadata in both readers',parity.blueCatalog&&parity.blueEntry);
+ for(const [name,body] of [
+  ['two preceding clocks',plainGrouped.replace(`<span>${clock} ~ 23:59</span><div class="subject">${title}`,`<span>${clock} ~ 23:59</span><span>00:00</span><div class="subject">${title}`)],
+  ['clock after the title',plainGrouped.replace(`<span>${clock} ~ 23:59</span><div class="subject">${title}</div>`,`<div class="subject">${title}</div><span>${clock} ~ 23:59</span>`)],
+  ['wrong weekday',plainGrouped.replace(date+'('+weekday+')',date+'('+wrongWeekday+')')],
+  ['classless conflicting date',plainGrouped.replace(`<div class="subject">${title}`,`<span>2020-01-01</span><div class="subject">${title}`)],
+  ['replay region',`<section class="replay"><h2>VOD</h2>${plainGrouped}</section>`],
+ ])check('Hanmi classless group rejects '+name,(await inspect('hmp',body)).status!=='ready');
+ check('two labelled Bluepharm schedules do not merge merely because their starts agree',(await inspect('bluepharm',mixedBlue.replace('<p>연자 합성 강연자</p>',`<p>일시 ${date} ${clock} ~ ${date} ${clock}</p>`))).status!=='ready');
  const tomorrow=new Date(Date.parse(date+'T00:00:00Z')+86400000).toISOString().slice(0,10),blue=value=>`<article><h3>${title}</h3><div class="sem_detail">일시 <span>${value}</span></div><span class="W_status ongoing">강의중</span><button onclick="fetch('/synthetic-entry',{method:'POST'})">참여하기</button></article>`;
  await inspect('bluepharm',blue(`${date} ${clock} ~ ${tomorrow} 23:59`),{work:async(page,posts)=>{const r=await page.call('pc-entry.js',[job('bluepharm'),'preflight']);check('Bluepharm continuous range uses its exact start date and time without submitting',r.status==='ready'&&r.targetMatched&&posts()===0);}});
  for(const [name,value] of [['backwards end',`${date} ${clock} ~ 2020-01-01 23:59`],['separate schedules',`${date} ${clock} / ${tomorrow} 23:59`],['missing start time',`${date} ~ ${tomorrow} ${clock}`]])check('Bluepharm range rejects '+name,(await inspect('bluepharm',blue(value))).status!=='ready');
@@ -94,7 +126,7 @@ async function run(){
  const hmpLedger=new LocalState(join(hmpDirectory,'state.json'));hmpLedger.setPaused(false);const hmpStore=new WorkflowStore(join(hmpDirectory,'workflows.json'));hmpStore.setFeature('entry',true);
  await session.fromPartition(hmpPartition).protocol.handle('https',request=>{
   if(request.method==='POST'){hmpPosts++;hmpReserved=Object.values(JSON.parse(readFileSync(join(hmpDirectory,'state.json'))).jobs).some(row=>row.state==='attempting'&&row.slot===0);return new Response('{}',{headers:{'content-type':'application/json'}});}
-  return new Response(shell(grouped()),{headers:{'content-type':'text/html; charset=utf-8'}});
+  return new Response(shell(plainGrouped),{headers:{'content-type':'text/html; charset=utf-8'}});
  });
  const hmpRunner=new EntryRunner({ledger:hmpLedger,store:hmpStore,createPage:async(_site,signal)=>new AutomationPage('hmp',signal,hmpPrefs)}),hmpEntry={...entry,...job('hmp')};hmpStore.putEntry(hmpEntry);
  await hmpRunner.run(hmpEntry);const hmpResult=hmpStore.entries()[0];
