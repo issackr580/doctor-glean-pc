@@ -136,6 +136,32 @@ test('quiz uses observed product navigation and reserves the one daily submit be
  await runner.run(p,date,{signal,allowed:()=>true});assert.equal(sent,1);
  assert.doesNotMatch(JSON.stringify(store.diagnostics()),/테스트 제품|pId|quizId|answers/);
 });
+test('quiz already completed on another device never starts ambiguous product discovery or reserves a submit',async t=>{
+ const {clock,ledger,store}=setup(t);let discovery=0;
+ const p=page(async(name)=>{if(name==='daily.js')return {status:'complete',reason:'today_quiz_visual'};if(name==='doctorville-quiz-journey.js')discovery++;return {status:'stopped',reason:'product_link_ambiguous'};});
+ const result=await new DoctorvilleQuizRunner({ledger,store,now:clock.now,sleep:clock.sleep}).run(p,date,{signal:new AbortController().signal,allowed:()=>true});
+ assert.equal(result.status,'complete');assert.equal(result.reason,'already_participated');assert.equal(discovery,0);assert.equal(Object.keys(ledger.snapshot().jobs).length,0);assert.equal(store.day(date).quizAuto.submitted,false);
+});
+test('desktop quiz duplicate-link recovery still reserves the daily submit before the original handler',async t=>{
+ const {clock,ledger,store}=setup(t);let sent=0;
+ const p=page(async(name,[input])=>{
+  if(name==='daily.js')return {status:'pending',reason:'today_quiz_visual'};
+  if(name==='doctorville-quiz-journey.js')return {status:'stopped',reason:'product_link_ambiguous'};
+  if(name==='doctorville-quiz-page.js')return {status:'navigate',reason:'today_product_link',productName:'합성 제품',url:'https://www.doctorville.co.kr/product/productView?pId=123'};
+  if(input.mode==='prepare')return {status:'ready',attemptCount:0};
+  if(input.mode==='submit'){assert.equal(Object.values(ledger.snapshot().jobs)[0].state,'attempting');sent++;return {status:'success',reason:'success_receipt'};}
+  return {status:'stopped',reason:'cancelled'};
+ });
+ const runner=new DoctorvilleQuizRunner({ledger,store,now:clock.now,sleep:clock.sleep});
+ assert.equal((await runner.run(p,date,{signal:new AbortController().signal,allowed:()=>true})).status,'complete');
+ await runner.run(p,date,{signal:new AbortController().signal,allowed:()=>true});assert.equal(sent,1);
+});
+test('genuinely ambiguous quiz products remain unsubmitted without consuming a ticket',async t=>{
+ const {clock,ledger,store}=setup(t);let prepared=0;
+ const p=page(async(name,[input])=>{if(input.mode==='prepare')prepared++;return {status:'stopped',reason:'product_link_ambiguous'};});
+ const result=await new DoctorvilleQuizRunner({ledger,store,now:clock.now,sleep:clock.sleep}).run(p,date,{signal:new AbortController().signal,allowed:()=>true});
+ assert.equal(result.reason,'product_link_ambiguous');assert.equal(prepared,0);assert.equal(Object.keys(ledger.snapshot().jobs).length,0);
+});
 
 test('morning completion waits for both the daily run and its queued catalog',async t=>{
  const {root,clock,ledger,store}=setup(t,'08:09');store.setFeature('morning',true);let queries=0;

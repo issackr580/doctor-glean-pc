@@ -2,6 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {credentialSite,allowedCredentialPage,safeCredentialStatus} from './credential-policy.js';
 import {waitFor} from './async-work.js';
 import {credentialObservation,recordCredentialObservation} from './credential-diagnostics.js';
+import {inspectDocpleSession} from './credential-session.js';
 const terminal=new Set(['challenge','rejected','blocked','stale']);
 export class CredentialRunner{
  constructor({attempts,now=Date.now,sleep=waitFor}){Object.assign(this,{attempts,now,sleep});}
@@ -24,6 +25,10 @@ export class CredentialRunner{
    if(site==='doctorville'&&submitted&&reply.status==='unknown'&&allowedCredentialPage(site,page.url)){
     const supplement=await page.call('credential-page-state.js',[input]);
     reply={...reply,...(supplement.status==='manual'?{status:'manual',detail:supplement.detail}:{}),evidence:{...reply.evidence,...supplement.evidence}};phase='provider';
+   }
+   if(site==='docple'&&['authenticated','unknown','login_required'].includes(reply.status)&&reply.evidence?.passwordShown!==true&&!reply.evidence?.barrierReason){
+    const server=await inspectDocpleSession(page,{signal,now:this.now,sleep:this.sleep,allowed,nonce});
+    if(page.url===policy.entry||['authenticated','login_required'].includes(server.status)){reply={...server};phase='provider';}
    }
    if(site==='dtalks'&&submitted&&reply.status==='unknown'){
     const state=page.diagnostics?.(),actual=state?.credentialNetworkEnabled===true&&state.credentialRequests>0&&state.credentialResponses>0&&state.credentialHttpStatus>=200&&state.credentialHttpStatus<400;
@@ -50,6 +55,15 @@ export class CredentialRunner{
      if(supplement.status==='authenticated')reply=supplement;observe('provider',supplement);
     }
     status=safeCredentialStatus(reply.status);onChange(status);
+    // Do not close a Docple login worker on a transient SPA logout label.
+    // Read the original protected calendar before declaring the profile ready.
+    if(site==='docple'&&status==='authenticated'&&reply.evidence?.authEvidenceSource==='docple_server_calendar')refreshed=true;
+    if(site==='docple'&&status==='authenticated'&&!refreshed){
+     if(validation&&(!attempted||!submitted)){status='manual';break;}
+     refreshed=true;observe('refresh',{status:'loading'});await page.load(policy.entry);
+     reply=await verify();status=safeCredentialStatus(reply.status);
+     if(status!=='authenticated'){if(terminal.has(status)||['manual','network_error','login_required'].includes(status))break;await this.sleep(350,signal);continue;}
+    }
     if(status==='authenticated'){
      if(validation&&(!attempted||!submitted)){status='manual';break;}
      return {status,attempted,submitted,reads,trace,elapsedMs:Math.max(0,this.now()-began)};
@@ -60,6 +74,16 @@ export class CredentialRunner{
      // session is already established. Read the fixed protected catalog once;
      // never replay its POST or treat a destination alone as authentication.
      const evidence=reply.evidence;
+     // The original Whodadoc handler can choose a destination which navigation
+     // policy blocks. Keep that policy; re-read only its fixed PC entry once,
+     // after a real auth response and this operation's single submission ACK.
+     const native=page.diagnostics?.();
+     if(site==='whodadoc'&&submitted&&!refreshed&&['unknown','login_required'].includes(status)&&evidence?.observed===true&&!evidence.barrierReason&&native?.navigationBlocked>0&&native.credentialNetworkEnabled===true&&native.credentialRequests===1&&native.credentialResponses>0&&native.credentialHttpStatus>=200&&native.credentialHttpStatus<400&&this.now()-at>=1200){
+      refreshed=true;observe('refresh',{status:'loading'});await page.load(policy.entry);continue;
+     }
+     if(site==='docple'&&submitted&&!refreshed&&status==='unknown'&&evidence?.observed===true&&evidence.loginShown===false&&evidence.passwordShown===false&&this.now()-at>=1200){
+      refreshed=true;observe('refresh',{status:'loading'});await page.load(policy.entry);continue;
+     }
      if(site==='dtalks'&&submitted&&!refreshed&&status==='unknown'&&page.version!==submittedVersion&&!allowedCredentialPage(site,page.url)&&evidence?.observed===true&&evidence.loginShown===false&&evidence.passwordShown===false&&evidence.logoutShown===false){
       settledReads++;
       if(settledReads>=2&&this.now()-at>=1200){refreshed=true;observe('refresh',{status:'loading'});await page.load(policy.entry);settledReads=0;continue;}

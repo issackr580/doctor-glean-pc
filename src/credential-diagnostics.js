@@ -1,6 +1,6 @@
 import {credentialSite,allowedCredentialPage,safeCredentialStatus} from './credential-policy.js';
 const phases=new Set(['open','probe','fill','submit','verify','provider','refresh','finish']);
-const evidenceSources=new Set(['none','visible_logout','hmp_server_member','intermd_server_member','keymedi_server_member','keymedi_background_member','dtalks_server_logout']);
+const evidenceSources=new Set(['none','visible_logout','hmp_server_member','intermd_server_member','keymedi_server_member','keymedi_background_member','dtalks_server_logout','docple_server_calendar']);
 export function credentialObservation(site,page,phase,reply,elapsedMs){
  let originAllowed=false;try{originAllowed=credentialSite(site)?.origins.includes(new URL(page.url).origin)===true;}catch{}
  const result={phase:phases.has(phase)?phase:'finish',status:safeCredentialStatus(reply?.status),elapsedMs:Math.min(90000,Math.max(0,Math.round(elapsedMs))),originAllowed,loginRoute:allowedCredentialPage(site,page.url),documentChanged:reply?.documentChanged===true};

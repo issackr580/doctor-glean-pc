@@ -5,7 +5,7 @@ export const credentialInput=input=>input&&typeof input==='object'&&typeof input
 export const CREDENTIAL_STATUSES=new Set(['idle','ready','loading','submitted','authenticated','login_required','manual','challenge','blocked','stale','already_submitted','unknown','rejected','pending','saved','removed','disabled','cooldown','daily_limit','cancelled','storage_unavailable','storage_error','network_error','time_limit','busy','not_saved','probe_unready']);
 export const safeCredentialStatus=value=>CREDENTIAL_STATUSES.has(value)?value:'unknown';
 export function isCredentialRequest(site,raw){
- try{const u=new URL(raw);return u.protocol==='https:'&&!u.username&&!u.password&&!u.port&&!u.search&&!u.hash&&(site==='doctorville'&&u.origin==='https://mims-account.shop.co.kr'&&u.pathname==='/apis/auth/login'||site==='dtalks'&&u.origin==='https://www.dtalks.kr'&&u.pathname==='/member/loginConfirm.do');}catch{return false;}
+ try{const u=new URL(raw);return u.protocol==='https:'&&!u.username&&!u.password&&!u.port&&!u.search&&!u.hash&&(site==='doctorville'&&u.origin==='https://mims-account.shop.co.kr'&&u.pathname==='/apis/auth/login'||site==='dtalks'&&u.origin==='https://www.dtalks.kr'&&u.pathname==='/member/loginConfirm.do'||site==='whodadoc'&&u.origin==='https://hcp.whodadoc.com'&&u.pathname==='/auth/login');}catch{return false;}
 }
 export function allowedCredentialPage(id,raw){
  const site=credentialSite(id);if(!site)return false;

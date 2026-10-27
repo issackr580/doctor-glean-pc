@@ -12,11 +12,22 @@ export class DoctorvilleQuizRunner{
   try{
    onProgress('닥터빌 당일 퀴즈 찾는 중');
    await page.load('https://www.doctorville.co.kr/product/main');visited.add(page.url);
+   // A user may already have participated on another device. Read the dated
+   // provider status before product discovery and never reserve another submit.
+   const existing=await page.call('daily.js',[{site:'doctorville',kind:'quiz',date,autoClaim:false,attempted:false,checkId:nonce}]);
+   if(existing.status==='complete'&&existing.reason==='today_quiz_visual'){receipt={status:'complete',reason:'already_participated'};return receipt;}
+   if(existing.status==='failed'&&existing.reason==='today_quiz_visual'){receipt={status:'wrong',reason:'today_quiz_visual'};return receipt;}
+   if(existing.status==='login'){receipt={status:'login',reason:'login_required'};return receipt;}
    let missingAt=0;
    while(valid()){
     if(['login','provider'].includes(page.route)){receipt={status:'login',reason:'login_required'};return receipt;}
     if(!quizNavigationAllowed(page.url))throw Error('policy_rejected');
-    const reply=await page.call('doctorville-quiz-journey.js',[{phase,date,expectedUrl:page.url,...(productName?{productName}:{})}]);
+    const request={phase,date,expectedUrl:page.url,...(productName?{productName}:{})};
+    let reply=await page.call('doctorville-quiz-journey.js',[request]);
+    if(reply.status==='stopped'&&['product_link_ambiguous','today_link_missing','product_not_found'].includes(reply.reason)){
+     const desktop=await page.call('doctorville-quiz-page.js',[request]);
+     if(['navigate','loading'].includes(desktop.status))reply=desktop;
+    }
     if(reply.status==='loading'){await this.sleep(500,signal);continue;}
     if(reply.status==='stopped'){
      if(['today_quiz_missing','today_link_missing'].includes(reply.reason)){missingAt||=this.now();if(this.now()-missingAt<8000){await this.sleep(700,signal);continue;}}

@@ -21,7 +21,19 @@ export function safeCatalogNavigation(profile,action,state){
 export class CatalogPage{
  constructor(profile,transport,signal){this.profile=profile;this.transport=transport;this.signal=signal;this.closed=false;this.reads=0;this.documentChanges=0;this.started=performance.now();}
  #current(){if(this.closed||this.signal.aborted)throw fail('cancelled');return this.transport.snapshot();}
- async open(){this.#current();await this.transport.load(this.profile.url,this.signal);this.#current();}
+ async open(){
+  this.#current();
+  try{await this.transport.load(this.profile.url,this.signal);}
+  catch(error){
+   this.#current();const site=siteById(this.profile.id);
+   // The fixed Whodadoc PC catalog can fail while its original login GET
+   // remains available. Let the host read that form and recover once; never
+   // turn an arbitrary failed navigation or a TLS failure into a login retry.
+   if(this.profile.id!=='whodadoc'||site?.url!==this.profile.url||!site.loginUrl||error.code!=='network_error'||error.failure!=='load_failed')throw error;
+   await this.transport.load(site.loginUrl,this.signal);
+  }
+  this.#current();
+ }
  async #evaluate(source){
   const before=this.#current();
   if(!allowedNavigation(this.profile.id,before.url))throw fail('navigation_changed');
