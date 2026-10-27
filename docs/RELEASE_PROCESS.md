@@ -48,6 +48,12 @@ node scripts/build-app-patch.mjs --from=/old/artifact/developer --to=/new/artifa
 - developer 초안은 편집 후 release ID로 다시 조회해 현재 주소를 확인한다. 임시 untagged URL은 편집하면 바뀔 수 있다. 영구 안내는 관리자·쓰기 권한 collaborator가 GitHub 로그인 후 같은 PC 저장소의 Releases 목록이다. 일반 사용자의 404는 정상이다.
 - 공개 이후 수정은 새 버전으로 배포한다. 기존 ZIP을 같은 이름으로 갈아 끼우지 않는다.
 
+## preview.10 수동 Draft 업로드 작업
+
+현재 실행 환경에서 GitHub API 조회는 가능하지만 업로드 주소가 401을 반환하여, 관리자의 게시 요청에 한해 `PC preview.10 manual Draft assets`를 수동 실행한다. 자동 push·PR·예약 실행이나 공개 게시 기능은 없다. `issackr580`만 실행하며 고정 소스 `2aef5b3`, 기존 preview.10 Draft ID, 기존 preview.9 패치 기준 자산을 사용한다. 이미 검증한 두 Windows 묶음과 소스의 파일별 해시 전체가 일치해야 업로드한다. 공식 GitHub runner의 일시적 `GITHUB_TOKEN`만 쓰며 별도 계정·서명 비밀을 추가하지 않는다.
+
+이 작업은 developer와 distribution을 모두 Draft로 유지한다. 담당자는 업로드된 파일을 다운로드해 해시·에디션·소스·패치를 확인한 뒤 distribution만 별도로 prerelease로 공개한다. 개발자 바이너리를 공개 Actions artifact로 저장하지 않는다. 기존 자산 교체·삭제와 모바일 저장소 변경은 하지 않는다.
+
 ## Windows 확인
 
 최소 확인은 시작·트레이 복원·명시적 종료, 업데이트 후 기존 데이터, 계정 저장/복호화, 로그인 만료 복구, 전체 중지, 재시작 중복 제출 방지다. 사이트별로 실제 입장·목적지·재생·적립을 따로 확인한다. Linux 검사 통과를 Windows·실계정 성공으로 확대하지 않는다.
