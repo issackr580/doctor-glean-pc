@@ -57,6 +57,8 @@ async function run(){
   const c=await catalog(page,'doctorville'),r=await page.call('pc-entry.js',[job('doctorville'),'preflight']);
   check('Doctorville collector and entry reader both bind bare date text beside inline elements',c.events.some(e=>e.title===title&&e.time===clock)&&r.status==='ready'&&posts()===0);
  }});
+ const datedTitle=title+' '+date,headingOnly=bareDoctor.replace(`<strong class="tit">${title}</strong>${date.replaceAll('-','.')}`,`<h3>${datedTitle}</h3>`);
+ check('Doctorville never borrows its date from an alternate title heading',(await inspect('doctorville',headingOnly,{job:{title:datedTitle}})).status!=='ready');
  check('Doctorville dedicated start also accepts a hyphenated month/day',(await inspect('doctorville',bareDoctor.replace(date.replaceAll('-','.'),date.slice(5)))).status==='ready');
  for(const [name,body] of [
   ['conflicting visible dates',bareDoctor.replace('<div class="time">','<span>2020-01-01</span><div class="time">')],
