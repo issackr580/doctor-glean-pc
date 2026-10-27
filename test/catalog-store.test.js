@@ -86,3 +86,8 @@ test('Bluepharm observed start dates require complete current-card facts and no 
  assert.equal(make({}).scope,'current_list_checked');
  assert.equal(make({continuation:{more:1,pagers:0,ambiguous:false}}).scope,'unconfirmed');assert.equal(make({startDatesRead:false}).scope,'unconfirmed');
 });
+test('Bluepharm selected-day calendar proof remains scoped to that checked date despite unrelated page controls',()=>{
+ const diagnostics={calendarChecked:true,calendarStatus:'checked',calendarDate:date,calendarMonth:date.slice(0,7),continuation:{more:0,pagers:1,ambiguous:false}};
+ const row=sanitiseResult('bluepharm',date,{status:'review',coverage:true,events:[],diagnostics},now);assert.equal(row.scope,'calendar_checked');
+ assert.equal(sanitiseResult('bluepharm',date,{status:'review',coverage:true,events:[],diagnostics:{...diagnostics,calendarDate:'2026-10-27'}},now).scope,'unconfirmed');
+});

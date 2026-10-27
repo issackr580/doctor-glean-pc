@@ -169,6 +169,7 @@ try{
  check('control separates retained clicks from this app session',await evaluate('document.getElementById("entry-results").textContent.includes("이번 프로그램 실행 후 PC 클릭 0회 · 시작 전 기록 5회")'));
  const batchResult=await evaluate('window.doctorGlean.preflightUpcoming()');
  check('batch inspection IPC and visible action remain read-only',batchResult.ok&&(await state()).automation.preflight.running===false&&requests.every(r=>r.method==='GET')&&await evaluate('document.getElementById("entry-results").textContent.includes("예정 예약 일괄 사전 검사")'));
+ check('batch UI distinguishes processed counts from eligibility outcomes',await evaluate('document.getElementById("entry-results").textContent.includes("버튼 확인")&&document.getElementById("entry-results").textContent.includes("로그인 필요")'));
  await evaluate('window.doctorGlean.exportReport()');
  const diagnostic=readFileSync(report,'utf8');
  check('report omits raw session, URLs and lecture titles',!/synthetic-login|https:|합성 .*강의/.test(diagnostic));

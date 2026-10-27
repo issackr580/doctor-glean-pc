@@ -8,6 +8,7 @@ export class CredentialRunner{
  constructor({attempts,now=Date.now,sleep=waitFor}){Object.assign(this,{attempts,now,sleep});}
  async run(site,page,{candidate,readCredentials,validation=false,automatic=false,signal,allowed=()=>true,onChange=()=>{}}){
   const policy=credentialSite(site),nonce=randomUUID().replace(/-/g,''),began=this.now();let attempted=false,submitted=false,at=0,usedProbe=false,reads=0,ready=0,lastVersion=-1,status='unknown',manualSince=0,submittedVersion=-1,refreshed=false,settledReads=0;
+  let failureCode;
   const trace=[],observe=(phase,reply)=>recordCredentialObservation(trace,credentialObservation(site,page,phase,reply,this.now()-began));
   const live=()=>!signal.aborted&&allowed()&&!page.closed&&this.now()-began<90000&&(!attempted||this.now()-at<(validation?45000:20000));
   // The original background proof rejects candidate-validation fields, even
@@ -116,13 +117,13 @@ export class CredentialRunner{
     await this.sleep(350,signal);
    }
    if(!live())status=signal.aborted||!allowed()?'cancelled':'time_limit';
-  }catch(error){status=safeCredentialStatus(signal.aborted?'cancelled':error.code??error.message);}
+  }catch(error){status=safeCredentialStatus(signal.aborted?'cancelled':error.code??error.message);failureCode=signal.aborted?'cancelled':error.code??error.message;}
   finally{
    page.credentialDialog=false;
    // Candidate authentication cannot unlock an older saved account. Only the
    // manager's successful encrypted replacement changes this to "saved".
    if(attempted)this.attempts.finish(site,validation&&status==='authenticated'?'pending':status,this.now());
-   observe('finish',{status});
+   observe('finish',{status,failure:failureCode});
   }
   return {status,attempted,submitted,...(trace.some(row=>row.clientValidationError)?{detail:'input_format'}:{}),reads,trace,elapsedMs:Math.max(0,this.now()-began)};
  }

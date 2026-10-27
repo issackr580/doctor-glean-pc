@@ -43,7 +43,7 @@ test('preflight uses only its separate read-only page and leaves dispatch ledger
  const runner=reserve(s,{createPage:async()=>{loginOrEntry++;throw Error('must not recover');},createInspectionPage:async()=>page(async(name,[job,mode])=>{assert.equal(name,'pc-entry.js');assert.equal(mode,'preflight');inspections++;return {status:'ready',targetMatched:true,matchedTargets:1,entryControls:1};})});
  s.store.setFeature('entry',false);const before=s.store.entries()[0],ledgerBefore=JSON.stringify(s.ledger.snapshot());
  assert.equal((await runner.preflight(before.key)).ok,true);
- const {preflight,...after}=s.store.entries()[0];assert.deepEqual(after,before);assert.equal(preflight.status,'complete');assert.equal(preflight.attempted,false);assert.equal(inspections,1);assert.equal(loginOrEntry,0);assert.equal(JSON.stringify(s.ledger.snapshot()),ledgerBefore);assert.equal(existsSync(join(s.root,'state.json')),false);
+ const {preflight,...after}=s.store.entries()[0];assert.deepEqual(after,before);assert.equal(preflight.status,'complete');assert.equal(preflight.attempted,false);assert.equal(inspections,2);assert.equal(loginOrEntry,0);assert.equal(JSON.stringify(s.ledger.snapshot()),ledgerBefore);assert.equal(existsSync(join(s.root,'state.json')),false);
  assert.equal(new WorkflowStore(join(s.root,'workflows.json')).entries()[0].preflight.status,'complete');
 });
 test('a manual site owner or absent inspection transport cannot trigger preflight login recovery',async t=>{
@@ -108,7 +108,7 @@ function batchController(t,s,createInspectionPage,options={}){
 test('batch preflight checks upcoming reservations with zero dispatches and unchanged ledger',async t=>{
  const s=setup(t),pages=[],controller=batchController(t,s,async()=>{const p=page(async()=>({status:'ready',targetMatched:true,entryControls:1}));pages.push(p);return p;});
  const before=controller.store.entries().map(({key,status,due})=>({key,status,due}));assert.equal((await controller.preflightUpcoming()).ok,true);
- assert.deepEqual(controller.snapshot().preflight,{running:false,total:2,completed:2,skipped:0,reason:'finished'});
+ assert.deepEqual(controller.snapshot().preflight,{running:false,total:2,completed:2,skipped:0,ready:2,waiting:0,login:0,unresolved:0,reason:'finished'});
  assert.deepEqual(controller.store.entries().map(({key,status,due})=>({key,status,due})),before);assert.equal(pages.length,2);assert.ok(pages.every(p=>p.closed));assert.equal(Object.keys(s.ledger.snapshot().jobs).length,0);
 });
 test('a due entry aborts the batch and cannot start its next inspection page',async t=>{
@@ -122,4 +122,33 @@ test('manual owners are skipped and batch read budget expires without affecting 
  const controller=batchController(t,s,async()=>page(async()=>{reads++;s.clock.set(s.clock.now()+120001);return {status:'login'};}));
  await controller.preflightUpcoming();assert.equal(reads,1);assert.equal(controller.snapshot().preflight.reason,'cancelled');assert.equal(controller.store.entries()[1].preflight,undefined);
  controller.entry.isManualOpen=()=>true;await controller.preflightUpcoming();assert.equal(controller.snapshot().preflight.skipped,2);assert.equal(reads,1);assert.equal(Object.keys(s.ledger.snapshot().jobs).length,0);
+});
+test('preflight waits for delayed catalog content and stable eligibility without creating a submit lease',async t=>{
+ const s=setup(t);let reads=0,normal=0;
+ const runner=reserve(s,{createPage:async()=>{normal++;},createInspectionPage:async()=>page(async()=>++reads<4?{status:'target_missing',candidateCards:0}:{status:'ready',targetMatched:true,entryControls:1})});
+ const before=s.store.entries()[0];await runner.preflight(before.key);const job=s.store.entries()[0];
+ assert.equal(reads,5);assert.equal(job.preflight.status,'complete');assert.equal(job.preflight.reads,5);assert.equal(normal,0);assert.equal(job.status,before.status);assert.equal(Object.keys(s.ledger.snapshot().jobs).length,0);
+});
+test('preflight ignores a changed document then reads the new document without repeating an action',async t=>{
+ const s=setup(t);let reads=0;
+ const runner=reserve(s,{createInspectionPage:async()=>page(async()=>{if(++reads===1)throw Object.assign(Error(),{code:'page_changed'});return {status:'ready',targetMatched:true,entryControls:1};})});
+ await runner.preflight(s.store.entries()[0].key);assert.equal(reads,3);assert.equal(s.store.entries()[0].preflight.status,'complete');assert.equal(Object.keys(s.ledger.snapshot().jobs).length,0);
+});
+test('a provider or login landing is classified before searching for missing lecture titles',async t=>{
+ const s=setup(t);let calls=0;
+ for(const route of ['provider','login']){
+  const runner=reserve(s,{createInspectionPage:async()=>({...page(async()=>{calls++;}),route})});await runner.preflight(s.store.entries()[0].key);
+  assert.equal(s.store.entries()[0].preflight.status,'login');assert.equal(s.store.entries()[0].preflight.reads,0);
+ }
+ assert.equal(calls,0);assert.equal(Object.keys(s.ledger.snapshot().jobs).length,0);
+});
+test('an empty catalog inspection is bounded and never changes an entry reservation or lease',async t=>{
+ const s=setup(t);let reads=0;
+ const runner=reserve(s,{createInspectionPage:async()=>page(async()=>{reads++;return {status:'target_missing',candidateCards:0};})});
+ await runner.preflight(s.store.entries()[0].key);assert.equal(reads,21);assert.equal(s.store.entries()[0].preflight.status,'target_missing');assert.equal(s.store.entries()[0].status,'reserved');assert.equal(Object.keys(s.ledger.snapshot().jobs).length,0);
+});
+test('batch processed counts distinguish waiting for an entry button from login need',async t=>{
+ const s=setup(t);let pages=0;
+ const controller=batchController(t,s,async()=>{const n=++pages;return page(async()=>n===1?{status:'not_open',targetMatched:true,reason:'opens_later'}:{status:'login',reason:'login_required'});});
+ await controller.preflightUpcoming();assert.deepEqual(controller.snapshot().preflight,{running:false,total:2,completed:2,skipped:0,ready:0,waiting:1,login:1,unresolved:0,reason:'finished'});assert.equal(Object.keys(s.ledger.snapshot().jobs).length,0);
 });

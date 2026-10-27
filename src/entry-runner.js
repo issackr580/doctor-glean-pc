@@ -66,19 +66,34 @@ export class EntryRunner{
   const job=this.store.entries().find(row=>row.key===key);
   if(!job||!this.createInspectionPage||this.active||this.isManualOpen(job.site))return {ok:false,reason:'busy'};
   const controller=new AbortController(),run={job,controller,page:null};this.active=run;
-  const began=this.now(),runId=randomUUID().replace(/-/g,'');let receipt={status:'unknown',reason:'provider_result_unconfirmed'};
+  const began=this.now(),runId=randomUUID().replace(/-/g,'');let receipt={status:'unknown',reason:'provider_result_unconfirmed'},reply={},reads=0;
   this.emit('preflight',job,{runId,status:'running',readOnly:true});this.onChange();
   try{
    if(job.date!==kstDate(this.now()))return {ok:false,reason:'date_mismatch'};
    run.page=await this.createInspectionPage(job.site,controller.signal);await run.page.load(siteById(job.site).url);
    if(controller.signal.aborted)throw Error('cancelled');
-   const reply=await run.page.call('pc-entry.js',[job,'preflight']);
+   const observedAt=this.now();let fingerprint='',stable=0;
+   // A loaded document can still be hydrating its catalog or redirecting to
+   // login. Re-read only; never turn this observation into credential recovery.
+   while(reads<21&&this.now()-observedAt<=8000){
+    if(controller.signal.aborted||job.date!==kstDate(this.now()))throw Error('cancelled');
+    await run.page.ready?.();
+    if(['login','provider'].includes(run.page.route)){reply={status:'login',reason:'login_required'};break;}
+    try{reply=await run.page.call('pc-entry.js',[job,'preflight']);reads++;}
+    catch(error){if(controller.signal.aborted)throw error;if(!['page_changed','navigation_changed'].includes(error.code??error.message))throw error;reply={status:'not_open',reason:'page_changed'};reads++;}
+    const next=JSON.stringify([reply.status,reply.reason,reply.targetMatched,reply.candidateCards,reply.titleMatches,reply.scheduleMatches,reply.entryControls]);
+    stable=next===fingerprint?stable+1:1;fingerprint=next;
+    if(['login','blocked','not_registered','lecture_ended'].includes(reply.status))break;
+    if(stable>=2&&['ready','ambiguous'].includes(reply.status)||stable>=2&&reply.status==='not_open'&&reply.targetMatched===true)break;
+    if(reads>=21||this.now()-observedAt>=8000)break;
+    await this.sleep(400,controller.signal);
+   }
    if(controller.signal.aborted||job.date!==kstDate(this.now()))throw Error('cancelled');
-   receipt=cleanReceipt({...reply,status:reply.status==='ready'?'complete':reply.status,attempted:false,elapsedMs:Math.max(0,this.now()-began)},this.now());
+   receipt=cleanReceipt({...reply,status:reply.status==='ready'?'complete':reply.status,attempted:false,reads,elapsedMs:Math.max(0,this.now()-began)},this.now());
    return {ok:true};
   }catch(error){receipt=cleanReceipt({status:controller.signal.aborted?'cancelled':'network',reason:controller.signal.aborted?'cancelled':'network_error',attempted:false},this.now());return {ok:false,reason:receipt.reason};}
   finally{
-   try{if(job.date===kstDate(this.now()))this.store.updateEntry(job.key,{preflight:receipt});this.emit('result',job,{...receipt,runId,readOnly:true});}
+   try{if(job.date===kstDate(this.now()))this.store.updateEntry(job.key,{preflight:receipt});this.emit('result',job,{...receipt,runId,readOnly:true,dateMatches:reply.dateMatches,timeMatches:reply.timeMatches});}
    finally{run.page?.close();this.active=null;this.onChange();}
   }
  }
@@ -99,7 +114,7 @@ export class EntryRunner{
    while(allowed()&&this.now()-began<45000&&(prepare?this.now()<job.start:this.now()<=job.deadline)){
     if(['login','provider'].includes(page.route)){receipt={status:'login',reason:'login_required'};break;}
     let reply=await page.call('auto-entry.js',[{...nativeJob(),detailOpened},'inspect']);adapter='auto-entry.js';
-    if(['doctorville','medigate','keymedi'].includes(job.site)&&['target_missing','button_missing','ambiguous'].includes(reply.status)){
+    if(['doctorville','medigate','keymedi','hmp'].includes(job.site)&&['target_missing','button_missing','ambiguous'].includes(reply.status)){
      const supplement=await page.call('pc-entry.js',[nativeJob(),'inspect']);
      emit('inspect',{...cleanReceipt(supplement,this.now()),reader:'pc',dateMatches:supplement.dateMatches,timeMatches:supplement.timeMatches,duplicateEquivalent:supplement.duplicateEquivalent});
      if(supplement.status==='ready'){reply=supplement;adapter='pc-entry.js';}
