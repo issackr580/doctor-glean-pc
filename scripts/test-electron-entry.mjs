@@ -54,6 +54,20 @@ async function run(){
   ['bluepharm',`<article><div class="sem_info"><h3>${title}</h3><p class="date">${date} ${clock} ~ 23:59</p><span class="W_status ongoing">강의중</span></div><div class="sem_action"><button onclick="fetch('/synthetic-entry',{method:'POST'})">참여하기</button></div></article>`],
  ])await inspect(site,body,{work:async(page,posts)=>{const result=await page.call('pc-entry.js',[job(site),'preflight']);check(site+' preflight finds its own exact target with zero provider submissions',result.status==='ready'&&posts()===0);}});
  check('Bluepharm participation needs its explicit ongoing status',(await inspect('bluepharm',`<div class="sem_info"><h3>${title}</h3><p class="date">${date} ${clock}</p><button>참여하기</button></div>`)).status!=='ready');
+ const weekday='일월화수목금토'[new Date(date+'T00:00:00Z').getUTCDay()],wrongWeekday='일월화수목금토'[new Date(date+'T00:00:00Z').getUTCDay()===0?1:0];
+ const grouped=(label=date+'('+weekday+')',gap='',extra='')=>`<main><div class="rows"><div class="area"><div>${label}</div><div><div class="subject">다른 합성 강의</div><div class="top"><span class="time">${clock} ~ 23:59</span></div></div></div>${gap}<div class="area"><div><div class="subject">${title}</div><div class="top"><span class="time">${clock} ~ 23:59</span></div>${extra}<button onclick="fetch('/synthetic-entry',{method:'POST'})">강의시청</button></div></div></div></main>`;
+ await inspect('hmp',grouped(),{work:async(page,posts)=>{const r=await page.call('pc-entry.js',[job('hmp'),'preflight']);check('Hanmi preflight binds the collector-style adjacent date group with no submit',r.status==='ready'&&r.targetMatched&&posts()===0);}});
+ await inspect('hmp',grouped(),{work:async(page,posts)=>{const r=await page.call('pc-entry.js',[{...job('hmp'),hmpSlot:5},'click'],{navigation:true});check('Hanmi supplemental click refuses an invalid repetition slot',r.status==='blocked'&&posts()===0);}});
+ for(const [name,body] of [['wrong weekday',grouped(date+'('+wrongWeekday+')')],['hidden gap',grouped(undefined,'<div hidden>다른 날짜 영역</div>')],['conflicting row date',grouped(undefined,'','<span class="date">2020-01-01</span>')]])check('Hanmi date group rejects '+name,(await inspect('hmp',body)).status!=='ready');
+ const tomorrow=new Date(Date.parse(date+'T00:00:00Z')+86400000).toISOString().slice(0,10),blue=value=>`<article><h3>${title}</h3><div class="sem_detail">일시 <span>${value}</span></div><span class="W_status ongoing">강의중</span><button onclick="fetch('/synthetic-entry',{method:'POST'})">참여하기</button></article>`;
+ await inspect('bluepharm',blue(`${date} ${clock} ~ ${tomorrow} 23:59`),{work:async(page,posts)=>{const r=await page.call('pc-entry.js',[job('bluepharm'),'preflight']);check('Bluepharm continuous range uses its exact start date and time without submitting',r.status==='ready'&&r.targetMatched&&posts()===0);}});
+ for(const [name,value] of [['backwards end',`${date} ${clock} ~ 2020-01-01 23:59`],['separate schedules',`${date} ${clock} / ${tomorrow} 23:59`],['missing start time',`${date} ~ ${tomorrow} ${clock}`]])check('Bluepharm range rejects '+name,(await inspect('bluepharm',blue(value))).status!=='ready');
+ await inspect('doctorville',`<main id="lazy-catalog"></main><script>setTimeout(()=>document.getElementById('lazy-catalog').innerHTML=${JSON.stringify(doctor())},900)</script>`,{work:async(page,posts)=>{
+  const directory=join(root,'lazy-preflight'),ledger=new LocalState(join(directory,'state.json')),store=new WorkflowStore(join(directory,'workflows.json'));
+  const entry={...job('doctorville'),start:Date.now(),status:'reserved',nextAt:Date.now()-1,retries:0,attempts:[],entryAttempted:false};store.putEntry(entry);let normal=0;
+  const runner=new EntryRunner({ledger,store,createPage:async()=>{normal++;throw Error('credential recovery forbidden');},createInspectionPage:async()=>page});
+  await runner.preflight(key);const saved=store.entries()[0];check('native preflight waits for delayed real DOM and stable eligibility with zero submits',saved.preflight.status==='complete'&&saved.preflight.reads>=4&&saved.status==='reserved'&&normal===0&&posts()===0&&Object.keys(ledger.snapshot().jobs).length===0);
+ }});
  await inspect('doctorville',doctor(),{work:async page=>{
   const future={...job('doctorville'),due:Date.now()+300000,deadline:Date.now()+900000};
   const read=await page.call('pc-entry.js',[future,'preflight']);const blocked=await page.call('pc-entry.js',[future,'click'],{navigation:true});
@@ -76,6 +90,15 @@ async function run(){
  await runner.run(entry);const receipt=store.entries()[0];check('real PC fallback calls the provider once after durable dispatch',posts===1&&reservedBeforePost&&receipt.status==='clicked');
  check('a clicked PC fallback cannot be automatically re-reserved',runner.retryJob(key)===false&&posts===1);
  check('entry report does not turn navigation alone into confirmed playback or site credit',receipt.receipt.playback!=='playing_observed'&&!Object.values(ledger.snapshot().jobs).some(row=>row.state==='confirmed'));
+ const hmpDirectory=join(root,'hmp-host'),hmpPartition='entry-hmp-host-'+randomUUID(),hmpPrefs={...remotePreferences('hmp'),partition:hmpPartition};let hmpPosts=0,hmpReserved=false;
+ const hmpLedger=new LocalState(join(hmpDirectory,'state.json'));hmpLedger.setPaused(false);const hmpStore=new WorkflowStore(join(hmpDirectory,'workflows.json'));hmpStore.setFeature('entry',true);
+ await session.fromPartition(hmpPartition).protocol.handle('https',request=>{
+  if(request.method==='POST'){hmpPosts++;hmpReserved=Object.values(JSON.parse(readFileSync(join(hmpDirectory,'state.json'))).jobs).some(row=>row.state==='attempting'&&row.slot===0);return new Response('{}',{headers:{'content-type':'application/json'}});}
+  return new Response(shell(grouped()),{headers:{'content-type':'text/html; charset=utf-8'}});
+ });
+ const hmpRunner=new EntryRunner({ledger:hmpLedger,store:hmpStore,createPage:async(_site,signal)=>new AutomationPage('hmp',signal,hmpPrefs)}),hmpEntry={...entry,...job('hmp')};hmpStore.putEntry(hmpEntry);
+ await hmpRunner.run(hmpEntry);const hmpResult=hmpStore.entries()[0];
+ check('native Hanmi supplemental click preserves its slot lease and five-slot schedule',hmpPosts===1&&hmpReserved&&hmpResult.receipt.status==='clicked'&&hmpResult.slot===1&&hmpResult.status==='reserved');
  check('all inspection and entry windows are released',BrowserWindow.getAllWindows().length===0);
  mkdirSync(new URL('../verification/',import.meta.url),{recursive:true});writeFileSync(new URL('../verification/electron-entry.json',import.meta.url),JSON.stringify({environment:'Linux Electron45; synthetic HTTPS; PC exact entry and read-only preflight',checks:checks.length,passed:checks,actualProviderVerified:false,windowsVerified:false},null,2)+'\n');
  console.log('ELECTRON_ENTRY_PASS:'+checks.length);app.quit();

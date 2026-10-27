@@ -1,9 +1,11 @@
 import {credentialSite,allowedCredentialPage,safeCredentialStatus} from './credential-policy.js';
+import {allowedNavigation} from './security.js';
 const phases=new Set(['open','probe','fill','submit','verify','provider','refresh','finish']);
 const evidenceSources=new Set(['none','visible_logout','hmp_server_member','intermd_server_member','keymedi_server_member','keymedi_background_member','dtalks_server_logout','docple_server_calendar']);
 export function credentialObservation(site,page,phase,reply,elapsedMs){
  let originAllowed=false;try{originAllowed=credentialSite(site)?.origins.includes(new URL(page.url).origin)===true;}catch{}
- const result={phase:phases.has(phase)?phase:'finish',status:safeCredentialStatus(reply?.status),elapsedMs:Math.min(90000,Math.max(0,Math.round(elapsedMs))),originAllowed,loginRoute:allowedCredentialPage(site,page.url),documentChanged:reply?.documentChanged===true};
+ const result={phase:phases.has(phase)?phase:'finish',status:safeCredentialStatus(reply?.status),elapsedMs:Math.min(90000,Math.max(0,Math.round(elapsedMs))),originAllowed,navigationAllowed:allowedNavigation(site,page.url),loginRoute:allowedCredentialPage(site,page.url),documentChanged:reply?.documentChanged===true};
+ if(['policy_rejected','invalid_response','page_changed','time_limit','network_error','cancelled','worker_closed','navigation_changed','stale','scope_changed'].includes(reply?.failure))result.failure=reply.failure;
  if(['provider','login','catalog','daily','lounge','brand','quiz','home','other'].includes(page.route))result.route=page.route;
  try{if(site==='doctorville'&&new URL(page.url).pathname==='/mims/directLogin')result.route='callback';}catch{}
  try{if(site==='dtalks'){const path=new URL(page.url).pathname;if(path==='/member/loginConfirm.do')result.route='login_result';else if(path==='/main.do')result.route='home';}}catch{}

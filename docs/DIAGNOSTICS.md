@@ -1,5 +1,7 @@
 # 공동 개발용 진단 수집
 
+preview.14의 계정 trace는 정확한 허용 이동 판정 `navigationAllowed`와 whitelist `failure`를 포함한다. originAllowed와 구분해 읽으며 실패 코드·주소 판정만으로 실제 원인을 확정하지 않는다. 사전 검사 receipt의 reads는 실제 PC 판독 횟수다. 일괄 결과는 처리 수와 ready/waiting/login/unresolved를 구분하고 10건 처리를 10건 준비 완료로 해석하지 않는다. URL·callback 값·계정·원문은 추가하지 않는다.
+
 preview.13은 `sites[].inspection`에 달력 확인/상태·선택 날짜/월, 현재 목록 판독, 카드 형식 enum, 추가 목록/페이지 수와 모호성 boolean을 보존한다. 원문 samples·회원·URL·달력 셀 내용은 제외한다. 예전 보고서에 빠진 사실은 소급 복원하지 않으며 새 조회가 필요하다. `automation.preflight`는 이번 일괄 사전 검사의 처리·건너뜀 수와 중단 상태이고, 예약별 실제 결과는 각 `preflight`다. `processStartedAt`과 영속 클릭 시각으로 이전 실행 기록을 구분한다.
 
 preview.12의 예약 검증은 [PC 검증 방법](ENTRY_VALIDATION.md)을 따른다. 개발자 이력에는 `area=automation`의 scheduled/start/inspect/open_detail/dispatch/retry/result/preflight 단계도 포함된다. key/runId는 로컬 익명 식별자이고 appVersion/sourceCommit은 그 실행의 기준이다. due/startedAt/delayMs와 고정 개수·boolean으로 단계와 지연을 대조한다. 기록이 없다는 것만으로 실행이 없었다고 판단하지 않는다. 현재 상태에는 exportedAt·processStartedAt·build·selectedCatalogSites가 추가되며, 예전 기록의 버전을 현재 실행판으로 추정하지 않는다. 배포용에는 추가 이력 기록기가 없다.

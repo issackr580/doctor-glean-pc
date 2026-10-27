@@ -34,7 +34,7 @@ export class AutomationController{
   const now=this.now(),date=kstDate(now),keys=this.store.entries(date).filter(job=>job.status==='reserved'&&job.start>now&&this.store.entrySites().includes(job.site)).sort((a,b)=>a.start-b.start).slice(0,40).map(job=>job.key);
   const controller=new AbortController();this.preflightBatch=controller;this.active='preflight';
   const timer=setTimeout(()=>{controller.abort();this.entry.cancel();},120000);timer.unref?.();
-  const progress={running:true,total:keys.length,completed:0,skipped:0,reason:'running'};this.preflightProgress=progress;this.onChange();
+  const progress={running:true,total:keys.length,completed:0,skipped:0,ready:0,waiting:0,login:0,unresolved:0,reason:'running'};this.preflightProgress=progress;this.onChange();
   try{
    for(const key of keys){
     if(this.closed||controller.signal.aborted||kstDate(this.now())!==date||this.now()-now>=120000){progress.reason='cancelled';break;}
@@ -43,7 +43,13 @@ export class AutomationController{
     if(this.allowed()&&this.store.features().entry&&this.entry.due(this.now())){progress.reason='entry_priority';break;}
     const result=await this.entry.preflight(key);
     if(controller.signal.aborted){progress.reason='cancelled';break;}
-    if(result.ok)progress.completed++;else progress.skipped++;
+    if(result.ok){
+     progress.completed++;const receipt=this.store.entries(date).find(job=>job.key===key)?.preflight;
+     if(receipt?.status==='complete')progress.ready++;
+     else if(receipt?.status==='not_open'&&receipt.targetMatched===true)progress.waiting++;
+     else if(receipt?.status==='login')progress.login++;
+     else progress.unresolved++;
+    }else progress.skipped++;
     this.onChange();
    }
    if(progress.reason==='running')progress.reason='finished';

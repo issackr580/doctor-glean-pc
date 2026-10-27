@@ -32,7 +32,7 @@ function scopeOf(inspection,coverage,site,date){
  if(coverage&&inspection.stopReason==='whodadoc_date_checked'&&inspection.listStatus==='checked')return 'date_range_checked';
  if(coverage&&inspection.calendarAgreement===true&&inspection.unknown===0)return 'calendar_checked';
  if(coverage&&inspection.dateBoundary===inspection.stopReason&&['after_target_date','past_target_date'].includes(inspection.stopReason))return 'date_range_checked';
- if(site==='dtalks'&&coverage&&inspection.stopReason==='selected_month_calendar'&&inspection.calendarChecked===true&&inspection.calendarStatus==='checked'&&inspection.calendarDate===date&&inspection.calendarMonth===date.slice(0,7))return 'calendar_checked';
+ if(['dtalks','bluepharm'].includes(site)&&coverage&&(site==='bluepharm'||inspection.stopReason==='selected_month_calendar')&&inspection.calendarChecked===true&&inspection.calendarStatus==='checked'&&inspection.calendarDate===date&&inspection.calendarMonth===date.slice(0,7))return 'calendar_checked';
  const fields=inspection.rows>0&&inspection.undated===0&&inspection.untimed===0&&inspection.untitled===0;
  if(fields&&inspection.currentListRead===true&&inspection.stopReason==='current_list_only'&&(site==='hmp'&&inspection.listStatus==='read'||site==='intermd'&&inspection.cardLayout==='intermd_cards'))return 'current_list_checked';
  if(fields&&site==='bluepharm'&&inspection.startDatesRead===true&&inspection.cardLayout==='sem_tit'&&inspection.continuationMore===0&&inspection.continuationPages===0&&inspection.continuationAmbiguous===false)return 'current_list_checked';

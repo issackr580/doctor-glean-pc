@@ -30,7 +30,7 @@ export function renderAutomation(state,api,perform){
   const failure=entryFailureLabel(job);if(failure)content.append(el('p',failure,'site-status'));
   const evidence=entryEvidenceLabel(job);if(evidence)content.append(el('p',evidence,'muted'));
   if(job.receipt?.checkedAt){const version=entryRunVersion(job);content.append(el('p','최근 결과 '+clock(job.receipt.checkedAt)+(job.receipt.checkedAt<state.processStartedAt?' · 이번 프로그램 시작 전 기록':'')+(version&&job.lastStartedAt?' · 실제 시작 '+clock(job.lastStartedAt):'')+(version?' · PC '+version:' · 실행 버전 미기록'),'muted'));}
-  if(job.preflight)content.append(el('p','사전 검사 '+clock(job.preflight.checkedAt)+' · '+preflightLabel(job.preflight),'muted'));
+  if(job.preflight)content.append(el('p','사전 검사 '+clock(job.preflight.checkedAt)+' · '+preflightLabel(job.preflight)+(job.preflight.reads!==undefined?' · 판독 '+job.preflight.reads+'회':''),'muted'));
   if(job.site==='hmp'){
    content.append(el('p','시작 기준 10분 간격 · 최대 5회 · 종료 확인 시 중단','muted'));
    for(const attempt of job.attempts??[])content.append(el('p',clock(attempt.due)+' · '+(LABELS[attempt.status]??'확인 필요')+(attempt.playback?' · '+playback[attempt.playback]:''),'muted'));
@@ -46,7 +46,7 @@ export function renderAutomation(state,api,perform){
  const session=entrySessionSummary(a.entries,state.processStartedAt),sessionInfo=el('p',`이번 프로그램 실행 후 PC 클릭 ${session.currentClicks}회 · 시작 전 기록 ${session.previousClicks}회`+(session.undatedClicks?` · 실행 시각 미기록 ${session.undatedClicks}회`:'')+' · 영상·적립 완료는 별도 확인','muted');
  const batch=button('예정 예약 일괄 사전 검사 · 클릭 없음',()=>perform(()=>api.preflightUpcoming(),'사전 검사 처리를 마쳤어요. 검사 수와 예약별 결과를 확인해 주세요. 입장·적립 성공은 별도예요.'));
  batch.disabled=!api.preflightUpcoming||!!a.active||state.collection.running||!!state.credentials?.active||!a.entries.some(job=>job.status==='reserved'&&job.start>Date.now());
- const progress=a.preflight,progressInfo=el('p',progress?`예약 사전 검사 ${progress.running?'진행 중':'종료'} · 처리 ${progress.completed}/${progress.total}건 · 건너뜀 ${progress.skipped}건`+(progress.reason==='cancelled'||progress.reason==='entry_priority'?' · 중단됨, 남은 예약은 다시 검사해 주세요.':'')+' · 로그인·입장 제출 없음':'예정 예약을 최대 40건·2분 동안 읽기만 확인해요. 정시 작업이 우선해요.','muted');
+ const progress=a.preflight,progressInfo=el('p',progress?`예약 사전 검사 ${progress.running?'진행 중':'종료'} · 처리 ${progress.completed}/${progress.total}건 · 건너뜀 ${progress.skipped}건`+(progress.ready!==undefined?` · 버튼 확인 ${progress.ready} · 시작 전 대기 ${progress.waiting} · 로그인 필요 ${progress.login} · 확인 필요 ${progress.unresolved}`:'')+(progress.reason==='cancelled'||progress.reason==='entry_priority'?' · 중단됨, 남은 예약은 다시 검사해 주세요.':'')+' · 로그인·입장 제출 없음':'예정 예약을 최대 40건·2분 동안 읽기만 확인해요. 정시 작업이 우선해요.','muted');
  document.getElementById('entry-results').replaceChildren(overview,sessionInfo,batch,progressInfo,...entries);
  const lounge=a.today.lounge;document.getElementById('lounge-result').textContent=lounge?'오늘 닥터라운지 · '+(LABELS[lounge.status]??'결과 확인 필요')+(lounge.reason==='mission_changed'?' · 사이트 미션 구성 변경 확인 필요':'')+(lounge.attemptMask===0?' · PC 제출 없음':'')+' · 사이트 완료 '+(lounge.providerComplete??0)+'/7':a.features.lounge?'다음 준비 '+new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',hour:'numeric',minute:'numeric'}).format(a.nextLounge):'닥터라운지 자동 실행 꺼짐';
 }
