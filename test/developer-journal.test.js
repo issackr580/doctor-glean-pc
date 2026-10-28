@@ -37,3 +37,10 @@ test('a corrupt journal is left intact until an explicit clear',t=>{
  assert.equal(journal.status(now).unavailable,true);assert.equal(journal.setEnabled(true,now),false);assert.equal(readFileSync(file,'utf8'),'{broken');
  assert.equal(journal.clear(),true);assert.equal(journal.status(now).enabled,false);assert.equal(journal.export(now).events.length,0);
 });
+test('opt-in fault rows survive restart with fixed fields and no raw exception',t=>{
+ const file=setup(t),journal=new DeveloperJournal(file);journal.setEnabled(true,now);
+ journal.event({area:'process',phase:'fault',site:'',origin:'uncaught_exception',code:'object_destroyed',source:'src/main.js',line:120,column:8,appVersion:'0.1.0-preview.19',sourceCommit:'a'.repeat(40),message:'PRIVATE_ACCOUNT',stack:'C:/Users/PRIVATE/secret.js',url:'https://private.invalid/'},now+1000);
+ journal.event({area:'process',phase:'fault',site:'',origin:'uncaught_exception',code:'PRIVATE'},now+1500);
+ const rows=new DeveloperJournal(file).export(now+2000).events;assert.equal(rows.length,1);assert.equal(rows[0].code,'object_destroyed');assert.equal(rows[0].line,120);assert.equal(rows[0].sourceCommit,'a'.repeat(40));
+ assert.doesNotMatch(readFileSync(file,'utf8'),/PRIVATE|private|Users|https:|message|stack/);
+});

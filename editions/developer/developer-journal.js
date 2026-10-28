@@ -1,10 +1,11 @@
 import {readFileSync,statSync,mkdirSync,openSync,writeFileSync,fsyncSync,closeSync,renameSync,unlinkSync} from 'node:fs';
 import {dirname} from 'node:path';
 import {randomUUID} from 'node:crypto';
+import {safeRuntimeFault} from '../../src/runtime-faults.js';
 
 const DAY=86_400_000,WINDOW=7*DAY,MAX_BYTES=4_194_304,MAX_EVENTS=2000;
 const AREAS=new Set(['collection','browser','control','process','automation']);
-const PHASES=new Set(['start','finish','phase','document_ready','document_load_failed','navigation_blocked','popup_blocked','window_opened','window_open_failed','login_fallback','session_flushed','session_flush_failed','enable','disable','scheduled','inspect','open_detail','dispatch','result','retry','preflight','suspend','resume','quit']);
+const PHASES=new Set(['start','finish','phase','document_ready','document_load_failed','navigation_blocked','popup_blocked','window_opened','window_open_failed','login_fallback','session_flushed','session_flush_failed','enable','disable','scheduled','inspect','open_detail','dispatch','result','retry','preflight','suspend','resume','quit','fault']);
 const SITES=new Set(['','doctorville','keymedi','hmp','intermd','whodadoc','medigate','ckd','bluepharm','dtalks','docple']);
 const REASONS=new Set(['idle','reading','finished','cancelled','suspended','date_mismatch','time_limit','storage_error','manual_view_open']);
 const kstDay=at=>new Date(at+9*3_600_000).toISOString().slice(0,10);
@@ -14,6 +15,11 @@ function clean(input,now){
  const out={area:input.area,phase:input.phase,site:input.site??'',at:input.at};
  for(const key of ['completed','total','heapUsedKb','rssKb'])if(number(input[key]))out[key]=input[key];
  if(REASONS.has(input.reason))out.reason=input.reason;
+ if(input.area==='process'&&input.phase==='fault'){
+  const fault=safeRuntimeFault(input);if(!fault)return null;Object.assign(out,fault);
+  if(typeof input.sourceCommit==='string'&&/^[a-f0-9]{40}$/.test(input.sourceCommit))out.sourceCommit=input.sourceCommit;
+  if(typeof input.appVersion==='string'&&/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(input.appVersion)&&input.appVersion.length<80)out.appVersion=input.appVersion;
+ }
  if(input.area==='automation'){
   for(const key of ['key','sourceCommit','runId'])if(typeof input[key]==='string'&&new RegExp(key==='key'?'^[a-f0-9]{64}$':key==='sourceCommit'?'^[a-f0-9]{40}$':'^[a-f0-9]{32}$').test(input[key]))out[key]=input[key];
   if(typeof input.appVersion==='string'&&input.appVersion.length<80&&/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(input.appVersion))out.appVersion=input.appVersion;

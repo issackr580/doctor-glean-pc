@@ -12,6 +12,7 @@ import {WorkflowStore} from '../src/workflow-store.js';
 import {remotePreferences} from '../src/security.js';
 import {kstDate} from '../src/schedule.js';
 import {watchManualEntry} from '../src/manual-entry-watch.js';
+import {boundedWork} from '../src/async-work.js';
 app.on('window-all-closed',()=>{});
 const root=mkdtempSync(join(tmpdir(),'pc-native-automation-'));
 app.setPath('userData',root);app.setPath('sessionData',join(root,'browser'));
@@ -106,6 +107,19 @@ async function run(){
  mode='unknown-confirm';const otherLedger=new LocalState(join(root,'other-state.json'));otherLedger.setPaused(false);const otherStore=new WorkflowStore(join(root,'other-workflows.json'));otherStore.setFeature('dailyClaim',true);
  await new DailyRunner({ledger:otherLedger,store:otherStore,createPage}).run(['doctorville:attendance']);check('unrelated account confirmation is dismissed without submitting',attendance===1&&otherStore.day().daily['doctorville:attendance'].status==='unknown');
  check('all worker windows are released after tasks',BrowserWindow.getAllWindows().length===0);
+ const unhandled=[],observe=error=>unhandled.push(error);process.on('unhandledRejection',observe);
+ try{
+  const aborted=new AbortController();aborted.abort();
+  const loading=new BrowserWindow({show:false,webPreferences:remotePreferences('doctorville')});
+  const lateLoad=boundedWork(loading.loadURL('https://www.doctorville.co.kr/seminar/synthetic'),aborted.signal,1000);loading.destroy();
+  await assert.rejects(lateLoad,{code:'cancelled'});await sleep(100);
+  check('already-cancelled native loading consumes the rejection from a destroyed window',unhandled.length===0);
+  const evaluating=new BrowserWindow({show:false,webPreferences:remotePreferences('doctorville')});await evaluating.loadURL('https://www.doctorville.co.kr/seminar/synthetic');
+  const native=evaluating.webContents.executeJavaScript('new Promise((_,reject)=>setTimeout(()=>reject(Error("synthetic late result")),30))');
+  const lateEvaluation=boundedWork(native,aborted.signal,1000);evaluating.destroy();
+  await assert.rejects(lateEvaluation,{code:'cancelled'});await sleep(100);
+  check('already-cancelled native evaluation cannot surface a late global rejection',unhandled.length===0&&BrowserWindow.getAllWindows().length===0);
+ }finally{process.removeListener('unhandledRejection',observe);}
  mkdirSync(new URL('../verification/',import.meta.url),{recursive:true});writeFileSync(new URL('../verification/electron-automation.json',import.meta.url),JSON.stringify({environment:'Linux Electron 45 and synthetic HTTPS',windowsVerified:false,authenticatedProviderVerified:false,checks:checks.length,passed:checks},null,2)+'\n');
  console.log('ELECTRON_AUTOMATION_PASS:'+checks.length);app.quit();
 }

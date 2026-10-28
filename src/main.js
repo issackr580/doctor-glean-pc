@@ -27,6 +27,7 @@ import {CredentialManager} from './credential-manager.js';
 import {credentialSite,safeCredentialStatus} from './credential-policy.js';
 import {credentialPageState} from './credential-page-state.js';
 import {manualLoadRecovery} from './site-load-policy.js';
+import {RuntimeFaults,faultNotice} from './runtime-faults.js';
 
 const metadata=JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8'));
 const VERSION=metadata.version,EDITION=resolveEdition(metadata.doctorGleanEdition);
@@ -43,6 +44,14 @@ const siteWindows=new Map(),remoteWindows=new Set(),configuredSessions=new Set()
 const manualOwners=new Map();
 const siteSessions=new Map(),navigationVersions=new WeakMap(),loadRequests=new WeakMap(),closingWindows=new WeakSet(),flushingSessions=new Map();
 const sessionState=id=>siteSessions.get(id)??{load:'not_opened',login:'not_confirmed',save:'not_requested',route:'other',checkedAt:0,lastError:''};
+const runtimeFaults=new RuntimeFaults({onFault:fault=>{
+ try{developerTools?.event({area:'process',phase:'fault',site:'',...fault,appVersion:VERSION,sourceCommit:BUILD_INFO.sourceCommit});}catch{}
+ // Stop new dispatches before cancelling workers. Never clear attempt records.
+ try{state?.setPaused(true);}catch{}
+ for(const stop of [()=>catalogQueue?.clear(),()=>collector?.cancel(),()=>automation?.cancel(),()=>credentials?.cancel()])try{stop();}catch{}
+ try{if(tray&&!tray.isDestroyed())updateTray();notify();}catch{}
+}});
+runtimeFaults.install();
 const effectiveSession=id=>sessionWithDailyEvidence(id,sessionState(id),catalog?.view(kstDate()).results[id],automation?.store.day().daily);
 function sessionChange(id,change){siteSessions.set(id,{...sessionState(id),...change,...(change.login&&change.login!=='authenticated'?{authSource:''}:{})});notify();}
 const browserEvents=[];
@@ -65,7 +74,7 @@ const buildState=()=>({
 function diagnosticSnapshot(){
  const snapshot=state.snapshot();
  return {appName:EDITION.name,applicationId:EDITION.appId,edition:EDITION.id,appVersion:VERSION,build:BUILD_INFO,exportedAt:Date.now(),processStartedAt:PROCESS_STARTED_AT,date:kstDate(),automationPaused:snapshot.paused,
-  runtime:{platform:process.platform,arch:process.arch,electron:process.versions.electron,chromium:process.versions.chrome,osRelease:release()},
+  runtime:{platform:process.platform,arch:process.arch,electron:process.versions.electron,chromium:process.versions.chrome,osRelease:release()},runtimeFaults:runtimeFaults.snapshot(),
   stage:'automation',automationAvailable:true,collection:collector.snapshot(),selectedCatalogSites:catalog.selected(),pendingQueries:catalogQueue?.snapshot()??[],sites:catalog.diagnostics(viewDate),automation:automation?.diagnostics(),
   siteSessions:SITES.map(({id})=>({site:id,open:[...manualOwners.values()].includes(id),...effectiveSession(id)})),credentials:credentials?.snapshot(),browserEvents:[...browserEvents],developerDiagnostics:developerTools?.status(),
   attempts:Object.values(snapshot.jobs).map(({site,kind,date,slot,state,updatedAt})=>({site,kind,date,slot,state,updatedAt}))};
@@ -127,14 +136,15 @@ async function finishSiteLogin(id){
 function updateTray(){
   tray.setContextMenu(Menu.buildFromTemplate([
     {label:EDITION.name+' 열기',click:showControl},
-    {label:state.snapshot().paused?'자동 실행 허용':'자동 실행 중지',click:()=>{try{const paused=!state.snapshot().paused;if(paused){catalogQueue.clear();collector.cancel();automation?.cancel();credentials?.cancel();}state.setPaused(paused);automation?.resumed();updateTray();notify();}catch{storageError();}}},
-    {label:'전체 중지',click:()=>{try{catalogQueue.clear();collector.cancel();automation?.cancel();credentials?.cancel();state.setPaused(true);updateTray();notify();}catch{storageError();}}},
+    {label:state.snapshot().paused?'자동 실행 허용':'자동 실행 중지',click:()=>{try{const paused=!state.snapshot().paused;if(paused){catalogQueue.clear();collector.cancel();automation?.cancel();credentials?.cancel();}state.setPaused(paused);automation?.resumed();updateTray();notify();}catch(error){operationError(error,'control');}}},
+    {label:'전체 중지',click:()=>{try{catalogQueue.clear();collector.cancel();automation?.cancel();credentials?.cancel();state.setPaused(true);updateTray();notify();}catch(error){operationError(error,'control');}}},
     {type:'separator'},
     {label:'프로그램 종료',click:()=>app.quit()},
   ]));
 }
-function storageError(){
-  dialog.showMessageBox({type:'error',title:'저장 확인 필요',message:'설정이나 실행 기록을 저장하지 못해 자동 실행을 중지했어요. 저장 공간과 파일 접근 권한을 확인해 주세요.'});
+function operationError(error,origin='automation'){
+  const fault=runtimeFaults.record(origin,error);
+  dialog.showMessageBox(faultNotice(fault)).catch(()=>{});
 }
 function showControl(){
   if(control&&!control.isDestroyed()){control.show();control.focus();return;}
@@ -147,7 +157,8 @@ function showControl(){
   control.webContents.on('will-navigate',event=>event.preventDefault());
   control.webContents.on('will-attach-webview',event=>event.preventDefault());
   control.on('close',event=>{if(!quitting){event.preventDefault();control.hide();}});
-  control.loadURL(controlUrl);
+  const window=control;
+  window.loadURL(controlUrl).catch(error=>{if(!quitting&&control===window&&!window.isDestroyed())operationError(error,'control');});
 }
 function prepareSession(id){
   const preferences=remotePreferences(id,EDITION.id);
@@ -316,6 +327,7 @@ else{
   app.on('second-instance',()=>{if(state)showControl();});
   app.on('before-quit',()=>{quitting=true;try{developerTools?.event({area:'process',phase:'quit',site:''});catalogQueue?.close();automation?.close();credentials?.cancel();collector?.cancel();developerTools?.close();}catch{}});
   app.on('window-all-closed',()=>{});
+  app.on('quit',()=>runtimeFaults.close());
   app.whenReady().then(()=>{
     try{
       state=new LocalState(join(app.getPath('userData'),'state-v1.json'));
@@ -349,10 +361,10 @@ else{
        isManualOpen:id=>[...manualOwners.values()].includes(id)||credentials.active?.site===id,catalog:date=>catalog.view(date).results,catalogBusy:()=>collector.snapshot().running||credentials.busy,
        queueCatalog:date=>{viewDate=date;catalogQueue.request(date,catalog.selected());},
        yieldCatalog:()=>{const current=collector.snapshot();if(current.running){catalogQueue.request(current.date,catalog.selected());collector.cancel('entry_priority');}},
-       onChange:()=>{notify();if(!automation?.busy)queueMicrotask(()=>catalogQueue?.pump());},onError:storageError});
+       onChange:()=>{notify();if(!automation?.busy)queueMicrotask(()=>catalogQueue?.pump());},onError:operationError});
     }
-    catch{
-      dialog.showErrorBox('실행 기록 확인 필요','저장된 실행 기록을 읽지 못했어요. 중복 실행을 막기 위해 시작하지 않았어요. 기존 파일을 지우지 말고 오류를 알려 주세요.');
+    catch(error){
+      const notice=faultNotice(runtimeFaults.record('startup',error),{startup:true});dialog.showErrorBox(notice.title,notice.message);
       app.quit();return;
     }
     ipc();

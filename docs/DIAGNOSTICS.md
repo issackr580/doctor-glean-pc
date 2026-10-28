@@ -1,5 +1,9 @@
 # 공동 개발용 진단 수집
 
+preview.19의 일반 보고에는 `runtimeFaults`가 추가된다. 주 프로세스의 미처리 예외/미처리 Promise가 예외로 승격된 경우와 호스트가 처리한 자동 작업·관리·시작 오류를 현재 프로세스에서 최근10개까지 메모리로만 보관한다. 오류 시 새 자동 제출을 중지하고 기존 시도·계정·수동 창은 유지한다. `uncaughtExceptionMonitor`만 사용하므로 Electron/Node의 원래 예외 처리·팝업·종료를 대체하지 않는다. 원시 메시지·stack·절대 경로·URL은 남기지 않고 origin/code와 알려진 PC src 파일·행/열만 기록하며 해당 위치가 없으면 unknown이다. 파일/행은 그 실행판의 build.sourceCommit에 맞춰 읽는다. 사이트 자체의 모든 alert·console 오류·Windows 오류를 포괄하는 기록이 아니며 기존 v18 팝업 원문은 복원할 수 없다.
+
+개발자용에서 기존7일 기록기를 켠 동안에는 `area=process, phase=fault`로 같은 고정 필드와 실행 appVersion/sourceCommit을 보존한다. 기존 날짜당2000개·4MiB·로컬 보관·명시적 내보내기 기준을 유지한다. 기록기가 꺼져 있거나 쓰기에 실패했으면 재시작 전 일반 보고를 저장해야 한다. 배포용에는 메모리의 일반 오류 근거만 있고 추가 기록기·전용 preload/IPC는 없다. 원문을 보내거나 계정/시도 파일을 지우도록 안내하지 않는다.
+
 preview.14의 계정 trace는 정확한 허용 이동 판정 `navigationAllowed`와 whitelist `failure`를 포함한다. originAllowed와 구분해 읽으며 실패 코드·주소 판정만으로 실제 원인을 확정하지 않는다. 사전 검사 receipt의 reads는 실제 PC 판독 횟수다. 일괄 결과는 처리 수와 ready/waiting/login/unresolved를 구분하고 10건 처리를 10건 준비 완료로 해석하지 않는다. URL·callback 값·계정·원문은 추가하지 않는다.
 
 preview.13은 `sites[].inspection`에 달력 확인/상태·선택 날짜/월, 현재 목록 판독, 카드 형식 enum, 추가 목록/페이지 수와 모호성 boolean을 보존한다. 원문 samples·회원·URL·달력 셀 내용은 제외한다. 예전 보고서에 빠진 사실은 소급 복원하지 않으며 새 조회가 필요하다. `automation.preflight`는 이번 일괄 사전 검사의 처리·건너뜀 수와 중단 상태이고, 예약별 실제 결과는 각 `preflight`다. `processStartedAt`과 영속 클릭 시각으로 이전 실행 기록을 구분한다.

@@ -76,7 +76,7 @@ export class AutomationController{
  async #work(kind,work,{priority=false}={}){
   if(this.active)return;this.active=kind;this.onChange();
   try{if(priority)this.yieldCatalog();await work();}
-  catch{try{this.ledger.setPaused(true);}catch{}this.onError();}
+  catch(error){try{this.ledger.setPaused(true);}catch{}this.onError(error);}
   finally{this.active=null;this.onChange();if(!this.closed){queueMicrotask(()=>this.tick());}}
  }
  tick(){
@@ -109,7 +109,7 @@ export class AutomationController{
      if(morning?.status==='running'&&result.reason!=='entry_priority')this.store.record(kstDate(this.now()),'morning',{...morning,dailyChecked:result.reason==='finished',status:result.reason==='finished'?morning.catalogChecked?'complete':'running':'unknown',reason:result.reason});
     });
    }
-  }catch{try{this.ledger.setPaused(true);}catch{}this.onError();}
+  }catch(error){try{this.ledger.setPaused(true);}catch{}this.onError(error);}
  }
  close(){this.closed=true;clearInterval(this.timer);this.cancel();}
 }
