@@ -103,7 +103,7 @@ export function pcEntryPage(job,mode='preflight'){
     if(time!==job.time)return false;diag.timeMatches++;return true;
    }
   }
-  const fields=all('.detail_date,.detail_date_location,.sci_detail,.webinarItem__date,.webinar__info,.mWebinar__date,.top .date,time,.date,.time,[data-date]',root);
+  const fields=all('.detail_date,.detail_date_location,.sci_detail,.webinarItem__date,.webinar__info,.mWebinar__date,.top .date,time,.date,.time,[data-date]',root).filter(e=>job.site!=='doctorville'||!e.closest(titleSelector)&&!e.querySelector(titleSelector));
   const leaves=all('span,p,div,time',root).filter(e=>!e.querySelector('span,p,div,time')&&!e.closest('h1,h2,h3,h4,h5,h6,.tit,.title,.subject,[class*="title"],[class*="subject"]')&&!sameTitle(text(e)));
   const values=[...new Set([...fields,...leaves].map(e=>e.getAttribute('data-date')||text(e)))];
   const raw=values.join(' '),full=[...raw.matchAll(/(20\d{2})\s*[.\-/년]\s*(\d{1,2})\s*[.\-/월]\s*(\d{1,2})(?!\d)/g)],dates=new Set(full.map(m=>dateValue(m[1],m[2],m[3])).filter(Boolean));
@@ -182,6 +182,19 @@ export function pcEntryPage(job,mode='preflight'){
   const detail=[...new Set(links.filter(raw=>{const u=new URL(raw);return raw!==safeLink(here.href)&&(/\/[a-z0-9_-]*\d[a-z0-9_-]*(?:\/|\.[a-z]+)?$/i.test(u.pathname)||[...u.searchParams.entries()].some(([k,v])=>/^(?:seminarId|webinarId|symposiumId|id|idx|no|seq)$/i.test(k)&&/^[a-zA-Z0-9_-]+$/.test(v)));}))];
   return detail.length===1?detail[0]:'';
  };
+ // A list card can omit the date that its detail exposes. Read one exact,
+ // observed detail link; this is never permission to click an entry control.
+ // Preflight and click modes do not navigate, and duplicate titles stay put.
+ if(job.site==='doctorville'&&mode==='inspect'&&!unique.length&&here.origin==='https://www.doctorville.co.kr'&&here.pathname==='/seminar/main'&&!here.search&&!here.hash){
+  const matching=cards.filter(titled);
+  if(matching.length===1){
+   const raw=safeLink(matching[0].getAttribute('href'));
+   try{
+    const target=new URL(raw),keys=[...target.searchParams.keys()];
+    if(target.origin===here.origin&&target.pathname==='/seminar/seminarDetail'&&keys.length===1&&target.searchParams.getAll('seminarId').length===1&&/^[1-9]\d{0,11}$/.test(target.searchParams.get('seminarId')))return {...out('navigate','read_only'),url:target.href};
+   }catch{}
+  }
+ }
  const label=e=>norm(e.getAttribute('aria-label')||text(e)||all('img[alt]',e).map(i=>i.getAttribute('alt')).join(' '));
  const controls=root=>[...(root.matches('a,button,[role="button"]')?[root]:[]),...all('a,button,[role="button"]',root)].filter(e=>/^(?:(?:live|라이브|강의|세미나|웨비나|온라인|웹심포지엄|웹심포지움))?(?:입장|입장하기|바로입장|시청하기|시청)$/.test(label(e))||['강의보기','시청하러가기','바로시청하기','라이브보기'].includes(label(e))||job.site==='hmp'&&/^강의시청(?:하기)?$/.test(label(e))||job.site==='bluepharm'&&label(e)==='참여하기'&&all('.W_status.ongoing',root).length>0);
  if(unique.length>1&&job.site==='medigate'){

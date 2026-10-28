@@ -28,6 +28,10 @@ export class CredentialRunner{
     const supplement=await page.call('credential-page-state.js',[input]);
     reply={...reply,...(supplement.status==='manual'?{status:'manual',detail:supplement.detail}:{}),evidence:{...reply.evidence,...supplement.evidence}};phase='provider';
    }
+   if(site==='hmp'&&submitted&&['unknown','login_required'].includes(reply.status)&&!reply.evidence?.barrierReason){
+    const supplement=await page.call('credential-page-state.js',[input]);
+    reply={...reply,...(supplement.status==='manual'?{status:'manual'}:{}),evidence:{...reply.evidence,...supplement.evidence}};phase='provider';
+   }
    if(site==='docple'&&['authenticated','unknown','login_required'].includes(reply.status)&&reply.evidence?.passwordShown!==true&&!reply.evidence?.barrierReason){
     const server=await inspectDocpleSession(page,{signal,now:this.now,sleep:this.sleep,allowed,nonce});
     if(page.url===policy.entry||['authenticated','login_required'].includes(server.status)){reply={...server};phase='provider';}
@@ -96,6 +100,13 @@ export class CredentialRunner{
      // policy blocks. Keep that policy; re-read only its fixed PC entry once,
      // after a real auth response and this operation's single submission ACK.
      const native=page.diagnostics?.();
+     // HMP's original POST can leave its result document with conflicting
+     // form markup. That document is never authentication proof. Re-read the
+     // fixed protected catalog once after a real successful auth response;
+     // explicit password changes/challenges still stop before this branch.
+     if(site==='hmp'&&submitted&&!refreshed&&['unknown','login_required'].includes(status)&&evidence?.observed===true&&!evidence.barrierReason&&evidence.hmpLoginResult===true&&evidence.hmpAdditionalStep===false&&evidence.logoutSameOrigin===true&&evidence.loginShown===false&&page.version!==submittedVersion&&native?.credentialNetworkEnabled===true&&native.credentialRequests===1&&native.credentialResponses>0&&native.credentialHttpStatus>=200&&native.credentialHttpStatus<400){
+      refreshed=true;observe('refresh',{status:'loading'});await page.load(policy.entry);continue;
+     }
      if(site==='whodadoc'&&submitted&&!refreshed&&['unknown','login_required'].includes(status)&&evidence?.observed===true&&!evidence.barrierReason&&native?.navigationBlocked>0&&native.credentialNetworkEnabled===true&&native.credentialRequests===1&&native.credentialResponses>0&&native.credentialHttpStatus>=200&&native.credentialHttpStatus<400&&this.now()-at>=1200){
       refreshed=true;observe('refresh',{status:'loading'});await page.load(policy.entry);continue;
      }

@@ -160,6 +160,22 @@ async function run(){
  await blueRunner.run(blueEntry);
  check('native Bluepharm timed supplement calls its original ongoing button once after the durable lease',bluePosts===1&&blueLease&&blueStore.entries()[0].status==='clicked');
  check('Bluepharm inspected schedule survives restart without exposing raw links',new WorkflowStore(join(blueDir,'workflows.json')).diagnostics().entries[0].inspection.timeMatches===1&&!JSON.stringify(blueStore.diagnostics()).includes('https:'));
+ for(const scenario of ['exact','wrong_date','end_time','title_date_only','duplicate','unsafe_link']){
+  const dir=join(root,'doctor-detail-'+scenario),partition='doctor-detail-'+randomUUID(),ledger=new LocalState(join(dir,'state.json')),store=new WorkflowStore(join(dir,'workflows.json'));ledger.setPaused(false);store.setFeature('entry',true);let posts=0,details=0,durable=false,now=Date.now();
+  const shownTitle=scenario==='title_date_only'?title+' '+date:title;
+  const card=`<a class="list_detail" href="/seminar/seminarDetail?seminarId=17${scenario==='unsafe_link'?'&token=PRIVATE':''}"><strong class="tit">${shownTitle}</strong><div class="time"><span class="start">${clock}</span></div></a>`;
+  const detail=`<section><h2>${shownTitle}</h2>${scenario==='title_date_only'?'':`<p class="detail_date">${scenario==='wrong_date'?'2020-01-01':date}</p>`}<p class="time">${scenario==='end_time'?'00:00 ~ '+clock:clock+' ~ 23:59'}</p><button onclick="fetch('/synthetic-entry',{method:'POST'})">입장하기</button></section>`;
+  await session.fromPartition(partition).protocol.handle('https',request=>{
+   if(request.method==='POST'){posts++;durable=Object.values(JSON.parse(readFileSync(join(dir,'state.json'))).jobs).some(row=>row.state==='attempting');return new Response('{}');}
+   const isDetail=new URL(request.url).pathname==='/seminar/seminarDetail';if(isDetail)details++;
+   return new Response(shell(isDetail?detail:card+(scenario==='duplicate'?card:'')),{headers:{'content-type':'text/html; charset=utf-8'}});
+  });
+  const entry={...job('doctorville'),title:shownTitle,start:now,status:'reserved',nextAt:now-1,retries:0,attempts:[],entryAttempted:false};store.putEntry(entry);
+  const runner=new EntryRunner({ledger,store,now:()=>now,sleep:async ms=>{now+=ms;await new Promise(resolve=>setTimeout(resolve,0));},createPage:async(_site,signal)=>new AutomationPage('doctorville',signal,{...remotePreferences('doctorville'),partition})});
+  await runner.run(entry);await new Promise(resolve=>setTimeout(resolve,100));
+  check('Doctorville '+scenario+' reads a single observed detail only when the list title and link are unique',details===(['duplicate','unsafe_link'].includes(scenario)?0:1));
+  check('Doctorville '+scenario+' requires fresh detail date/start/title before durable entry dispatch',scenario==='exact'?posts===1&&durable&&store.entries()[0].status==='clicked':posts===0&&Object.keys(ledger.snapshot().jobs).length===0);
+ }
  check('all inspection and entry windows are released',BrowserWindow.getAllWindows().length===0);
  mkdirSync(new URL('../verification/',import.meta.url),{recursive:true});writeFileSync(new URL('../verification/electron-entry.json',import.meta.url),JSON.stringify({environment:'Linux Electron45; synthetic HTTPS; PC exact entry and read-only preflight',checks:checks.length,passed:checks,actualProviderVerified:false,windowsVerified:false},null,2)+'\n');
  console.log('ELECTRON_ENTRY_PASS:'+checks.length);app.quit();

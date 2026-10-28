@@ -104,7 +104,8 @@ async function inspectSession(window,id){
  }catch{}finally{clearTimeout(timer);}
 }
 function navigateSite(window,id,url,allowLoginFallback=true){
- if(!allowedNavigation(id,url))throw Error('invalid_site');
+ if(window.isDestroyed())return;
+ if(!allowedNavigation(id,url)){sessionChange(id,{lastError:'navigation_blocked'});browserEvent(id,'navigation_blocked');return;}
  const request=(loadRequests.get(window)??0)+1;loadRequests.set(window,request);
  sessionChange(id,{load:'loading',lastError:'',login:'loading'});
  if(window.isMinimized())window.restore();window.show();window.focus();

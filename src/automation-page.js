@@ -15,7 +15,7 @@ const failure=code=>Object.assign(Error(code),{code});
 export class AutomationPage{
  constructor(site,signal,preferences,{onDialog=()=>({accept:false,status:'unknown',reason:'manual_confirmation'})}={}){
   Object.assign(this,{site,signal,preferences,onDialog});this.windows=[];this.generation=0;this.popupAllowed=false;this.focusPopup=false;this.closed=false;this.dialogResult=null;this.dialogs=0;
-  this.runtime={navigationBlocked:0,popupDenied:0,mainFrameFailures:0,consoleErrors:0,credentialRequestObservationSupported:['doctorville','dtalks','whodadoc'].includes(site),credentialNetworkEnabled:false,credentialRequests:0,credentialResponses:0,credentialHttpStatus:0,credentialNetworkFailures:0};this.root=this.#create();this.current=this.root;this.abort=()=>this.close();signal.addEventListener('abort',this.abort,{once:true});
+  this.runtime={navigationBlocked:0,popupDenied:0,mainFrameFailures:0,consoleErrors:0,credentialRequestObservationSupported:['doctorville','dtalks','whodadoc','hmp'].includes(site),credentialNetworkEnabled:false,credentialRequests:0,credentialResponses:0,credentialHttpStatus:0,credentialNetworkFailures:0};this.root=this.#create();this.current=this.root;this.abort=()=>this.close();signal.addEventListener('abort',this.abort,{once:true});
  }
  #create(){
   const window=new BrowserWindow({show:false,width:1100,height:1800,autoHideMenuBar:true,webPreferences:{...this.preferences,backgroundThrottling:false}});

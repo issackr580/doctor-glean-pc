@@ -1,5 +1,5 @@
 import {siteById,allowedNavigation} from './security.js';
-import {entrySchedule,safeReason} from './automation-policy.js';
+import {entrySchedule,safeReason,doctorvilleDetailNavigation} from './automation-policy.js';
 import {cleanReceipt,cleanEntryInspection} from './workflow-store.js';
 import {kstDate,kstInstant} from './schedule.js';
 import {waitFor} from './async-work.js';
@@ -110,26 +110,30 @@ export class EntryRunner{
    emit('start',{startedAt:began,delayMs:Math.max(0,began-job.due),readOnly:prepare});
    if(this.isManualOpen(job.site)){receipt={status:'busy',reason:'manual_view_open'};return false;}
    if(!prepare)this.store.updateEntry(job.key,{status:'running'});
-   run.page=await this.createPage(job.site,controller.signal);const page=run.page;await page.load(siteById(job.site).url);let navigations=0,detailOpened=false;
+   run.page=await this.createPage(job.site,controller.signal);const page=run.page;await page.load(siteById(job.site).url);let navigations=0,detailOpened=false,pcDetailRead=false;
    while(allowed()&&this.now()-began<45000&&(prepare?this.now()<job.start:this.now()<=job.deadline)){
     if(['login','provider'].includes(page.route)){receipt={status:'login',reason:'login_required'};break;}
-    let reply=await page.call('auto-entry.js',[{...nativeJob(),detailOpened},'inspect']);adapter='auto-entry.js';
-    if(['doctorville','medigate','keymedi','hmp','bluepharm'].includes(job.site)&&['target_missing','button_missing','ambiguous'].includes(reply.status)){
+    let reply=await page.call(pcDetailRead?'pc-entry.js':'auto-entry.js',[{...nativeJob(),detailOpened},'inspect']);adapter=pcDetailRead?'pc-entry.js':'auto-entry.js';
+    if(!pcDetailRead&&['doctorville','medigate','keymedi','hmp','bluepharm'].includes(job.site)&&['target_missing','button_missing','ambiguous'].includes(reply.status)){
      const supplement=await page.call('pc-entry.js',[nativeJob(),'inspect']);
      emit('inspect',{...cleanReceipt(supplement,this.now()),reader:'pc',dateMatches:supplement.dateMatches,timeMatches:supplement.timeMatches,duplicateEquivalent:supplement.duplicateEquivalent});
      this.store.updateEntry(job.key,{inspection:cleanEntryInspection({...supplement,readOnly:false},this.now())});
      if(supplement.status==='ready'){reply=supplement;adapter='pc-entry.js';}
+     else if(['target_missing','button_missing'].includes(reply.status)&&supplement.status==='navigate'&&supplement.reason==='read_only'){reply=supplement;adapter='pc-entry.js';}
      else if(['target_missing','button_missing'].includes(reply.status)&&supplement.status==='target_missing'&&supplement.titleMatches>0)reply=supplement;
     }
     receipt={...reply,reason:safeReason(reply.reason)};emit('inspect',{...cleanReceipt(receipt,this.now()),reader:adapter==='pc-entry.js'?'pc':'original'});
     if(prepare)break;
     if(reply.status==='navigate'){
-     if(++navigations>3||!navigable(job.site,reply.url)){receipt={status:'blocked',reason:'policy_rejected'};break;}await page.load(reply.url);continue;
+     const detail=job.site==='doctorville';
+     if(++navigations>3||!navigable(job.site,reply.url)||detail&&(job.site!=='doctorville'||pcDetailRead||!doctorvilleDetailNavigation(page.url,reply.url))){receipt={status:'blocked',reason:'policy_rejected'};break;}
+     if(detail){pcDetailRead=true;detailOpened=true;emit('open_detail',cleanReceipt(receipt,this.now()));}
+     await page.load(reply.url);continue;
     }
     if(reply.status==='open_target'){
      emit('open_detail',cleanReceipt(receipt,this.now()));
      if(detailOpened){receipt={status:'button_missing',reason:'no_target'};break;}
-     await page.call('auto-entry.js',[{...nativeJob(),detailOpened:false},'open_target'],{navigation:true});detailOpened=true;await this.sleep(600,controller.signal);continue;
+     await page.call('auto-entry.js',[{...nativeJob(),detailOpened:false},'open_target'],{navigation:true});detailOpened=true;if(job.site==='doctorville')pcDetailRead=true;await this.sleep(600,controller.signal);continue;
     }
     if(reply.status==='ready'){
      if(reply.targetMatched!==true){receipt={status:'ambiguous',reason:'no_target'};break;}

@@ -5,6 +5,12 @@ const source=JSON.parse(readFileSync(new URL('../vendor/automation/manifest.json
 const nativeReasons=['idle','running','finished','cancelled','suspended','manual_view_open','entry_priority','network_error','time_limit','storage_error','duplicate_prevented','unknown_result','disabled','paused','expired','reserved','attempting','clicked','confirmed','unknown','manual_clicked','retry_pending','not_registered','lecture_ended','provider_result_unconfirmed','today_status','list_unconfirmed','login_required','session_required','operation_unavailable','date_mismatch','scheduled','missed','read_only','no_banner','already_complete','no_target','page_changed','navigation_unconfirmed','policy_rejected','submission_reserved','discovery_started','success_receipt','scope_changed','worker_closed','task_limit','claim_not_authorized','manual_confirmation','site_dialog','confirmation_started','claim_started','brand_previous_no_banner','brand_daily_limit','brand_previous_unconfirmed','opens_later','day_changed'];
 const reasons=new Set([...source.reasons,...nativeReasons]);
 export const safeReason=value=>reasons.has(value)?value:'provider_result_unconfirmed';
+export function doctorvilleDetailNavigation(from,raw){
+ try{
+  const before=new URL(from),next=new URL(raw),origin='https://www.doctorville.co.kr';
+  return before.origin===origin&&before.pathname==='/seminar/main'&&!before.search&&!before.hash&&next.origin===origin&&!next.username&&!next.password&&!next.port&&!next.hash&&next.pathname==='/seminar/seminarDetail'&&[...next.searchParams.keys()].length===1&&next.searchParams.getAll('seminarId').length===1&&/^[1-9]\d{0,11}$/.test(next.searchParams.get('seminarId'));
+ }catch{return false;}
+}
 export const DAILY_TASKS=Object.freeze([
  {key:'doctorville:attendance',site:'doctorville',kind:'attendance',label:'닥터빌 출석',url:'https://www.doctorville.co.kr/event/attend'},
  {key:'keymedi:attendance',site:'keymedi',kind:'attendance',label:'키메디 출석',url:'https://www.keymedi.com/mypage/attendance'},

@@ -16,6 +16,8 @@ const dataDirectory=join(temporary,edition.directory),browserDirectory=join(data
 mkdirSync(browserDirectory,{recursive:true});app.setPath('appData',temporary);app.setPath('userData',dataDirectory);app.setPath('sessionData',browserDirectory);
 const resultFile=new URL('../verification/electron-edition-'+edition.id+'.json',import.meta.url);
 const modes={doctorville:'normal',keymedi:'normal',whodadoc:'normal',dtalks:'entry-error'},requests=[],checks=[];
+const windowMenus=new WeakMap(),setMenu=BrowserWindow.prototype.setMenu;
+BrowserWindow.prototype.setMenu=function(menu){windowMenus.set(this,menu);return setMenu.call(this,menu);};
 const today=kstDate(),tomorrow=kstDate(Date.parse(today+'T12:00:00+09:00')+86_400_000);
 const seededStore=new WorkflowStore(join(dataDirectory,'workflows-v1.json')),seededEvent={site:'doctorville',date:today,time:'13:00',title:'합성 닥터빌 강의 1'},seededKey=seededStore.entryKey(seededEvent),seededStart=kstInstant(today,'13:00');
 seededStore.putEntry({key:seededKey,...seededEvent,start:seededStart,due:seededStart-3000000,deadline:seededStart+600000,nextAt:seededStart-3000000,status:'reserved',slot:0,retries:0,attempts:[],entryAttempted:false});
@@ -32,7 +34,7 @@ const login='<form><label>합성 로그인 <input type="password"></label><butto
 
 async function run(){
 await app.whenReady();
-for(const id of ['doctorville','keymedi','whodadoc','dtalks']){
+for(const id of ['doctorville','keymedi','whodadoc','dtalks','hmp']){
  const profile=session.fromPartition(`persist:doctor-glean-pc-${edition.id}-v1-${id}`);
  await profile.protocol.handle('https',request=>{
   requests.push({site:id,method:request.method});
@@ -74,7 +76,7 @@ try{
  const protectedSave=await evaluate('window.doctorGlean.saveCredential("hmp","SYNTHETIC_ACCOUNT","SYNTHETIC_PASSWORD",true)');
  check('credential IPC refuses save when Windows protection is unavailable',!protectedSave.ok&&protectedSave.status==='storage_unavailable'&&!existsSync(join(dataDirectory,'credentials-v1.json')));
  check('untrusted credential site names are rejected',(await evaluate('window.doctorGlean.recoverCredential("__proto__")')).ok===false);
- for(const id of ['whodadoc','dtalks']){
+ for(const id of ['whodadoc','dtalks','hmp']){
   const prior=new Set(BrowserWindow.getAllWindows());
   check(id+' open action acknowledged',(await evaluate(`window.doctorGlean.openSite(${JSON.stringify(id)})`)).ok);
   const window=await until(()=>BrowserWindow.getAllWindows().find(w=>!prior.has(w)));
@@ -88,13 +90,20 @@ try{
    modes.dtalks='entry-error';await evaluate('window.doctorGlean.openLogin("dtalks")');
    await until(()=>window.webContents.executeJavaScript('!!document.querySelector("input[type=password]")'));
    check('fixed Dtalks login entry still recovers after both targets failed',window.webContents.getURL()==='https://www.dtalks.kr/login.do');
-  }else{
+  }else if(id==='whodadoc'){
    await until(()=>window.webContents.executeJavaScript('!!document.querySelector("input[type=password]")'));
    window.minimize();await evaluate('window.doctorGlean.openSite("whodadoc")');
    check('reopening a minimized Whodadoc window restores it',!window.isMinimized()&&window.isVisible());
+  }else{
+   await until(()=>window.webContents.executeJavaScript('!!document.querySelector("input[type=password]")'));
+   const item=windowMenus.get(window).getMenuItemById('open-login');
+   check('HMP manual login menu has a real fixed credential entry',item.enabled===true);
+   item.click();await until(()=>window.webContents.getURL()==='https://www.hmp.co.kr/login/loginForm.hm');
+   check('HMP native login menu navigates without a global runtime fault',window.isVisible());
   }
   check(id+' window offers visible login actions',window.isMenuBarVisible());
   window.close();await until(async()=>!(await state()).sites.find(s=>s.id===id).open);
+  if(id==='hmp'){assert.doesNotThrow(()=>windowMenus.get(window).getMenuItemById('open-login').click());check('late native menu callbacks do nothing after their window closes',window.isDestroyed());}
  }
  if(edition.developer){
   check('developer recorder starts disabled',!(await evaluate('window.doctorGleanDeveloper.status()')).enabled);
