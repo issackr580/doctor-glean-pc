@@ -2,7 +2,7 @@ import {BrowserWindow} from 'electron';
 import {readFileSync} from 'node:fs';
 import {allowedNavigation,allowedPopup} from './security.js';
 import {pageRole} from './page-role.js';
-import {waitFor} from './async-work.js';
+import {waitFor,boundedWork as bounded} from './async-work.js';
 import {credentialPageState} from './credential-page-state.js';
 import {isCredentialRequest,bareDoctorvilleProvider} from './credential-policy.js';
 import {credentialProviderLanding} from './credential-provider-landing.js';
@@ -12,11 +12,6 @@ import {pcEntryPage} from './entry-page.js';
 const assets=new Map();
 const NAMES=new Set(['daily.js','auto-entry.js','pc-entry.js','keymedi-lounge.js','doctorville-quiz-pilot.js','doctorville-quiz-journey.js','doctorville-quiz-page.js','doctorville-survey.js','credential-login.js','credential-keymedi-proof.js','credential-background-keymedi-proof.js','credential-page-state.js','credential-docple-session.js']);
 const failure=code=>Object.assign(Error(code),{code});
-function bounded(promise,signal,ms){return new Promise((resolve,reject)=>{
- let finished=false;const finish=(fn,value)=>{if(finished)return;finished=true;clearTimeout(timer);signal.removeEventListener('abort',abort);fn(value);};
- const abort=()=>finish(reject,failure('cancelled')),timer=setTimeout(()=>finish(reject,failure('time_limit')),ms);
- if(signal.aborted){abort();return;}signal.addEventListener('abort',abort,{once:true});Promise.resolve(promise).then(value=>finish(resolve,value),()=>finish(reject,failure('network_error')));
-});}
 export class AutomationPage{
  constructor(site,signal,preferences,{onDialog=()=>({accept:false,status:'unknown',reason:'manual_confirmation'})}={}){
   Object.assign(this,{site,signal,preferences,onDialog});this.windows=[];this.generation=0;this.popupAllowed=false;this.focusPopup=false;this.closed=false;this.dialogResult=null;this.dialogs=0;

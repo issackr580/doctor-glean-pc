@@ -177,6 +177,12 @@ test('morning completion waits for both the daily run and its queued catalog',as
  assert.equal(queries,1);assert.equal(c.store.day().morning.status,'running');assert.equal(c.store.day().morning.dailyChecked,true);
  c.catalogFinished(date,[],{reason:'finished'});assert.equal(c.store.day().morning.status,'complete');assert.equal(c.store.day().morning.catalogChecked,true);
 });
+test('controller pauses dispatch and preserves the original non-storage error for reporting',t=>{
+ const {root,clock,ledger}=setup(t),error=TypeError('synthetic scheduling failure'),observed=[];ledger.setPaused(false);
+ const c=new AutomationController({file:join(root,'workflows.json'),ledger,createPage:async()=>{throw Error('unexpected_page');},isManualOpen:()=>false,catalog:()=>({}),catalogBusy:()=>{throw error;},queueCatalog:()=>{},yieldCatalog:()=>{},onError:value=>observed.push(value),now:clock.now});
+ clearInterval(c.timer);t.after(()=>c.close());c.tick();
+ assert.equal(ledger.snapshot().paused,true);assert.deepEqual(observed,[error]);
+});
 test('restart marks interrupted lounge and quiz results unknown without erasing attempts',t=>{
  const {root,store}=setup(t);store.record(date,'lounge',{status:'running',reason:'running',attemptMask:127,sentMask:3});store.record(date,'quizAuto',{status:'attempting',reason:'submission_reserved',submitted:true});
  const restarted=new WorkflowStore(join(root,'workflows.json'));restarted.recover();assert.equal(restarted.day().lounge.status,'unknown');assert.equal(restarted.day().lounge.attemptMask,127);assert.equal(restarted.day().quizAuto.submitted,true);

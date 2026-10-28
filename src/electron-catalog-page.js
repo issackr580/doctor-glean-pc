@@ -2,16 +2,12 @@ import {BrowserWindow} from 'electron';
 import {CatalogPage} from './catalog-page.js';
 import {allowedNavigation} from './security.js';
 import {loadFailure} from './login-status.js';
-import {waitFor} from './async-work.js';
+import {waitFor,boundedWork} from './async-work.js';
 
-function bounded(promise,signal,ms){return new Promise((resolve,reject)=>{
- let ended=false;
- const finish=(method,value)=>{if(ended)return;ended=true;clearTimeout(timer);signal.removeEventListener('abort',abort);method(value);};
- const abort=()=>finish(reject,Object.assign(Error(),{code:'cancelled'}));
- const timer=setTimeout(()=>finish(reject,Object.assign(Error(),{code:'time_limit'})),ms);
- if(signal.aborted){abort();return;}signal.addEventListener('abort',abort,{once:true});
- Promise.resolve(promise).then(value=>finish(resolve,value),error=>finish(reject,Object.assign(Error(),{code:error?.code==='cancelled'?'cancelled':'network_error',failure:loadFailure(error?.errno)})));
-});}
+const bounded=(promise,signal,ms)=>boundedWork(promise,signal,ms,(code,error)=>Object.assign(Error(),{
+ code:code==='network_error'&&error?.code==='cancelled'?'cancelled':code,
+ ...(code==='network_error'?{failure:loadFailure(error?.errno)}:{}),
+}));
 
 export function electronCatalogPage(profile,signal,preferences){
  const window=new BrowserWindow({show:false,width:1100,height:1800,autoHideMenuBar:true,webPreferences:{...preferences,backgroundThrottling:false}});

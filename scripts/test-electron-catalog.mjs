@@ -207,6 +207,32 @@ try{
  check('hidden worker windows released',BrowserWindow.getAllWindows().length===1);
  control.close();check('closing control retains resident app',!control.isDestroyed());
  check('synthetic protocol only made catalog GET requests',requests.every(request=>request.method==='GET'));
+ // Emit only the monitor event: the real fatal/default behavior is covered in
+ // a separate Node subprocess, so the synthetic suite never hides a popup.
+ const exceptionHandlers=process.listenerCount('uncaughtException'),rejectionHandlers=process.listenerCount('unhandledRejection');
+ await evaluate('window.doctorGlean.openSite("doctorville")');
+ const retainedManual=await until(()=>BrowserWindow.getAllWindows().find(window=>window!==control));
+ await evaluate('window.doctorGlean.setPaused(false)');
+ const beforeFault=JSON.parse(readFileSync(join(dataDirectory,'state-v1.json'),'utf8'));
+ const fault=TypeError('SYNTHETIC_PRIVATE_ACCOUNT https://private.invalid/?token=SECRET');
+ fault.stack='TypeError: private\n    at synthetic ('+pathToFileURL(join(application,'src/main.js')).href+':90:7)';
+ process.emit('uncaughtExceptionMonitor',fault,'unhandledRejection');
+ const afterFault=await state(),savedFault=JSON.parse(readFileSync(join(dataDirectory,'state-v1.json'),'utf8'));
+ check('runtime monitoring pauses automatic dispatch durably and retains the manual window',afterFault.paused&&savedFault.paused&&!retainedManual.isDestroyed()&&retainedManual.isVisible());
+ check('runtime fault handling preserves all external attempt records',JSON.stringify(beforeFault.jobs)===JSON.stringify(savedFault.jobs));
+ check('runtime monitoring leaves default exception and rejection handlers intact',process.listenerCount('uncaughtException')===exceptionHandlers&&process.listenerCount('unhandledRejection')===rejectionHandlers);
+ await evaluate('window.doctorGlean.exportReport()');
+ const faultReport=JSON.parse(readFileSync(report,'utf8')),faultRows=faultReport.runtimeFaults.events;
+ check('ordinary reports identify the safe fault kind and app source position',faultRows.length===1&&faultRows[0].origin==='unhandled_rejection'&&faultRows[0].code==='type_error'&&faultRows[0].source==='src/main.js'&&faultRows[0].line===90);
+ check('fault reports omit private error text, absolute paths and URLs',!/SYNTHETIC_PRIVATE|private\.invalid|SECRET|file:|workspace|Users/.test(JSON.stringify(faultReport)));
+ if(edition.developer){
+  await evaluate('window.doctorGleanDeveloper.export()');
+  const persistedFault=JSON.parse(readFileSync(developerReport,'utf8')).events.find(row=>row.phase==='fault');
+  check('opt-in developer journal persists safe fault rows with execution version',persistedFault?.code==='type_error'&&persistedFault.appVersion===appMetadata.version&&persistedFault.source==='src/main.js');
+ }else check('ordinary fault reporting creates no distribution developer journal',!existsSync(join(dataDirectory,'developer-diagnostics-v1.json')));
+ await evaluate('window.doctorGlean.finishLogin("doctorville")');
+ await evaluate('window.doctorGlean.cancelCollection()');
+ await until(()=>BrowserWindow.getAllWindows().length===1);
  mkdirSync(new URL('../verification/',import.meta.url),{recursive:true});
  writeFileSync(resultFile,JSON.stringify({schemaVersion:1,edition:edition.id,version:appMetadata.version,environment:'Linux Electron 45 with virtual X display and synthetic HTTPS',osSandboxVerified:false,windowsVerified:false,authenticatedProviderVerified:false,checks:checks.length,passed:checks,requests:requests.length},null,2)+'\n');
  console.log('ELECTRON_CATALOG_PASS:'+checks.length);

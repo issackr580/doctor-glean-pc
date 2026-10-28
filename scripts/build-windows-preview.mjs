@@ -37,7 +37,9 @@ cpSync(join(root,'vendor'),join(application,'vendor'),{recursive:true});
 cpSync(join(root,'editions',edition.id,'developer-tools.js'),join(application,'src/developer-tools.js'));
 cpSync(join(root,'editions',edition.id,'edition-ui.js'),join(application,'ui/edition-ui.js'));
 if(edition.developer){
- cpSync(join(root,'editions/developer/developer-journal.js'),join(application,'src/developer-journal.js'));
+ const journal=readFileSync(join(root,'editions/developer/developer-journal.js'),'utf8');
+ if(!journal.includes("from '../../src/runtime-faults.js'"))throw Error('developer_journal_import_changed');
+ writeFileSync(join(application,'src/developer-journal.js'),journal.replace("from '../../src/runtime-faults.js'","from './runtime-faults.js'"));
  writeFileSync(join(application,'src/preload-developer.cjs'),readFileSync(join(root,'src/preload.cjs'),'utf8')+'\n'+readFileSync(join(root,'editions/developer/preload-extra.cjs'),'utf8'));
 }
 writeFileSync(join(application,'package.json'),JSON.stringify({name:pkg.name,productName:edition.name,doctorGleanEdition:edition.id,version:pkg.version,sourceCommit:workingTreeClean?sourceCommit:null,type:'module',main:'src/main.js'},null,2)+'\n');
@@ -63,8 +65,13 @@ const guide=`${edition.name} ${pkg.version} — Windows x64 검증판
 
 아이디·비밀번호를 일반 설정이나 진단에 넣지 않아요. 저장된 비밀번호를 다시 표시하지 않아요. 보호 저장소를 쓸 수 없으면 평문으로 대체하지 않아요.
 이 앱의 개발자용/배포용·Windows 사용자별로 계정과 세션을 분리해요. 평소 Chrome·Edge·모바일의 계정이나 쿠키를 가져오지 않아요.
-로그인 시도는 실행 전 기록하고 재시작에도 유지해요. 최근 시도 간격·15분 3회·당일 10회 제한을 적용하고 다음 가능 시각을 표시해요. 계정 교체로 이 기록을 초기화하지 않아요. 한국 날짜가 바뀌어도 최근 15분 시도는 유지해요.
+로그인 시도는 실행 전 기록하고 재시작에도 유지해요. 직접 제출 간격은 ${edition.developer?3:10}초이고 자동 복구는 60초·15분 3회예요. 사이트별 당일 10회 한도를 함께 유지해요. 대기 중에도 현재 세션은 확인할 수 있지만 실제 제출 전에는 다시 제한을 확인해요. 계정 교체로 기록을 초기화하지 않아요. 한국 날짜가 바뀌어도 최근 15분 시도는 유지해요.
 검증 성공 직후에는 저장한 계정으로 원래 작업 프로필을 한 번 복구할 수 있어요. 이후 빠른 재제출은 제한해요.
+
+오류 팝업이 뜬 경우
+- 가능하면 프로그램을 완전히 종료하기 전에 관리 창의 오류보고를 저장해 주세요. 현재 실행의 최근 오류 종류와 PC 파일 위치를 원문 없이 남겨요.
+- 개발자용의 기존 7일 진단을 켠 동안에는 같은 최소 오류가 로컬에 보존돼요. 배포용에는 추가 기록기가 없어요.
+- 오류 종류와 발생 시각을 함께 알려 주시면 돼요. 기존 계정·프로필·시도 기록을 지우지 마세요.
 
 기존 사용법
 - 사이트 열기에서 직접 로그인한 경우 상단의 로그인 마침 · 이 사이트 조회를 누르면 돼요. 이 기능은 계정 저장과 별개인 브라우저 세션 보관이에요.
