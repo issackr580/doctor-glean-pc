@@ -11,7 +11,7 @@ export function bareDoctorvilleProvider(raw){
  try{const u=new URL(raw);return u.origin==='https://mims-account.shop.co.kr'&&!u.username&&!u.password&&!u.port&&!u.search&&!u.hash&&['/','/login'].includes(u.pathname);}catch{return false;}
 }
 export function isCredentialRequest(site,raw){
- try{const u=new URL(raw);return u.protocol==='https:'&&!u.username&&!u.password&&!u.port&&!u.search&&!u.hash&&(site==='doctorville'&&u.origin==='https://mims-account.shop.co.kr'&&u.pathname==='/apis/auth/login'||site==='dtalks'&&u.origin==='https://www.dtalks.kr'&&u.pathname==='/member/loginConfirm.do'||site==='whodadoc'&&u.origin==='https://hcp.whodadoc.com'&&u.pathname==='/auth/login');}catch{return false;}
+ try{const u=new URL(raw);return u.protocol==='https:'&&!u.username&&!u.password&&!u.port&&!u.search&&!u.hash&&(site==='doctorville'&&u.origin==='https://mims-account.shop.co.kr'&&u.pathname==='/apis/auth/login'||site==='dtalks'&&u.origin==='https://www.dtalks.kr'&&u.pathname==='/member/loginConfirm.do'||site==='whodadoc'&&u.origin==='https://hcp.whodadoc.com'&&u.pathname==='/auth/login'||site==='hmp'&&u.origin==='https://www.hmp.co.kr'&&u.pathname==='/login/loginProcess.hm');}catch{return false;}
 }
 export function allowedCredentialPage(id,raw){
  const site=credentialSite(id);if(!site)return false;

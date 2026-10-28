@@ -11,6 +11,36 @@ import {CredentialManager} from '../src/credential-manager.js';
 import {credentialSite,allowedCredentialPage} from '../src/credential-policy.js';
 import {atomicJson} from '../src/atomic-json.js';
 const account={id:'SYNTHETIC_PRIVATE_ACCOUNT',password:'SYNTHETIC_PRIVATE_PASSWORD'};
+test('HMP conflicting result markup needs one actual auth response and a fresh protected-page proof',async t=>{
+ for(const validation of [false,true]){
+  const s=setup(t),attempts=new CredentialAttempts(join(s.root,'hmp.json'));let posts=0,reads=0;
+  const p=fakePage('hmp',async(name,[input])=>{
+   if(name==='credential-page-state.js')return {status:'unknown',evidence:{hmpLoginResult:true,hmpAdditionalStep:false}};
+   if(input.mode==='probe')return {status:'ready'};
+   if(input.mode==='fill'){posts++;p.url='https://www.hmp.co.kr/login/loginProcess.hm';p.version++;return {status:'submitted',submitted:true};}
+   return p.url===credentialSite('hmp').entry?{status:'authenticated',evidence:{observed:true,logoutShown:true,passwordShown:false}}:{status:'login_required',evidence:{observed:true,logoutSameOrigin:true,loginShown:false,passwordShown:true}};
+  });
+  p.diagnostics=()=>({credentialNetworkEnabled:true,credentialRequests:posts,credentialResponses:posts,credentialHttpStatus:200});
+  p.load=async url=>{p.url=url;p.version++;if(url===credentialSite('hmp').entry)reads++;};
+  const r=await new CredentialRunner({...s,attempts}).run('hmp',p,{validation,candidate:account,signal:new AbortController().signal,readCredentials:()=>({...account})});
+  assert.equal(r.status,'authenticated');assert.equal(posts,1);assert.equal(reads,1);assert.ok(r.trace.some(row=>row.phase==='refresh'));assert.doesNotMatch(JSON.stringify(r),/SYNTHETIC_PRIVATE|https:/);
+ }
+});
+test('HMP extra steps, missing auth responses and unreviewed result pages never authorize a protected read',async t=>{
+ for(const scenario of ['additional','no_response','bad_http','other_page','same_document','multiple_posts']){
+  const s=setup(t),attempts=new CredentialAttempts(join(s.root,'hmp-'+scenario+'.json'));let posts=0,reads=0;
+  const p=fakePage('hmp',async(name,[input])=>{
+   if(name==='credential-page-state.js')return {status:scenario==='additional'?'manual':'unknown',evidence:{hmpLoginResult:scenario!=='other_page',hmpAdditionalStep:scenario==='additional'}};
+   if(input.mode==='probe')return {status:'ready'};
+   if(input.mode==='fill'){posts++;p.url='https://www.hmp.co.kr/login/loginProcess.hm';if(scenario!=='same_document')p.version++;return {status:'submitted',submitted:true};}
+   return {status:'login_required',evidence:{observed:true,logoutSameOrigin:true,loginShown:false,passwordShown:true}};
+  });
+  p.diagnostics=()=>({credentialNetworkEnabled:true,credentialRequests:scenario==='multiple_posts'?2:posts,credentialResponses:scenario==='no_response'?0:posts,credentialHttpStatus:scenario==='bad_http'?401:200});
+  p.load=async url=>{p.url=url;p.version++;if(url===credentialSite('hmp').entry)reads++;};
+  const r=await new CredentialRunner({...s,attempts}).run('hmp',p,{validation:true,candidate:account,signal:new AbortController().signal});
+  assert.equal(reads,0,scenario);assert.equal(posts,1,scenario);assert.notEqual(r.status,'authenticated',scenario);
+ }
+});
 test('an in-page provider detour requires two fresh ready probes before decrypting in the same document generation',async t=>{
  const s=setup(t),attempts=new CredentialAttempts(join(s.root,'fresh-probe.json'));let probes=0,state='first',canonical='';const began=s.now();
  const p=fakePage('doctorville',async(_name,[input])=>{if(input.mode==='probe'){probes++;return {status:'ready'};}if(input.mode==='fill'){assert.equal(probes,3);return {status:'submitted',submitted:true};}return {status:'authenticated'};});canonical=p.url;

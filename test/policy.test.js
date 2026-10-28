@@ -2,6 +2,24 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {allowedNavigation, allowedPopup, siteById, remotePreferences, trustedControl} from '../src/security.js';
 import {kstDate, kstInstant, hmpSlots, nextLoungePreparation, eligibleNow} from '../src/schedule.js';
+import {CREDENTIAL_SITES} from '../src/credential-policy.js';
+import {doctorvilleDetailNavigation} from '../src/automation-policy.js';
+
+test('every manual login entry is a reviewed credential route within its existing site boundary',()=>{
+ for(const policy of CREDENTIAL_SITES){
+  const entry=siteById(policy.id).loginUrl;
+  assert.equal(allowedNavigation(policy.id,entry),true,policy.id);
+  const actual=new URL(entry),expected=new URL(policy.url);
+  assert.equal(actual.origin,expected.origin);assert.equal(actual.pathname,expected.pathname);
+  assert.deepEqual([...actual.searchParams],[...expected.searchParams]);
+ }
+});
+test('Doctorville detail reads are limited to one observed identifier on the fixed list and detail paths',()=>{
+ const from='https://www.doctorville.co.kr/seminar/main',target='https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=17';
+ assert.equal(doctorvilleDetailNavigation(from,target),true);
+ for(const raw of [target+'&seminarId=18',target+'&token=PRIVATE',target.replace('seminarId=17','seminarId=x'),target.replace('www.doctorville.co.kr','evil.invalid'),target.replace('https:','http:'),target+'#play',target.replace('/seminar/seminarDetail','/seminar/entry')])assert.equal(doctorvilleDetailNavigation(from,raw),false,raw);
+ assert.equal(doctorvilleDetailNavigation(target,target),false);assert.equal(doctorvilleDetailNavigation(from+'?redirect=1',target),false);
+});
 
 test('fixed sites reject injected IDs and cross-site top-level navigation', () => {
   assert.equal(siteById('__proto__'), null);

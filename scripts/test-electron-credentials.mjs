@@ -119,6 +119,31 @@ async function run(){
   }finally{p.close();}
  }
 
+ // HMP's reviewed original POST may return conflicting form markup. Only a
+ // native observed successful response permits one protected catalog GET.
+ for(const scenario of ['candidate','recover','additional','anonymous','bad_response','other_result']){
+  const partition='hmp-result-'+randomUUID(),profile=session.fromPartition(partition),file=join(root,'hmp-'+scenario+'.json'),a=new CredentialAttempts(file),policy=CREDENTIAL_SITES.find(p=>p.id==='hmp');let sent=0,reads=0;
+  const headers={'content-type':'text/html; charset=utf-8'},form=inputs.hmp+'<script>window.login=()=>document.querySelector("form").submit();</script>';
+  await profile.protocol.handle('https',request=>{
+   const u=new URL(request.url);
+   if(request.method==='POST'){
+    assert.equal(u.pathname,'/login/loginProcess.hm');assert.equal(JSON.parse(readFileSync(file)).sites.hmp.status,'submitted');sent++;
+    const body='<a href="/login/logout.hm">로그아웃</a><form><input type="password">'+(scenario==='additional'?'<label>새 비밀번호</label><input type="password"><button>비밀번호 변경</button>':'')+'</form>'+(scenario==='other_result'?'<script>history.replaceState(null,"","/login/otherResult.hm")</script>':'');
+    return new Response(shell(body),{status:scenario==='bad_response'?401:200,headers});
+   }
+   if(u.pathname===new URL(policy.entry).pathname){reads++;return new Response(shell(scenario==='anonymous'?form:'<a href="/login/logout.hm">로그아웃</a><main>합성 보호 목록</main>'),{headers});}
+   return new Response(shell(form),{headers});
+  });
+  const p=new AutomationPage('hmp',new AbortController().signal,{...remotePreferences('hmp'),partition});
+  try{
+   const validation=scenario!=='recover',r=await new CredentialRunner({attempts:a}).run('hmp',p,{validation,signal:p.signal,candidate:{id:'SYNTHETIC_USER',password:'SYNTHETIC_PASSWORD'},readCredentials:()=>({id:'SYNTHETIC_USER',password:'SYNTHETIC_PASSWORD'})});
+   const fresh=['candidate','recover','anonymous'].includes(scenario),success=['candidate','recover'].includes(scenario);
+   check('HMP '+scenario+' uses one durable original POST and only an authorized protected GET',sent===1&&reads===(fresh?1:0));
+   check('HMP '+scenario+' never accepts conflicting result markup as authentication',success?r.status==='authenticated':r.status!=='authenticated');
+   check('HMP '+scenario+' exports only safe result categories',!/SYNTHETIC_|https:/.test(JSON.stringify(r)));
+  }finally{p.close();}
+ }
+
  // The real Keymedi helper must receive background-only options from the
  // native runner. A visible logout link would conceal a rejected proof call.
  for(const scenario of ['spa','navigation','unauthorized']){

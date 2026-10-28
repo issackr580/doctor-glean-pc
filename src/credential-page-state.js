@@ -8,6 +8,13 @@ export function credentialPageState(input){
    if(!node?.isConnected||!node.getClientRects().length||node.closest('[hidden],[aria-hidden="true"],[inert]'))return false;
    for(let at=node;at;at=at.parentElement){const s=getComputedStyle(at);if(s.display==='none'||s.visibility==='hidden'||s.visibility==='collapse')return false;}return true;
   };
+  if(input.site==='hmp'){
+   if(location.origin!=='https://www.hmp.co.kr'||location.search||location.hash||!['/login/loginProcess.hm','/main/main.hm','/symposium/schedulerequest/scheduleList.hm'].includes(location.pathname))return {status:'unknown'};
+   const forms=[...document.querySelectorAll('form')].filter(form=>[...form.querySelectorAll('input[type="password"]')].some(visible));
+   const additional=forms.some(form=>[...form.querySelectorAll('h1,h2,h3,p,label,button,[role="alert"]')].filter(visible).some(node=>/비밀번호\s*(?:변경|재설정)|(?:새|새로운|현재)\s*비밀번호|비밀번호를\s*변경/.test(node.innerText||node.textContent||'')));
+   const evidence={hmpLoginResult:location.pathname==='/login/loginProcess.hm',hmpAdditionalStep:additional};
+   return {status:additional?'manual':'unknown',evidence};
+  }
   if(input.site==='dtalks'){
    if(location.origin!=='https://www.dtalks.kr'||!['/main.do','/websim/vodList.do'].includes(location.pathname)||location.search||location.hash)return {status:'unknown'};
    const clean=value=>String(value||'').replace(/\s+/g,'');
