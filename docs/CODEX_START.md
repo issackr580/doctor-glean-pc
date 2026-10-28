@@ -4,7 +4,7 @@
 
 1. 이 저장소를 작업 루트로 연다. 현재 환경에서는 `/workspace/doctor-glean-pc`다. 새 환경에서는 `https://github.com/issackr580/doctor-glean-pc`를 clone하거나 PC 시작 묶음의 `project` 폴더를 연다.
 2. `AGENTS.md` → 이 문서 → [현재 인계](CODEX_HANDOFF.md) → `CONTRIBUTING.md` → `DEVELOPMENT_POLICY.md` → `STATUS.md` → `ARCHITECTURE.md` 순서로 읽는다.
-3. Git 상태·현재 commit·앱 버전을 확인한다. 기존 사용자 변경은 보존한다. 현재 실행판은 **0.1.0-preview.19**이며 다음 제품 변경은 새 버전으로 만든다.
+3. Git 상태·현재 commit·앱 버전을 확인한다. 기존 사용자 변경은 보존한다. 현재 실행판은 **0.1.0-preview.20**이며 다음 제품 변경은 새 버전으로 만든다.
 4. Node24/npm11, lockfile, Electron45.0.0을 사용한다. `npm ci`, `npm test`, `npm run check`가 기본이다. 관련 동작 변경은 `npm run test:electron`도 실행한다. 처음 받은 묶음의 manifest 대조만을 위해 제품 회귀 전체를 반복할 필요는 없다.
 5. 이슈별 브랜치·PR로 작업하고 STATUS에 근거와 남은 확인을 갱신한다. 빌드·게시 시 `RELEASE_PROCESS.md`와 `ACCESS.md`를 따른다.
 
