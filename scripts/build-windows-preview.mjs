@@ -53,7 +53,7 @@ if(!edition.developer){
 const guide=`${edition.name} ${pkg.version} — Windows x64 검증판
 
 첫 설치: 전체 ZIP을 새 폴더에 풀고 ${edition.executable}를 실행해 주세요.
-기존 버전 업데이트: 배포 페이지에서 정확한 이전 버전·같은 에디션에 맞는 작은 패치를 선택해 resources/app 전체를 교체할 수 있어요.
+기존 버전 업데이트: 배포 페이지에서 같은 에디션의 호환 검증된 이전 버전을 확인하고 작은 패치를 선택해 resources/app 전체를 교체할 수 있어요.
 패치 전에는 관리 창 또는 트레이의 프로그램 종료를 눌러 완전히 끝내 주세요. X는 숨기기예요.
 
 계정 저장·복구

@@ -39,6 +39,41 @@ export function pcEntryPage(job,mode='preflight'){
  const dateValue=(year,month,day)=>{
   const value=`${year}-${String(+month).padStart(2,'0')}-${String(+day).padStart(2,'0')}`,d=new Date(value+'T00:00:00Z');return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===value?value:'';
  };
+ if(job.site==='doctorville'&&!doctorDetail)for(const key of ['dateMissingCards','dateInvalidCards','dateConflictCards','dateMismatchCards','startInvalidCards','startMismatchCards','sharedDateCards'])diag[key]=0;
+ const doctorGroupDate=root=>{
+  // Share only a date column and its own adjacent lecture column. Never use
+  // the last heading elsewhere in the document or carry across list gaps.
+  const outside=e=>!!e.closest('header,footer,nav,aside,[role="dialog"],[aria-modal="true"]');
+  const column=element=>{
+   if(!visible(element)||element.querySelector('a,button,input,textarea,select,.tit,.time')||element.querySelectorAll('*').length>12)return {kind:'barrier'};
+   const value=text(element);if(!value)return {kind:'empty'};
+   const m=value.match(/^(?:(20\d{2})\s*[.\/년-]\s*)?(\d{1,2})\s*[.\/월-]\s*(\d{1,2})(?:일)?\s*\.?\s*(?:\(([월화수목금토일])(?:요일)?\)|([월화수목금토일])요일)?$/);
+   if(!m||!m[1]&&!m[4]&&!m[5])return {kind:'barrier'};
+   const date=dateValue(m[1]||job.date.slice(0,4),m[2],m[3]),weekday=m[4]||m[5];
+   return !date||weekday&&new Date(date+'T00:00:00Z').getUTCDay()!=='일월화수목금토'.indexOf(weekday)?{kind:'invalid'}:{kind:'date',date};
+  };
+  const rowParts=row=>{
+   if(!visible(row)||outside(row)||!row.matches('div,section,article,li,dl')||row.children.length!==2||row.querySelectorAll('*').length>400||text(row).length>12000)return null;
+   const [left,right]=row.children;if(!visible(left)||!visible(right)||left.querySelector('a.list_detail')||!all('a.list_detail',right).length)return null;
+   return {left,right,stamp:column(left)};
+  };
+  for(let row=root.parentElement,depth=0;row&&row!==document.body&&depth<6;row=row.parentElement,depth++){
+   if(outside(row))break;
+   const parts=rowParts(row);if(!parts||!parts.right.contains(root)||parts.stamp.kind==='barrier')continue;
+   if(parts.stamp.kind!=='empty')return parts.stamp;
+   // A blank date column can continue only immediately adjacent, uniformly
+   // shaped single-card rows under the same bounded list parent.
+   const parent=row.parentElement;if(!parent?.matches('div,ul,ol,dl')||parent.children.length>400||all('a.list_detail',parts.right).length!==1)return {kind:'missing'};
+   for(let previous=row.previousElementSibling;previous;previous=previous.previousElementSibling){
+    const prior=rowParts(previous);
+    if(!prior||previous.tagName!==row.tagName||prior.left.tagName!==parts.left.tagName||prior.right.tagName!==parts.right.tagName||all('a.list_detail',prior.right).length!==1)return {kind:'missing'};
+    if(prior.stamp.kind==='empty')continue;
+    return prior.stamp.kind==='barrier'?{kind:'missing'}:prior.stamp;
+   }
+   return {kind:'missing'};
+  }
+  return {kind:'missing'};
+ };
  const doctorEnded=value=>/^(?:종료된세미나(?:입니다)?[.!。]?|세미나종료|강의종료|방송종료)$/.test(norm(value));
  const doctorDetailSchedule=root=>{
   const titles=all(titleSelector,root).filter(e=>sameTitle(text(e))),forbidden='nav,footer,aside,[role="dialog"],[aria-modal="true"],button,a,[role="button"],input,textarea,select,script,style,template,noscript';
@@ -77,20 +112,27 @@ export function pcEntryPage(job,mode='preflight'){
  const schedule=root=>{
   if(/(?:강의|방송|행사|세미나)\s*취소|취소된\s*(?:강의|행사)/.test(text(root)))return false;
   if(doctorDetail)return doctorDetailSchedule(root);
-  if(job.site==='doctorville'&&root.matches('a.list_detail')&&root.querySelector('.time .start')){
+  if(job.site==='doctorville'&&root.matches('a.list_detail')){
    // Match the collector's dedicated start field. Dates can be bare text
    // between inline elements; a querySelector leaf cannot see those nodes.
-   const starts=all('.time .start',root);if(starts.length!==1)return false;
+   const fail=key=>{diag[key]++;return false;};
+   const starts=all('.time .start',root);if(starts.length!==1)return fail('startInvalidCards');
    const copy=root.cloneNode(true),nodes=Array.from(root.querySelectorAll('*')),clones=Array.from(copy.querySelectorAll('*'));
    nodes.forEach((node,i)=>{if(!visible(node)||node.matches('.tit,h1,h2,h3,h4,.ico_secret,button,[role="button"],.time .start,script,style,template,noscript'))clones[i].remove();});
    copy.querySelectorAll('br,span,div,p,time,em,strong').forEach(node=>node.after(document.createTextNode(' ')));
    const raw=copy.textContent.replace(/\s+/g,' ').trim(),full=[...raw.matchAll(/(?:^|[^\d])(20\d{2})\s*[.\-/년]\s*(\d{1,2})\s*[.\-/월]\s*(\d{1,2})(?:일)?\s*\.?\s*(?:\(([월화수목금토일])(?:요일)?\))?(?!\d)/g)];
    const values=full.length?full:[...raw.matchAll(/(?:^|[^\d])(\d{1,2})\s*[.\-/월]\s*(\d{1,2})(?:일)?\s*\.?\s*(?:\(([월화수목금토일])(?:요일)?\))?(?!\d)/g)].map(m=>[m[0],job.date.slice(0,4),m[1],m[2],m[3]]);
    const dates=values.map(m=>{const date=dateValue(m[1],m[2],m[3]);return !date||m[4]&&new Date(date+'T00:00:00Z').getUTCDay()!=='일월화수목금토'.indexOf(m[4])?'':date;});
-   if(!dates.length||dates.some(value=>!value)||new Set(dates).size!==1||dates[0]!==job.date)return false;diag.dateMatches++;
-   const m=text(starts[0]).match(/^(?:(오전|오후)\s*)?([01]?\d|2[0-3]):([0-5]\d)$/);if(!m)return false;
-   let hour=+m[2];if(m[1]){if(hour<1||hour>12)return false;hour=hour%12+(m[1]==='오후'?12:0);}
-   if(String(hour).padStart(2,'0')+':'+m[3]!==job.time)return false;diag.timeMatches++;return true;
+   const group=doctorGroupDate(root);
+   if(dates.some(value=>!value)||group.kind==='invalid')return fail('dateInvalidCards');
+   if(new Set(dates).size>1||dates.length&&group.kind==='date'&&dates[0]!==group.date)return fail('dateConflictCards');
+   const date=dates[0]||(group.kind==='date'?group.date:'');
+   if(!date)return fail('dateMissingCards');
+   if(date!==job.date)return fail('dateMismatchCards');diag.dateMatches++;
+   if(!dates.length)diag.sharedDateCards++;
+   const m=text(starts[0]).match(/^(?:(오전|오후)\s*)?([01]?\d|2[0-3]):([0-5]\d)$/);if(!m)return fail('startInvalidCards');
+   let hour=+m[2];if(m[1]){if(hour<1||hour>12)return fail('startInvalidCards');hour=hour%12+(m[1]==='오후'?12:0);}
+   if(String(hour).padStart(2,'0')+':'+m[3]!==job.time)return fail('startMismatchCards');diag.timeMatches++;return true;
   }
   if(job.site==='bluepharm'){
    // The collector indexes a continuous seminar by its start. Keep both

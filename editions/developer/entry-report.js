@@ -23,7 +23,7 @@ export function cleanEntryEvent(input){
  if(input.playback!==undefined)out.playback=PLAYBACK.has(input.playback)?input.playback:'not_checked';
  if(['pc','original'].includes(input.reader))out.reader=input.reader;
  for(const k of ['attempted','submitted','targetMatched','navigationObserved','readOnly','duplicateEquivalent','mainFrame','popup'])if(typeof input[k]==='boolean')out[k]=input[k];
- for(const k of ['candidateCards','titleMatches','dateMatches','timeMatches','scheduleMatches','matchedTargets','entryControls','identifiedTargets','distinctIdentities','stateVariants','navigationBlocked','popupDenied','mainFrameFailures'])if(integer(input[k],1000))out[k]=input[k];
+ for(const k of ['candidateCards','titleMatches','dateMatches','timeMatches','scheduleMatches','matchedTargets','entryControls','identifiedTargets','distinctIdentities','stateVariants','navigationBlocked','popupDenied','mainFrameFailures','dateMissingCards','dateInvalidCards','dateConflictCards','dateMismatchCards','startInvalidCards','startMismatchCards','sharedDateCards'])if(integer(input[k],1000))out[k]=input[k];
  for(const k of ['elapsedMs','pageGeneration','retryCount'])if(integer(input[k],k==='elapsedMs'?190000:10000))out[k]=input[k];
  if(version(input.appVersion))out.appVersion=input.appVersion;
  if(version(input.electronVersion))out.electronVersion=input.electronVersion;

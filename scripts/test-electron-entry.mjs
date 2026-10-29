@@ -65,6 +65,47 @@ async function run(){
   ['missing start',bareDoctor.replace(clock,'00:00')],
   ['duplicate starts',bareDoctor.replace('</div><button>',`<span class="start">${clock}</span></div><button>`)],
  ])check('Doctorville dedicated schedule rejects '+name,(await inspect('doctorville',body)).status!=='ready');
+ // Only the content relationship comes from a reported PC list layout.
+ // These synthetic classes/handlers are not a copy of authenticated HTML.
+ const listWeekday='일월화수목금토'[new Date(date+'T00:00:00Z').getUTCDay()];
+ const listDate=`${date.slice(5).replace('-','/')} ${listWeekday}요일`;
+ const listCard=(heading=title,id=31)=>`<a class="list_detail" href="/seminar/seminarDetail?seminarId=${id}"><div class="time"><span class="start">${clock}</span><span>~23:59</span></div><div><strong class="tit">${heading}</strong><span>신청완료</span><button onclick="fetch('/synthetic-entry',{method:'POST'})">입장하기</button></div></a>`;
+ const dayGroup=(label=listDate,content=listCard())=>`<section><div>${label}</div><div>${content}</div></section>`;
+ const sharedList=dayGroup(undefined,listCard('다른 합성 강의',30)+listCard()+listCard('별도 합성 강의',32));
+ await inspect('doctorville',sharedList,{work:async(page,posts)=>{
+  const c=await catalog(page,'doctorville'),r=await page.call('pc-entry.js',[job('doctorville'),'preflight']);
+  check('Doctorville collector recognizes the synthetic shared-date list before entry inspection',c.events.some(e=>e.title===title&&e.time===clock));
+  check('Doctorville shared list date binds the same lecture in preflight without submitting',r.status==='ready'&&r.sharedDateCards===1&&posts()===0);
+  check('Doctorville shared-date registration inspection remains read-only',(await page.call('pc-registration.js',[job('doctorville'),'inspect'])).status==='registered'&&posts()===0);
+  await page.current.webContents.executeJavaScript("document.querySelector('section>div').textContent='2020-01-01'");
+  check('Doctorville rechecks a changed group date immediately before its original entry handler',(await page.call('pc-entry.js',[job('doctorville'),'click'],{navigation:true})).status!=='clicked'&&posts()===0);
+ }});
+ const listRows=(first=listDate,gap='')=>`<ul><li><div>${first}</div><div>${listCard('다른 합성 강의',30)}</div></li>${gap}<li><div style="min-height:1px"></div><div>${listCard()}</div></li></ul>`;
+ check('Doctorville contiguous two-column rows can share their visible date',(await inspect('doctorville',listRows())).status==='ready');
+ for(const [name,body] of [
+  ['wrong group date',dayGroup('2020-01-01')],
+  ['wrong group weekday',dayGroup(date+'('+('일월화수목금토일'[new Date(date+'T00:00:00Z').getUTCDay()+1])+')')],
+  ['hidden group date',dayGroup(`<span hidden>${listDate}</span>`)],
+  ['unrelated global heading',`<h2>${listDate}</h2><main>${listCard()}</main>`],
+  ['separate section date',dayGroup(undefined,listCard('다른 합성 강의',30))+`<section>${listCard()}</section>`],
+  ['hidden intervening row',listRows(undefined,'<li hidden>다른 날짜 영역</li>')],
+  ['unrelated intervening row',listRows(undefined,'<li>다른 목록 영역</li>')],
+  ['conflicting own date',dayGroup(undefined,listCard().replace('<div class="time">','<span>2020-01-01</span><div class="time">'))],
+  ['duplicate matching cards',dayGroup(undefined,listCard()+listCard())],
+ ])await inspect('doctorville',body,{work:async(page,posts)=>{
+  const r=await page.call('pc-entry.js',[job('doctorville'),'preflight']);
+  check('Doctorville shared list date rejects '+name,r.status!=='ready'&&posts()===0);
+ }});
+ const anotherDate=dayGroup('2020-01-01',listCard(title,29));
+ check('Doctorville same-title lectures on different days resolve only inside the matching date group',(await inspect('doctorville',anotherDate+sharedList)).status==='ready');
+ for(const [name,body,field] of [
+  ['missing date',listCard(),'dateMissingCards'],
+  ['different date',dayGroup('2020-01-01'),'dateMismatchCards'],
+  ['conflicting dates',dayGroup(undefined,listCard().replace('<div class="time">','<span>2020-01-01</span><div class="time">')),'dateConflictCards'],
+  ['invalid date',dayGroup('2020-02-30'),'dateInvalidCards'],
+  ['missing start',dayGroup(undefined,listCard().replace('class="start"','class="other"')),'startInvalidCards'],
+  ['different start',dayGroup(undefined,listCard().replace(`<span class="start">${clock}</span>`,`<span class="start">${clock==='00:00'?'00:01':'00:00'}</span>`)),'startMismatchCards'],
+ ])check('Doctorville diagnostics distinguish '+name+' without retaining raw text',(await inspect('doctorville',body))[field]===1);
  // Screenshot-observed content relationships, with synthetic titles and no
  // claim about the authenticated site's CSS classes or private handlers.
  const detailUrl='https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=17',detailWeekday='일월화수목금토'[new Date(date+'T00:00:00Z').getUTCDay()];
@@ -166,6 +207,14 @@ async function run(){
  await runner.run(entry);const receipt=store.entries()[0];check('real PC fallback calls the provider once after durable dispatch',posts===1&&reservedBeforePost&&receipt.status==='clicked');
  check('a clicked PC fallback cannot be automatically re-reserved',runner.retryJob(key)===false&&posts===1);
  check('entry report does not turn navigation alone into confirmed playback or site credit',receipt.receipt.playback!=='playing_observed'&&!Object.values(ledger.snapshot().jobs).some(row=>row.state==='confirmed'));
+ await inspect('doctorville',sharedList,{work:async(page,submissions)=>{
+  const folder=join(root,'shared-list-host'),ledger=new LocalState(join(folder,'state.json')),store=new WorkflowStore(join(folder,'workflows.json'));ledger.setPaused(false);store.setFeature('entry',true);
+  const entry={...job('doctorville'),start:Date.now(),status:'reserved',nextAt:Date.now()-1,retries:0,attempts:[],entryAttempted:false};store.putEntry(entry);let durable=false;
+  const call=page.call.bind(page);page.call=async(name,args,options)=>{if(args[1]==='click')durable=Object.values(JSON.parse(readFileSync(join(folder,'state.json'))).jobs).some(row=>row.state==='attempting');return call(name,args,options);};
+  const runner=new EntryRunner({ledger,store,createPage:async()=>page});await runner.run(entry);
+  check('Doctorville shared list fallback dispatches its original provider handler only after durable recording',submissions()===1&&durable&&store.entries()[0].status==='clicked');
+  check('Doctorville shared list fallback preserves consumption and refuses another automatic attempt',runner.retryJob(key)===false&&submissions()===1);
+ }});
  const hmpDirectory=join(root,'hmp-host'),hmpPartition='entry-hmp-host-'+randomUUID(),hmpPrefs={...remotePreferences('hmp'),partition:hmpPartition};let hmpPosts=0,hmpReserved=false;
  const hmpLedger=new LocalState(join(hmpDirectory,'state.json'));hmpLedger.setPaused(false);const hmpStore=new WorkflowStore(join(hmpDirectory,'workflows.json'));hmpStore.setFeature('entry',true);
  await session.fromPartition(hmpPartition).protocol.handle('https',request=>{

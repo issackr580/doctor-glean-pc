@@ -56,7 +56,7 @@ export function preflightLabel(receipt){
  if(receipt.status==='login')return '로그인 필요 · 계정 제출 없음';
  if(receipt.status==='cancelled')return '사전 검사 중단 · 실제 클릭 없음';
  if(receipt.status==='ambiguous')return '대상 또는 버튼 여러 개 · 실제 클릭 없음';
- if(receipt.status==='target_missing')return '날짜·시각·제목 대조 미완료 · 실제 클릭 없음';
+ if(receipt.status==='target_missing')return (receipt.titleMatches>0?'제목 후보 확인 · 날짜·시작 시각 확인 못함':receipt.titleMatches===0?'예약한 강의 제목을 목록에서 찾지 못함':'강의 정보 확인 미완료')+' · 실제 클릭 없음';
  if(receipt.status==='button_missing')return '대상 확인 · 입장 버튼 없음 · 실제 클릭 없음';
  if(receipt.status==='blocked')return '사이트에서 직접 확인 필요 · 실제 클릭 없음';
  return '사전 검사 미완료 · 실제 클릭 없음';

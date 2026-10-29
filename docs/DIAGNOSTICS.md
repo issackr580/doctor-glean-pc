@@ -1,5 +1,7 @@
 # 공동 개발용 진단 수집
 
+미게시 preview.24의 개발자 입장 회차 inspect는 닥터빌 목록의 제목 후보별 `dateMissingCards`(날짜 근거 없음), `dateInvalidCards`(잘못된 날짜/요일), `dateConflictCards`(복수/묶음과 충돌), `dateMismatchCards`(예약일과 다름), `startInvalidCards`(전용 시작 필드 누락/복수/형식 오류), `startMismatchCards`(시작시각 불일치), `sharedDateCards`(같은 묶음의 날짜 대조 통과)를0~1000의 고정 개수로 남긴다. 한 후보는 처음 실패한 단계까지만 집계하며 시작 필드 개수 오류는 날짜 검사보다 먼저 기록할 수 있다. 공유 날짜 대조 통과는 시각/대상/입장 성공이 아니다. 여러 제목 후보는 서로 다른 이유로 실패할 수 있다. 원문 날짜·제목·HTML은 없고 기존 일반 receipt/inspection에는 새 필드를 저장하지 않는다. 따라서 과거 진단에서 이 원인을 소급 복원하지 않는다.
+
 preview.21은 기존 동의와 보관 한도를 공유하는 PC 회차 경과·선택 보고를 추가한다. 개발자용의 입장 회차별 경과에서 미리본 고정 내용을 그대로 저장/복사한다. 필수 시도 저장과 독립적이며 진단 실패·삭제·철회로 제출 권한을 되살리지 않는다. 배포용에는 추가되지 않는다. [검증 흐름과 PC 관찰 계약](QUALITY_WORKFLOW.md)을 따른다.
 
 preview.20은 한미의 공개 로그인 처리기가 쓰는 정확한 `/login/loginProcess.hm` POST에도 기존 Network 개수·HTTP 상태 관찰을 적용한다. URL·본문·쿠키·계정값은 기록하지 않는다. trace의 `route=login_result`, `hmpLoginResult`, `hmpAdditionalStep`는 고정 분류와 boolean이며 인증 근거가 아니다. 실제 제출 ACK·정상 인증 응답 뒤 허용 조건에서만 고정 보호 목록을1회 읽고 기존 인증 판독을 다시 한다. 비밀번호 변경·추가 인증·실패 응답은 통과시키지 않는다.
