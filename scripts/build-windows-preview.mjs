@@ -31,10 +31,11 @@ renameSync(join(folder,'electron.exe'),join(folder,edition.executable));
 rmSync(join(folder,'resources/default_app.asar'),{force:true});
 const application=join(folder,'resources/app');mkdirSync(application,{recursive:true});
 mkdirSync(join(application,'src'));mkdirSync(join(application,'ui'));
-for(const name of readdirSync(join(root,'src')))if(!['developer-tools.js','preload-developer.cjs'].includes(name))cpSync(join(root,'src',name),join(application,'src',name));
+for(const name of readdirSync(join(root,'src')))if(!['developer-tools.js','preload-developer.cjs','private-update.js'].includes(name))cpSync(join(root,'src',name),join(application,'src',name));
 for(const name of readdirSync(join(root,'ui')))if(name!=='edition-ui.js')cpSync(join(root,'ui',name),join(application,'ui',name));
 cpSync(join(root,'vendor'),join(application,'vendor'),{recursive:true});
 cpSync(join(root,'editions',edition.id,'developer-tools.js'),join(application,'src/developer-tools.js'));
+cpSync(join(root,'editions',edition.id,'update-download.js'),join(application,'src/private-update.js'));
 cpSync(join(root,'editions',edition.id,'edition-ui.js'),join(application,'ui/edition-ui.js'));
 if(edition.developer){
  cpSync(join(root,'editions/developer/entry-report.js'),join(application,'src/entry-report.js'));
@@ -53,7 +54,7 @@ if(!edition.developer){
 const guide=`${edition.name} ${pkg.version} — Windows x64 검증판
 
 첫 설치: 전체 ZIP을 새 폴더에 풀고 ${edition.executable}를 실행해 주세요.
-기존 버전 업데이트: 배포 페이지에서 같은 에디션의 호환 검증된 이전 버전을 확인하고 작은 패치를 선택해 resources/app 전체를 교체할 수 있어요.
+이전 preview.27 이하에서 이번 버전까지는 같은 에디션 작은 패치를 한 번 적용해 주세요. 이후에는 앱의 PC 업데이트 확인 → 다운로드·업데이트로 설치하고 재시작할 수 있어요. 개발자용은 앱 안의 별도 GitHub 창에서 협업자 로그인이 필요해요. 강의 입장·로그인·직접 사용하는 사이트 창은 먼저 마쳐 주세요. 로그인·설정·예약·시도 기록은 유지해요.
 패치 전에는 관리 창 또는 트레이의 프로그램 종료를 눌러 완전히 끝내 주세요. X는 숨기기예요.
 
 계정 저장·복구
@@ -115,7 +116,7 @@ PC가 켜져 있고 절전 상태가 아니며 프로그램이 실행 중이어�
 지속 영상 재생은 추가하지 않았어요. 종근당 매일 강제 재로그인·닥터빌 설문 자동 수행은 별도 검증 대상으로 남겨 두었어요.
 
 Node·Linux Electron 합성 HTTPS로 원래 로그인 처리기와 전체 저장/복구 흐름을 검사했어요. Windows DPAPI 실기기·실제 계정의 무인 로그인/입장/적립 검증은 남아 있어요. 선착순 성공을 보장하지 않아요.
-자체 Windows 코드 서명은 없어요. 별도 서버·유료 API·원격 제어·절전 해제·자동 업데이트는 사용하지 않아요.
+자체 Windows 코드 서명은 없어요. 별도 서버·유료 API·원격 제어·절전 해제는 사용하지 않아요. 업데이트는 사용자가 버튼을 누를 때만 진행하고 서명·해시·같은 에디션/실행 환경을 검증해요.
 `;
 writeFileSync(join(folder,'실행안내.txt'),guide,'utf8');
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');

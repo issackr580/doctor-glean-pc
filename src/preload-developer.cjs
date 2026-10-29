@@ -31,6 +31,8 @@ contextBridge.exposeInMainWorld('doctorGlean',Object.freeze({
   quit:()=>ipcRenderer.invoke('pc:quit'),
   exportReport:()=>ipcRenderer.invoke('pc:export-report'),
   checkUpdate:()=>ipcRenderer.invoke('pc:update-check'),
+  installUpdate:()=>ipcRenderer.invoke('pc:update-install'),
+  updateReady:()=>ipcRenderer.invoke('pc:update-ready'),
   openUpdatePage:()=>ipcRenderer.invoke('pc:update-page'),
   onChanged:callback=>{
     if(typeof callback!=='function')return ()=>{};

@@ -28,7 +28,7 @@ try{
 // Keep this run's original results; old reports never satisfy a fresh run.
 if(!report.error){
  try{
-  for(const name of ['catalog','automation','credentials','entry','replay','registration']){
+  for(const name of ['catalog','automation','credentials','entry','replay','registration','update']){
    const args=['scripts/run-electron-tests.mjs','--suite='+name,...(env.containerNoSandbox?['--container-no-sandbox']:[])];
    const path=join(out,name==='catalog'?'electron-edition-developer.json':'electron-'+name+'.json');if(existsSync(path))renameSync(path,join(directory,'previous-'+name+'.json'));
    run(name,args,new RegExp('^PASS Electron '+name+' ([1-9][0-9]*) ','gm'));
