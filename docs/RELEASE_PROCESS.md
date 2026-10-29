@@ -93,3 +93,7 @@ node scripts/build-app-patch.mjs --from=/old/artifact/developer --to=/new/artifa
 ## preview.20 게시 확인
 
 [수동 runner](https://github.com/issackr580/doctor-glean-pc/actions/runs/40670979779)는 고정 소스 `ec2056e`와 검증본 전체 파일 해시·기존 v19 자산 SHA를 대조해 기존 두 Draft에만 업로드했다. 전체/19→20 패치/소스를 재다운로드해 서버 SHA·체크섬·ZIP 내부 파일 전체를 검증한 뒤 배포용만 별도 API 동작으로 공개했다. 개발자용은 Draft이며 독립 웹 조회로 공개/404 경계를 확인했다. 완료한 일회성 workflow를 제거하고 자동 게시·예약 실행·공개 개발자 artifact는 남기지 않는다. 이전 릴리스·자산·모바일은 변경하지 않았다.
+
+## preview.21 게시 확인
+
+[수동 runner](https://github.com/issackr580/doctor-glean-pc/actions/runs/40794729941)는 고정 소스 `3687d014c5f6482c322d9b7ab502ef58c73a8d61`와 검증본 전체 파일 해시·기존 v20 자산 SHA를 대조해 기존 두 Draft에만 업로드했다. Node223·Linux Electron447·최종 Windows 묶음의 Linux Electron 관리 창 개발자94/배포80·에디션 분리·깨끗한 소스166파일·20→21 동일 runtime 패치를 확인했다.12개 자산을 재다운로드해 서버 SHA·체크섬·ZIP 내부 파일 전체를 대조한 뒤 배포용만 별도 API 동작으로 공개했다. 개발자용은 Draft이고 독립 웹 공개/404 경계를 확인했다. 완료한 임시 workflow를 제거하며 자동 게시·예약 실행·공개 개발자 artifact는 남기지 않는다. 실제 Windows/실계정은 별도 확인이며 과거 릴리스/자산·모바일은 변경하지 않았다.
