@@ -38,6 +38,8 @@ test('five Hanmi clicks remain one lecture and never become confirmed playback o
  assert.match(entryEvidenceLabel(job),/관찰 불가.*출석·적립 미확인/);
  assert.match(entryFailureLabel({receipt:{titleMatches:1,scheduleMatches:0,attempted:false}}),/날짜·시작 시각.*클릭 없음/);
  assert.match(preflightLabel({status:'complete'}),/실제 클릭 없음/);
+ assert.match(preflightLabel({status:'target_missing',reason:'scope_changed'}),/예약과 사이트의 시작 시각이 다름/);
+ assert.match(entryFailureLabel({receipt:{status:'target_missing',reason:'scope_changed',titleMatches:1,scheduleMatches:0,attempted:false}}),/예약한 시작 시각과 사이트의 시작 시각이 다름.*클릭 없음/);
 });
 test('preflight uses only its separate read-only page and leaves dispatch ledger and reservation untouched',async t=>{
  const s=setup(t);let loginOrEntry=0,inspections=0;

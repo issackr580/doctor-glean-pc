@@ -27,7 +27,7 @@ export function renderAutomation(state,api,perform){
   const row=el('article',undefined,'lecture entry-row'),content=el('div'),site=state.sites.find(s=>s.id===job.site)?.name??'';
   content.append(el('p',site+' · '+job.time,'lecture-site'),el('p',job.title,'lecture-title'),el('p',LABELS[job.status]??'확인 필요','site-status'));
   if(job.status==='reserved')content.append(el('p','다음 확인 '+clock(job.nextAt??job.due),'muted'));
-  const failure=entryFailureLabel(job);if(failure)content.append(el('p',(job.status==='reserved'&&job.preflight?.targetMatched&&job.preflight.checkedAt>job.receipt?.checkedAt?'이전 실행: ':'')+failure,'site-status'));
+  const failure=entryFailureLabel(job);if(failure)content.append(el('p',(canPreflightEntry(job)&&job.preflight?.checkedAt>job.receipt?.checkedAt?'이전 실행: ':'')+failure,'site-status'));
   const evidence=entryEvidenceLabel(job);if(evidence)content.append(el('p',evidence,'muted'));
   if(job.receipt?.checkedAt){const version=entryRunVersion(job);content.append(el('p','최근 결과 '+clock(job.receipt.checkedAt)+(job.receipt.checkedAt<state.processStartedAt?' · 이번 프로그램 시작 전 기록':'')+(version&&job.lastStartedAt?' · 실제 시작 '+clock(job.lastStartedAt):'')+(version?' · PC '+version:' · 실행 버전 미기록'),'muted'));}
   if(job.preflight&&canPreflightEntry(job))content.append(el('p','사전 검사 '+clock(job.preflight.checkedAt)+' · '+preflightLabel(job.preflight)+(job.preflight.reads!==undefined?' · 판독 '+job.preflight.reads+'회':''),'muted'));

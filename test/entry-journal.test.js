@@ -23,9 +23,9 @@ test('repeated unchanged inspections do not update timestamps or consume the lim
 });
 test('date-reading failures survive selected export as bounded counts without raw schedule text',t=>{
  const {dir,journal}=fixture(t);journal.setEnabled(true,now);
- journal.entry({...job,site:'doctorville'},'preflight','inspect',{status:'target_missing',reason:'schedule_unmatched',dateMissingCards:2,dateMismatchCards:1,dateInvalidCards:0,dateConflictCards:0,startInvalidCards:1,startMismatchCards:0,sharedDateCards:0,rawDate:'PRIVATE_DATE',rawTitle:'PRIVATE_TITLE',html:'PRIVATE_HTML'},now+1);
+ journal.entry({...job,site:'doctorville'},'preflight','inspect',{status:'target_missing',reason:'scope_changed',catalogReference:'schedule_changed',dateMissingCards:2,dateMismatchCards:1,dateInvalidCards:0,dateConflictCards:0,startInvalidCards:1,startMismatchCards:0,sharedDateCards:0,rawDate:'PRIVATE_DATE',rawTitle:'PRIVATE_TITLE',html:'PRIVATE_HTML'},now+1);
  const reopened=new DeveloperJournal(join(dir,'journal.json')),journalData=reopened.export(now+2).entryJournal,report=focusReport(journalData,journalData.records[0].executionId),row=JSON.parse(report).records[0].events[0];
- assert.equal(row.dateMissingCards,2);assert.equal(row.dateMismatchCards,1);assert.equal(row.startInvalidCards,1);assert.doesNotMatch(report,/PRIVATE|rawDate|rawTitle|html/);
+ assert.equal(row.dateMissingCards,2);assert.equal(row.dateMismatchCards,1);assert.equal(row.startInvalidCards,1);assert.equal(row.reason,'scope_changed');assert.equal(row.catalogReference,'schedule_changed');assert.doesNotMatch(report,/PRIVATE|rawDate|rawTitle|html/);
  reopened.entry({...job,site:'doctorville'},'preflight','inspect',{dateMissingCards:'1',dateMismatchCards:-1,dateInvalidCards:1001,dateConflictCards:1.2},now+3);
  const bad=reopened.export(now+4).entryJournal.records[0].events.at(-1);for(const field of ['dateMissingCards','dateMismatchCards','dateInvalidCards','dateConflictCards'])assert.equal(bad[field],undefined);
 });

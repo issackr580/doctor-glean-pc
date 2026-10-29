@@ -264,14 +264,15 @@ async function run(){
   check('raw list inspection reproduces missing dates while its dedicated starts and repeated titles are present',r.status==='target_missing'&&r.dateMissingCards===2&&r.startInvalidCards===0&&r.sharedDateCards===0);
   check('the original collector retains the exact dated lecture identity despite the failed list entry inspection',observed.length===1&&observed[0].url===refUrl&&observed[0].time===clock);
  }});
- for(const scenario of ['preflight','entry','wrong_date','wrong_start','wrong_title','ambiguous_reference','login_redirect','unexpected_redirect','changed_before_click','waiting_button']){
+ for(const scenario of ['preflight','entry','wrong_date','wrong_start','wrong_title','ambiguous_reference','login_redirect','unexpected_redirect','changed_before_click','waiting_button','changed_catalog_preflight','changed_catalog_entry','changed_catalog_original_detail','different_start_identity']){
   const dir=join(root,'catalog-reference-'+scenario),partition='catalog-reference-'+randomUUID(),ledger=new LocalState(join(dir,'state.json')),store=new WorkflowStore(join(dir,'workflows.json'));let now=Date.now(),posts=0,durable=false;const details=[];
-  const isEntry=['entry','wrong_start','changed_before_click'].includes(scenario);
+  const isEntry=['entry','wrong_start','changed_before_click','changed_catalog_entry','changed_catalog_original_detail','different_start_identity'].includes(scenario),changedClock=clock==='00:00'?'00:01':'00:00',changedCatalog=scenario.startsWith('changed_catalog');
   if(isEntry){ledger.setPaused(false);store.setFeature('entry',true);}
   const catalogStore=new CatalogStore(join(dir,'catalog.json'));
-  catalogStore.record('doctorville',date,{status:'review',coverage:true,events:scenario==='ambiguous_reference'?[...observed,{...observed[0],id:'b'.repeat(64),url:refUrl.replace('=17','=18')}]:observed});
+  const catalogEvents=changedCatalog?observed.map(row=>({...row,time:changedClock})):['ambiguous_reference','different_start_identity'].includes(scenario)?[...observed,{...observed[0],id:'b'.repeat(64),time:scenario==='different_start_identity'?changedClock:clock,url:refUrl.replace('=17','=18')}]:observed;
+  catalogStore.record('doctorville',date,{status:'review',coverage:true,events:catalogEvents});
   const savedCatalog=new CatalogStore(join(dir,'catalog.json'));
-  const detail=detailHeader(scenario==='waiting_button'?'<button>신청취소</button>':`<button onclick="fetch('/synthetic-entry',{method:'POST'})">입장하기</button>`,(scenario==='wrong_date'?'2020-01-01':date)+' '+(scenario==='wrong_start'?(clock==='00:00'?'00:01':'00:00'):clock)+' ~ 23:59',scenario==='wrong_title'?'별도 합성 강의':title);
+  const detail=detailHeader(scenario==='waiting_button'?'<button>신청취소</button>':`<button onclick="fetch('/synthetic-entry',{method:'POST'})">입장하기</button>`,(scenario==='wrong_date'?'2020-01-01':date)+' '+(['wrong_start','changed_catalog_preflight','changed_catalog_entry'].includes(scenario)?changedClock:clock)+' ~ 23:59',scenario==='wrong_title'?'별도 합성 강의':title);
   await session.fromPartition(partition).protocol.handle('https',request=>{
    if(request.method!=='GET'){posts++;durable=Object.values(JSON.parse(readFileSync(join(dir,'state.json'))).jobs).some(r=>r.state==='attempting');return new Response('{}');}
    const u=new URL(request.url),isDetail=u.pathname==='/seminar/seminarDetail';
@@ -289,10 +290,11 @@ async function run(){
   const runner=new EntryRunner({ledger,store,catalog:d=>savedCatalog.view(d).results,createInspectionPage:create,createPage:isEntry?create:async()=>{recoveryPages++;throw Error('read-only preflight cannot recover');},now:()=>now,sleep:async ms=>{now+=ms;await new Promise(resolve=>setTimeout(resolve,0));}});
   if(isEntry)await runner.run(entry);else await runner.preflight(key);
   const result=store.entries()[0],receipt=isEntry?result.receipt:result.preflight;
-  const expected={preflight:'complete',entry:'clicked',wrong_date:'target_missing',wrong_start:'target_missing',wrong_title:'target_missing',ambiguous_reference:'ambiguous',login_redirect:'login',unexpected_redirect:'blocked',changed_before_click:'unknown',waiting_button:'not_open'}[scenario];
+  const expected={preflight:'complete',entry:'clicked',wrong_date:'target_missing',wrong_start:'target_missing',wrong_title:'target_missing',ambiguous_reference:'ambiguous',login_redirect:'login',unexpected_redirect:'blocked',changed_before_click:'unknown',waiting_button:'not_open',changed_catalog_preflight:'target_missing',changed_catalog_entry:'target_missing',changed_catalog_original_detail:'clicked',different_start_identity:'ambiguous'}[scenario];
   check('catalog detail '+scenario+' retains fresh detail validation and its exact result',receipt.status===expected);
-  check('catalog detail '+scenario+' reads only its single observed identity',details.length===(scenario==='ambiguous_reference'?0:1)&&details.every(id=>id==='17'));
-  check('catalog detail '+scenario+' preserves read-only checks and durable dispatch',scenario==='entry'?posts===1&&durable:posts===0&&recoveryPages===0&&(scenario==='changed_before_click'?runner.retryJob(key)===false:Object.keys(ledger.snapshot().jobs).length===0));
+  check('catalog detail '+scenario+' reads only its single observed identity',details.length===(['ambiguous_reference','different_start_identity'].includes(scenario)?0:1)&&details.every(id=>id==='17'));
+  check('catalog detail '+scenario+' preserves read-only checks and durable dispatch',['entry','changed_catalog_original_detail'].includes(scenario)?posts===1&&durable:posts===0&&recoveryPages===0&&(scenario==='changed_before_click'?runner.retryJob(key)===false:Object.keys(ledger.snapshot().jobs).length===0));
+  if(['changed_catalog_preflight','changed_catalog_entry','wrong_start'].includes(scenario))check('catalog detail '+scenario+' identifies a fresh start mismatch without rewriting timing',receipt.reason==='scope_changed'&&result.time===entry.time&&result.start===entry.start&&result.due===entry.due&&result.deadline===entry.deadline);
  }
  check('all inspection and entry windows are released',BrowserWindow.getAllWindows().length===0);
  mkdirSync(new URL('../verification/',import.meta.url),{recursive:true});writeFileSync(new URL('../verification/electron-entry.json',import.meta.url),JSON.stringify({runtime:{platform:process.platform,electron:process.versions.electron,chromium:process.versions.chrome},environment:'Linux Electron45; synthetic HTTPS; PC exact entry and read-only preflight',checks:checks.length,passed:checks,actualProviderVerified:false,windowsVerified:false},null,2)+'\n');

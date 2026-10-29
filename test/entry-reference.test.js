@@ -24,15 +24,22 @@ function setup(t){
  const options={ledger,store,catalog:()=>catalog(),createInspectionPage:async()=>page,now:()=>now,sleep:async ms=>{now+=ms;},traceEntry:()=>({event:(phase,detail)=>events.push({phase,...detail}),finish(){}})};
  return {root,ledger,store,row,page,loads,calls,events,options};
 }
-test('one observed catalog identity resolves by exact site, date, title and start',()=>{
+test('one observed catalog identity resolves by exact site, date and title',()=>{
  assert.equal(catalogEntryReference(job,catalog()).url,url);
  assert.equal(catalogEntryReference(job,catalog([{...event,title:' 합성   일정 확인 '},event])).url,url);
  assert.equal(catalogEntryReference({...job,url:'https://PRIVATE.invalid'},{}),null);
- for(const change of [{site:'hmp'},{date:'2020-01-01'},{time:'18:00'},{title:'다른 합성 강의'}])assert.equal(catalogEntryReference(job,catalog([{...event,...change}])),null);
+ for(const change of [{site:'hmp'},{date:'2020-01-01'},{title:'다른 합성 강의'}])assert.equal(catalogEntryReference(job,catalog([{...event,...change}])),null);
  assert.equal(catalogEntryReference(job,{doctorville:{...catalog().doctorville,date:'2020-01-01'}}),null);
+});
+test('a changed observed start is a read-only hint for the same unique identity',()=>{
+ const ref=catalogEntryReference(job,catalog([{...event,time:'18:40'}]));
+ assert.equal(ref.url,url);assert.equal(ref.scheduleChanged,true);
+ assert.equal(catalogEntryReference(job,catalog()).scheduleChanged,false);
+ assert.equal(catalogEntryReference(job,catalog([event,{...event,time:'18:40'}])).scheduleChanged,true);
 });
 test('different observed identities for the same schedule remain ambiguous',()=>{
  assert.equal(catalogEntryReference(job,catalog([event,{...event,url:url.replace('17','18')}])).status,'ambiguous');
+ assert.equal(catalogEntryReference(job,catalog([event,{...event,time:'18:40',url:url.replace('17','18')}])).status,'ambiguous');
 });
 test('unsafe catalog links never become navigation hints',()=>{
  for(const bad of [url+'&token=PRIVATE',url+'&other=1',url+'&seminarId=18',url+'#fragment',url.replace('www.doctorville.co.kr','PRIVATE.invalid'),url.replace('https:','http:'),url.replace('www.','user:password@www.'),url.replace('seminarDetail','other'),url.replace('=17','=0')])assert.equal(catalogEntryReference(job,catalog([{...event,url:bad}])).status,'blocked');
@@ -53,6 +60,15 @@ test('date-missing preflight reads one catalog detail and leaves durable entry d
 test('wrong detail schedule cannot be replaced by the cached catalog schedule',async t=>{
  const s=setup(t);s.page.call=async function(){return this.url===url?{...missing,titleMatches:1,dateMissingCards:0}:missing;};
  await new EntryRunner(s.options).preflight(job.key);assert.equal(s.store.entries()[0].preflight.status,'target_missing');assert.equal(s.loads.filter(v=>v===url).length,1);assert.equal(Object.keys(s.ledger.snapshot().jobs).length,0);
+});
+test('a fresh changed start is reported without rescheduling or consuming the old reservation',async t=>{
+ const s=setup(t),before=s.store.entries()[0];
+ s.options.catalog=()=>catalog([{...event,time:'18:40'}]);
+ s.page.call=async function(){return this.url===url?{...missing,reason:'scope_changed',titleMatches:1,dateMatches:1,dateMissingCards:0}:missing;};
+ await new EntryRunner(s.options).preflight(job.key);
+ const {preflight,inspection,...after}=new WorkflowStore(join(s.root,'workflows.json')).entries()[0];
+ assert.deepEqual(after,before);assert.equal(preflight.reason,'scope_changed');assert.equal(inspection.reason,'scope_changed');assert.equal(preflight.attempted,false);
+ assert.equal(s.loads.filter(v=>v===url).length,1);assert.equal(s.events.find(e=>e.catalogReference).catalogReference,'schedule_changed');assert.equal(Object.keys(s.ledger.snapshot().jobs).length,0);
 });
 test('ambiguous catalog references cannot select one detail or consume an attempt',async t=>{
  const s=setup(t);await new EntryRunner({...s.options,catalog:()=>catalog([event,{...event,url:url.replace('17','18')}])}).preflight(job.key);

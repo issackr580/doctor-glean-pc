@@ -14,7 +14,7 @@ export class EntryRunner{
  #observe(job,phase,detail){try{this.observeEntry(job,phase,detail);}catch{}}
  async #catalogDetail(job,page,trace,signal){
   const ref=catalogEntryReference(job,this.catalog(job.date));
-  trace.event('inspect',{targetSource:'catalog',catalogReference:!ref?'missing':ref.status==='navigate'?'matched':ref.status==='ambiguous'?'ambiguous':'unsafe',readOnly:true});
+  trace.event('inspect',{targetSource:'catalog',catalogReference:!ref?'missing':ref.status==='navigate'?(ref.scheduleChanged?'schedule_changed':'matched'):ref.status==='ambiguous'?'ambiguous':'unsafe',readOnly:true});
   if(!ref)return {used:false};
   if(ref.status!=='navigate')return {used:false,reply:ref};
   if(!doctorvilleDetailNavigation(page.url,ref.url))return {used:false,reply:{status:'blocked',reason:'policy_rejected'}};
