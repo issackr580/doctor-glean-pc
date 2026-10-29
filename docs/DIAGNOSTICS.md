@@ -79,3 +79,5 @@ v18은 제공자 공개 코드의 direct_login/account_home/profile_required/acc
 `authEvidenceSource=docple_server_calendar`는 고정 보호 페이지의 현재 토큰으로 정상 출석 calendar 응답을 확인했다는 뜻이다. 토큰·회원·과거 출석 날짜는 내보내지 않는다. 토큰·문서·날짜가 바뀐 이전 응답은 인증 근거로 재사용하지 않는다. 로그인 복구의 성공과 이후 출석 수령·적립은 별개다.
 
 preview.26부터 catalogReference의 schedule_changed는 조회 힌트의 시작 시각과 기존 예약이 다름을 뜻한다. 이것만으로 사이트 일정 변경을 확정하지 않는다. 새 상세의 독립 날짜·제목·단일 첫 시작 시각을 읽고 기존 예약과 다를 때만 target_missing + scope_changed로 구분한다. 원문·강의 ID·URL·계정은 추가하지 않으며 기존7일 opt-in·기록/내보내기 한도를 유지한다.
+
+preview.27의 닥터빌 일정 갱신은 prepare 읽기 관찰이며 schedule_updated의 oldTime/confirmedTime만 HH:mm로 제한해 내보낸다. 기존 예약 time은 회차 식별에 유지한다. 일반 보고의 scheduleChanges는 이전/새 시각·시작/실행 기한·검증 시각·선택적 recovered=true의 최근8개이며 URL/강의 ID/identity 해시는 내보내지 않는다. entryClosesAt는 확인한 복구 종료시각이다. receipt/attempts/retries/필수 원장과 별개이며 새 자동 전송·IPC·진단 동의/보관 한도 변경은 없다. 갱신/사전 검사 성공을 입장·영상·적립 성공으로 표시하지 않는다.
