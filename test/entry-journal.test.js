@@ -21,6 +21,14 @@ test('repeated unchanged inspections do not update timestamps or consume the lim
  const {journal}=fixture(t);journal.setEnabled(true,now);for(let i=1;i<80;i++)journal.entry(job,'entry','inspect',{status:'ambiguous',reason:'multiple_entry_controls',entryControls:2,elapsedMs:i},now+i);
  const row=journal.export(now+100).entryJournal.records[0];assert.equal(row.events.length,1);assert.equal(row.updatedAt,now+1);
 });
+test('date-reading failures survive selected export as bounded counts without raw schedule text',t=>{
+ const {dir,journal}=fixture(t);journal.setEnabled(true,now);
+ journal.entry({...job,site:'doctorville'},'preflight','inspect',{status:'target_missing',reason:'schedule_unmatched',dateMissingCards:2,dateMismatchCards:1,dateInvalidCards:0,dateConflictCards:0,startInvalidCards:1,startMismatchCards:0,sharedDateCards:0,rawDate:'PRIVATE_DATE',rawTitle:'PRIVATE_TITLE',html:'PRIVATE_HTML'},now+1);
+ const reopened=new DeveloperJournal(join(dir,'journal.json')),journalData=reopened.export(now+2).entryJournal,report=focusReport(journalData,journalData.records[0].executionId),row=JSON.parse(report).records[0].events[0];
+ assert.equal(row.dateMissingCards,2);assert.equal(row.dateMismatchCards,1);assert.equal(row.startInvalidCards,1);assert.doesNotMatch(report,/PRIVATE|rawDate|rawTitle|html/);
+ reopened.entry({...job,site:'doctorville'},'preflight','inspect',{dateMissingCards:'1',dateMismatchCards:-1,dateInvalidCards:1001,dateConflictCards:1.2},now+3);
+ const bad=reopened.export(now+4).entryJournal.records[0].events.at(-1);for(const field of ['dateMissingCards','dateMismatchCards','dateInvalidCards','dateConflictCards'])assert.equal(bad[field],undefined);
+});
 test('click request, local response, navigation and manual report never prove arrival or credit',t=>{
  const {journal}=fixture(t);journal.setEnabled(true,now);for(const [i,phase] of ['work_started','click_requested','click_response','navigation_observed','work_finished','state_observed'].entries())journal.entry(job,'entry',phase,{status:phase==='state_observed'?'manual_clicked':'clicked',attempted:true,navigationObserved:true},now+i+1);
  const row=journal.export(now+20).entryJournal.records[0],report=JSON.parse(focusReport(journal.export(now+20).entryJournal,row.executionId));assert.equal(report.evidence.attemptRecorded,true);assert.equal(report.evidence.manualReported,true);assert.equal(report.limits.arrivalVerified,false);assert.equal(report.limits.attendanceVerified,false);
