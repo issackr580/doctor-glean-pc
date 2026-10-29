@@ -22,6 +22,8 @@ export function cleanEntryEvent(input){
  if(input.reason!==undefined)out.reason=REASONS.has(input.reason)?input.reason:'unknown';
  if(input.playback!==undefined)out.playback=PLAYBACK.has(input.playback)?input.playback:'not_checked';
  if(['pc','original'].includes(input.reader))out.reader=input.reader;
+ if(input.targetSource==='catalog')out.targetSource='catalog';
+ if(['missing','matched','ambiguous','unsafe'].includes(input.catalogReference))out.catalogReference=input.catalogReference;
  for(const k of ['attempted','submitted','targetMatched','navigationObserved','readOnly','duplicateEquivalent','mainFrame','popup'])if(typeof input[k]==='boolean')out[k]=input[k];
  for(const k of ['candidateCards','titleMatches','dateMatches','timeMatches','scheduleMatches','matchedTargets','entryControls','identifiedTargets','distinctIdentities','stateVariants','navigationBlocked','popupDenied','mainFrameFailures','dateMissingCards','dateInvalidCards','dateConflictCards','dateMismatchCards','startInvalidCards','startMismatchCards','sharedDateCards'])if(integer(input[k],1000))out[k]=input[k];
  for(const k of ['elapsedMs','pageGeneration','retryCount'])if(integer(input[k],k==='elapsedMs'?190000:10000))out[k]=input[k];

@@ -29,6 +29,7 @@ export function createDeveloperTools({directory,register,save,copy,notify,policy
    event({area:'collection',phase:state.running?'phase':'finish',site:state.site??'',completed:state.completed??0,total:state.total??0,reason:state.reason});
   },
   status:()=>journal.status(),
+  reportDetails(){try{return journal.status().enabled?{entryJournal:journal.export().entryJournal}:{};}catch{return {}; }},
   register(){
    register('pc-dev:status',()=>journal.status());
    register('pc-dev:enabled',value=>{if(typeof value!=='boolean')return {ok:false};revoke();const ok=journal.setEnabled(value);if(ok)event({area:'control',phase:value?'enable':'disable',site:''});notify();return {ok};});

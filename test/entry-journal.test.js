@@ -58,3 +58,10 @@ test('an untrusted stored UUID cannot merge another reservation into selected ou
  const base={area:'entry',reference:job.key,site:job.site,date:job.date,time:job.time,slot:0,entryKind:'entry',executionId:'00000000-0000-4000-8000-000000000001',phase:'inspect',at:now,status:'ready'};
  const output=entryRecords([base,{...base,reference:'b'.repeat(64),status:'clicked',at:now+1},{...base,site:'doctorville',status:'clicked',at:now+2}]);assert.equal(output.recordCount,1);assert.equal(output.records[0].events.length,1);assert.equal(output.records[0].events[0].status,'ready');
 });
+test('ordinary developer error reports include the same bounded entry journal only while opted in',t=>{
+ const {dir}=fixture(t),handlers=new Map();const tools=createDeveloperTools({directory:dir,register:(n,fn)=>handlers.set(n,fn),notify(){},edition:{id:'developer'},version:'0.1.0-preview.25'});tools.register();
+ assert.deepEqual(tools.reportDetails(),{});handlers.get('pc-dev:enabled')(true);
+ tools.traceEntry(job,'preflight').event('inspect',{status:'target_missing',dateMissingCards:2,targetSource:'catalog',url:'https://PRIVATE',rawDate:'PRIVATE_DATE'});
+ const data=tools.reportDetails();assert.equal(data.entryJournal.records[0].events.at(-1).dateMissingCards,2);assert.equal(data.entryJournal.records[0].events.at(-1).targetSource,'catalog');assert.doesNotMatch(JSON.stringify(data),/PRIVATE|https:|rawDate|owner|reference/);
+ handlers.get('pc-dev:enabled')(false);assert.deepEqual(tools.reportDetails(),{});
+});

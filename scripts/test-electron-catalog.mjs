@@ -197,6 +197,7 @@ try{
  check('batch UI distinguishes processed counts from eligibility outcomes',await evaluate('document.getElementById("entry-results").textContent.includes("버튼 확인")&&document.getElementById("entry-results").textContent.includes("로그인 필요")'));
  await evaluate('window.doctorGlean.exportReport()');
  const diagnostic=readFileSync(report,'utf8');
+ check('ordinary error reports add opt-in entry evidence only in developer builds',edition.developer?Array.isArray(JSON.parse(diagnostic).entryJournal?.records):!Object.hasOwn(JSON.parse(diagnostic),'entryJournal'));
  check('report omits raw session, URLs and lecture titles',!/synthetic-login|https:|합성 .*강의/.test(diagnostic));
  check('report includes bounded collection counts',JSON.parse(diagnostic).sites.length===2);
  check('blocked navigation is diagnosable without its URL',JSON.parse(diagnostic).browserEvents.some(row=>row.kind==='navigation_blocked')&&!diagnostic.includes('outside.example.invalid'));
