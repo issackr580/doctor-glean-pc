@@ -1,0 +1,58 @@
+{
+  "keyId": "pc-update-2026-10",
+  "payload": {
+    "schemaVersion": 1,
+    "repository": "issackr580/doctor-glean-pc",
+    "channel": "preview",
+    "issuedAt": 1793286402913,
+    "targets": [
+      {
+        "edition": "developer",
+        "version": "0.1.0-preview.28",
+        "electronVersion": "45.0.0",
+        "sourceCommit": "36bd10d100bdbdc4ac4273b4125e16138d9c189f",
+        "page": "https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-f90ab5d162afe5ce012c",
+        "compatibleVersions": [
+          "0.1.0-preview.20",
+          "0.1.0-preview.21",
+          "0.1.0-preview.22",
+          "0.1.0-preview.23",
+          "0.1.0-preview.24",
+          "0.1.0-preview.25",
+          "0.1.0-preview.26",
+          "0.1.0-preview.27"
+        ],
+        "patch": {
+          "name": "doctor-glean-pc-developer-patch-v0.1.0-preview.27-to-v0.1.0-preview.28-windows-x64.zip",
+          "sha256": "de3aff37c67253c806d63566af8aacaa7c2bfd247f2a394656cefc3cf88786c5",
+          "size": 330516,
+          "url": "https://github.com/issackr580/doctor-glean-pc/releases/download/untagged-f90ab5d162afe5ce012c/doctor-glean-pc-developer-patch-v0.1.0-preview.27-to-v0.1.0-preview.28-windows-x64.zip"
+        }
+      },
+      {
+        "edition": "distribution",
+        "version": "0.1.0-preview.28",
+        "electronVersion": "45.0.0",
+        "sourceCommit": "36bd10d100bdbdc4ac4273b4125e16138d9c189f",
+        "page": "https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.28",
+        "compatibleVersions": [
+          "0.1.0-preview.20",
+          "0.1.0-preview.21",
+          "0.1.0-preview.22",
+          "0.1.0-preview.23",
+          "0.1.0-preview.24",
+          "0.1.0-preview.25",
+          "0.1.0-preview.26",
+          "0.1.0-preview.27"
+        ],
+        "patch": {
+          "name": "doctor-glean-pc-patch-v0.1.0-preview.27-to-v0.1.0-preview.28-windows-x64.zip",
+          "sha256": "e1854a281f80c1955e0c71604b83ecd409fa75a142a9686aa5a6351a9e9f5ac1",
+          "size": 314170,
+          "url": "https://github.com/issackr580/doctor-glean-pc/releases/download/pc-v0.1.0-preview.28/doctor-glean-pc-patch-v0.1.0-preview.27-to-v0.1.0-preview.28-windows-x64.zip"
+        }
+      }
+    ]
+  },
+  "signature": "Wt5TOt7+kGMA9gYMElQH4rBE9N+1b7pJ/H0xnwc4VbCSEzUr/6ZRRZhLlSYfDfvc05Hdi8TVI413CllGbeo5Dg=="
+}

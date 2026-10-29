@@ -121,3 +121,7 @@ node scripts/build-app-patch.mjs --from=/old/artifact/developer --to=/new/artifa
 ## preview.27 게시 확인
 
 [수동 runner](https://github.com/issackr580/doctor-glean-pc/actions/runs/40871660909)는 고정 소스 `c1b6637d04484064f3f347f7982350f79f325bab`·검증본 전체 파일 해시·기존 v26 자산 SHA를 대조해 기존 두 Draft에만 업로드했다. Node276·구문·Linux Electron45/Xvfb 합성 HTTPS 관리107·자동30·계정121·입장218·replay136·신청193, Electron 전체805개·최종 Windows resources/app의 Linux Electron 개발자107/배포93·같은 상위 appData의 분리·깨끗한 소스179파일·의존성·Node276·구문 재현·같은 에디션20/21/22/23/24/25/26의 실제 runtime·작은 패치 전체 app 교체가 목표 전체 ZIP과 같은14경우를 확인했다.12개 자산 재다운로드·서버 SHA·체크섬·ZIP 내부 파일 전체를 대조한 뒤 배포용만 공개했다. 개발자 Draft·독립 웹 공개/404 경계를 확인했고 완료한 임시 workflow를 제거한다. 자동 게시·예약 실행·공개 개발자 artifact는 남기지 않는다. 실제 Windows/인증 사이트는 별도 확인이며 과거 릴리스/자산·모바일은 변경하지 않았다.
+
+## preview.28 게시와 버튼 업데이트 피드
+
+고정 소스 `36bd10d100bdbdc4ac4273b4125e16138d9c189f`에 Node300·구문·Linux Electron45/Xvfb 합성 HTTPS 관리109·자동30·계정121·입장218·replay136·신청193·업데이트23, Electron 전체830개·최종 Windows resources/app의 Linux Electron 개발자109/배포95·에디션 데이터 분리·깨끗한 소스195파일·의존성·Node300·구문 재현·같은 에디션20/21/22/23/24/25/26/27의 실제 ZIP runtime·전체 app 패치 교체가 목표 전체 ZIP과 같은16경우를 확인했다. [수동 runner](https://github.com/issackr580/doctor-glean-pc/actions/runs/40897446074) 뒤12개 자산 재다운로드·서버 SHA·체크섬·ZIP 내부 전체를 대조하고 배포용만 공개했다. 개발자 Draft·독립 웹 공개/404 경계를 확인했다. 실제 서버 패치의 이름/원래 URL/SHA/크기·소스·호환 버전만 외부 개인키로 서명한 피드를 PR로 기록하고 공개키로 검증한다. [D27 유지보수 절차](UPDATES.md)를 따른다. 완료한 임시 workflow를 제거하며 원래 실행 소스·태그·기존 자산·모바일은 변경하지 않는다. 실제 Windows·실제 GitHub 인증은 별도 확인이다.

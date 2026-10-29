@@ -2,7 +2,7 @@
 
 # 의사 이삭 줍기 PC
 
-Windows PC를 켜두고 사용하는 독립형 상주 프로그램. 기준 버전은 **0.1.0-preview.27**이다. 운영 서버·유료 API·모바일 동기화·자체 원격 조작·절전 해제를 사용하지 않는다.
+Windows PC를 켜두고 사용하는 독립형 상주 프로그램. 기준 버전은 **0.1.0-preview.28**이다. 운영 서버·유료 API·모바일 동기화·자체 원격 조작·절전 해제를 사용하지 않는다.
 
 ## 공동 개발 시작
 
@@ -13,7 +13,7 @@ PC 전용 [공개 소스 저장소](https://github.com/issackr580/doctor-glean-p
 3. [구조](docs/ARCHITECTURE.md): 모듈·신뢰 경계·저장 형식·엔진 동기화
 4. [개발 방침](docs/DEVELOPMENT_POLICY.md)과 [결정 기록](docs/DECISIONS.md): 확정 범위
 5. [개발자 로그 수집](docs/DIAGNOSTICS.md): 재현 전 기록 켜기·JSON 내보내기·공유 기준
-6. [배포 절차](docs/RELEASE_PROCESS.md)와 [이번 기록](docs/releases/0.1.0-preview.27.md): 소스 기준점·검증·릴리스
+6. [배포 절차](docs/RELEASE_PROCESS.md)와 [이번 기록](docs/releases/0.1.0-preview.28.md): 소스 기준점·검증·릴리스
 
 ```sh
 npm ci
@@ -40,7 +40,7 @@ Node24/npm11을 사용한다. Windows에서는 Electron 검사를 그대로 실�
 
 ## 실행과 업데이트
 
-[Windows 안내](docs/WINDOWS_PREVIEW.md)를 따른다. 배포용 실행물은 이 저장소의 [공개 검증판](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.27), 개발자용 실행물은 지정 collaborator가 GitHub 로그인 후 같은 [Releases 목록](https://github.com/issackr580/doctor-glean-pc/releases)의 **preview.27 협업자 전용 Draft**에서 받는다. 접근 권한은 [배포·협업 권한 기준](docs/ACCESS.md)을 따른다. 개발자용 실행파일을 공개 릴리스에 첨부하지 않는다.
+[Windows 안내](docs/WINDOWS_PREVIEW.md)를 따른다. 배포용 실행물은 이 저장소의 [공개 검증판](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.28), 개발자용 실행물은 지정 collaborator가 GitHub 로그인 후 같은 [Releases 목록](https://github.com/issackr580/doctor-glean-pc/releases)의 **preview.28 협업자 전용 Draft**에서 받는다. 접근 권한은 [배포·협업 권한 기준](docs/ACCESS.md)을 따른다. 개발자용 실행파일을 공개 릴리스에 첨부하지 않는다.
 
 작은 패치는 최신 resources/app 전체를 담는다. 릴리스에서 호환 검증한 같은 에디션의 이전 버전은 중간 패치를 거치지 않고 한 번에 올릴 수 있다. 완전 종료 → 기존 resources/app 백업 → 패치 app 전체 교체 → 하단 버전 확인 순서다. X는 트레이 숨김이다. 로그인·계정·시도는 별도 데이터 폴더에 유지된다. 첫 설치·호환 미확인 버전·runtime 변경은 전체 ZIP이다.
 
@@ -60,4 +60,6 @@ npm run source:pack
 
 닥터빌 상세는 같은 대상 영역의 제목·독립된 날짜·첫 시작시각을 대조하고, 종료·기신청·미리보기 상태를 구분합니다. 외부 플레이어의 계정 생성·동의·추가 인증은 사이트에서 직접 마칩니다.
 
-닥터빌의 최신 상세 일정으로 예약·타이머를 수정하고, 옛 기한이 지났어도 현재 입장 가능한 미입장 강의를 복구합니다. 취소·이미 시도/소비·불확실한 입장은 반복하지 않습니다. 같은 에디션 preview.20·21·22·23·24·25·26는 작은 패치 한 번으로 preview.27에 올릴 수 있습니다.
+닥터빌의 최신 상세 일정으로 예약·타이머를 수정하고, 옛 기한이 지났어도 현재 입장 가능한 미입장 강의를 복구합니다. 취소·이미 시도/소비·불확실한 입장은 반복하지 않습니다. 같은 에디션 preview.20·21·22·23·24·25·26·27는 작은 패치 한 번으로 preview.28에 올릴 수 있습니다.
+
+preview.28 이후에는 **PC 업데이트 확인 → 다운로드·업데이트**로 설치·재시작합니다. 개발자용은 앱 안에서 GitHub 협업자 로그인을 마칩니다. 이전 버전에서28까지는 같은 에디션 작은 패치를 한 번 적용해 주세요. [버튼 업데이트·복구·유지보수](docs/UPDATES.md)를 따르며 로그인·설정·예약·시도 데이터는 유지합니다.
