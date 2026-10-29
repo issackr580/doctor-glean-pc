@@ -25,7 +25,7 @@ async function inspect(site,body,options={}){
   return new Response(shell(body),{headers:{'content-type':'text/html; charset=utf-8'}});
  });
  const controller=new AbortController(),page=new AutomationPage(site,controller.signal,prefs),urls={doctorville:'https://www.doctorville.co.kr/seminar/main',medigate:'https://new.medigate.net/symposium',keymedi:'https://www.keymedi.com/meditv/live',hmp:'https://www.hmp.co.kr/symposium/schedulerequest/scheduleList.hm',intermd:'https://www.intermd.co.kr/webinar/list.do',bluepharm:'https://bluepharmkorea.co.kr/'};
- await page.load(urls[site]);
+ await page.load(options.url??urls[site]);
  try{if(options.work)return await options.work(page,()=>posts);return await page.call('pc-entry.js',[{...job(site),...options.job},options.mode??'preflight']);}
  finally{page.close();}
 }
@@ -65,6 +65,32 @@ async function run(){
   ['missing start',bareDoctor.replace(clock,'00:00')],
   ['duplicate starts',bareDoctor.replace('</div><button>',`<span class="start">${clock}</span></div><button>`)],
  ])check('Doctorville dedicated schedule rejects '+name,(await inspect('doctorville',body)).status!=='ready');
+ // Screenshot-observed content relationships, with synthetic titles and no
+ // claim about the authenticated site's CSS classes or private handlers.
+ const detailUrl='https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=17',detailWeekday='일월화수목금토'[new Date(date+'T00:00:00Z').getUTCDay()];
+ const detailHeader=(action='<button>입장하기</button>',schedule=date+'('+detailWeekday+') '+clock+' ~ 23:59',heading=title,extra='')=>`<main><section><figure>합성 이미지</figure><div><strong>${heading}</strong><div>${schedule}</div><p>합성 강연자</p><span>100 / 200명</span>${extra}${action}</div></section><section><h3>세미나 소개</h3><p>자료 안내 2020-01-01</p></section></main>`;
+ await inspect('doctorville',detailHeader(),{url:detailUrl,work:async(page,posts)=>{
+  const r=await page.call('pc-entry.js',[job('doctorville'),'preflight']);check('Doctorville detail binds a plain strong title and one complete header schedule without CSS guesses',r.status==='ready'&&r.targetMatched&&r.dateMatches===1&&r.timeMatches===1&&posts()===0);
+ }});
+ await inspect('doctorville',detailHeader('<span>종료된 세미나입니다.</span>'),{url:detailUrl,work:async(page,posts)=>{check('Doctorville exact ended-seminar notice stops entry with no provider action',(await page.call('pc-entry.js',[job('doctorville'),'inspect'])).status==='lecture_ended'&&posts()===0);}});
+ await inspect('doctorville',detailHeader('<button>신청취소</button>'),{url:detailUrl,work:async(page,posts)=>{
+  check('Doctorville cancellation action proves an existing application without invoking it',(await page.call('pc-registration.js',[job('doctorville'),'inspect'])).status==='registered'&&posts()===0);
+  check('Doctorville existing application without an entry button remains waiting',(await page.call('pc-entry.js',[{...job('doctorville'),due:Date.now()+60000},'preflight'])).status==='not_open'&&posts()===0);
+ }});
+ await inspect('doctorville',detailHeader('<span>미리보기 VOD</span><button>신청취소</button>'),{url:detailUrl,work:async(page,posts)=>{check('Doctorville preview VOD badge does not turn an existing application into an ended lecture',(await page.call('pc-registration.js',[job('doctorville'),'inspect'])).status==='registered'&&posts()===0);}});
+ check('Doctorville date and start in a later description cannot repair a header with no schedule',(await inspect('doctorville',detailHeader(undefined,'').replace('<p>자료 안내 2020-01-01</p>',`<p>${date}(${detailWeekday}) ${clock} ~ 23:59</p>`),{url:detailUrl})).status!=='ready');
+ check('Doctorville header schedule can be a direct text run between title and action',(await inspect('doctorville',detailHeader().replace(`<div>${date}(${detailWeekday}) ${clock} ~ 23:59</div>`,`${date}(${detailWeekday}) ${clock} ~ 23:59`),{url:detailUrl})).status==='ready');
+ check('Doctorville complete range owns nested start and end spans',(await inspect('doctorville',detailHeader(undefined,`<span>${date}(${detailWeekday})</span> <span>${clock}</span> ~ <span>23:59</span>`),{url:detailUrl})).status==='ready');
+ check('Doctorville header semantics do not depend on a presentation class',(await inspect('doctorville',detailHeader().replace('<section>','<header>').replace('</section>','</header>'),{url:detailUrl})).status==='ready');
+ check('Doctorville detail accepts its already allowed canonical host alias',(await inspect('doctorville',detailHeader(),{url:detailUrl.replace('www.doctorville','doctorville')})).status==='ready');
+ for(const [name,body,input] of [
+  ['wrong date',detailHeader(undefined,'2020-01-01 '+clock+' ~ 23:59'),{}],
+  ['end clock instead of start',detailHeader(undefined,date+'('+detailWeekday+') 00:00 ~ '+clock),{}],
+  ['title-only date',detailHeader(undefined,clock+' ~ 23:59',title+' '+date),{title:title+' '+date}],
+  ['conflicting visible header date',detailHeader(undefined,undefined,undefined,'<span>2020-01-01</span>'),{}],
+  ['duplicate detail headers',detailHeader()+detailHeader(),{}],
+  ['unreviewed detail query',detailHeader(),{}],
+ ])check('Doctorville detail rejects '+name,(await inspect('doctorville',body,{url:detailUrl+(name==='unreviewed detail query'?'&token=SYNTHETIC':''),job:input})).status!=='ready');
  const live=await inspect('medigate',medi(11)+medi(11,'?utm_source=hero#top'));
  check('Medigate equivalent visible cards merge only by one observed lecture identity',live.status==='ready'&&live.duplicateEquivalent&&live.matchedTargets===1);
  const registered=medi().replace('</h3>','</h3><span>신청완료</span>'),hero=registered.replace(/<button[\s\S]*?<\/button>/,'');
@@ -160,11 +186,11 @@ async function run(){
  await blueRunner.run(blueEntry);
  check('native Bluepharm timed supplement calls its original ongoing button once after the durable lease',bluePosts===1&&blueLease&&blueStore.entries()[0].status==='clicked');
  check('Bluepharm inspected schedule survives restart without exposing raw links',new WorkflowStore(join(blueDir,'workflows.json')).diagnostics().entries[0].inspection.timeMatches===1&&!JSON.stringify(blueStore.diagnostics()).includes('https:'));
- for(const scenario of ['exact','wrong_date','end_time','title_date_only','duplicate','unsafe_link']){
+ for(const scenario of ['exact','plain_detail','ended_detail','wrong_date','end_time','title_date_only','duplicate','unsafe_link']){
   const dir=join(root,'doctor-detail-'+scenario),partition='doctor-detail-'+randomUUID(),ledger=new LocalState(join(dir,'state.json')),store=new WorkflowStore(join(dir,'workflows.json'));ledger.setPaused(false);store.setFeature('entry',true);let posts=0,details=0,durable=false,now=Date.now();
   const shownTitle=scenario==='title_date_only'?title+' '+date:title;
   const card=`<a class="list_detail" href="/seminar/seminarDetail?seminarId=17${scenario==='unsafe_link'?'&token=PRIVATE':''}"><strong class="tit">${shownTitle}</strong><div class="time"><span class="start">${clock}</span></div></a>`;
-  const detail=`<section><h2>${shownTitle}</h2>${scenario==='title_date_only'?'':`<p class="detail_date">${scenario==='wrong_date'?'2020-01-01':date}</p>`}<p class="time">${scenario==='end_time'?'00:00 ~ '+clock:clock+' ~ 23:59'}</p><button onclick="fetch('/synthetic-entry',{method:'POST'})">입장하기</button></section>`;
+  const detail=['plain_detail','ended_detail'].includes(scenario)?detailHeader(scenario==='ended_detail'?'<span>종료된 세미나입니다.</span>':`<button onclick="fetch('/synthetic-entry',{method:'POST'})">입장하기</button>`):`<section><h2>${shownTitle}</h2>${scenario==='title_date_only'?'':`<p class="detail_date">${scenario==='wrong_date'?'2020-01-01':date}</p>`}<p class="time">${scenario==='end_time'?'00:00 ~ '+clock:clock+' ~ 23:59'}</p><button onclick="fetch('/synthetic-entry',{method:'POST'})">입장하기</button></section>`;
   await session.fromPartition(partition).protocol.handle('https',request=>{
    if(request.method==='POST'){posts++;durable=Object.values(JSON.parse(readFileSync(join(dir,'state.json'))).jobs).some(row=>row.state==='attempting');return new Response('{}');}
    const isDetail=new URL(request.url).pathname==='/seminar/seminarDetail';if(isDetail)details++;
@@ -174,7 +200,8 @@ async function run(){
   const runner=new EntryRunner({ledger,store,now:()=>now,sleep:async ms=>{now+=ms;await new Promise(resolve=>setTimeout(resolve,0));},createPage:async(_site,signal)=>new AutomationPage('doctorville',signal,{...remotePreferences('doctorville'),partition})});
   await runner.run(entry);await new Promise(resolve=>setTimeout(resolve,100));
   check('Doctorville '+scenario+' reads a single observed detail only when the list title and link are unique',details===(['duplicate','unsafe_link'].includes(scenario)?0:1));
-  check('Doctorville '+scenario+' requires fresh detail date/start/title before durable entry dispatch',scenario==='exact'?posts===1&&durable&&store.entries()[0].status==='clicked':posts===0&&Object.keys(ledger.snapshot().jobs).length===0);
+  check('Doctorville '+scenario+' requires fresh detail date/start/title before durable entry dispatch',['exact','plain_detail'].includes(scenario)?posts===1&&durable&&store.entries()[0].status==='clicked':posts===0&&Object.keys(ledger.snapshot().jobs).length===0);
+  if(scenario==='ended_detail')check('Doctorville closed detail is recorded as ended without consuming an entry lease',store.entries()[0].status==='lecture_ended'&&posts===0&&Object.keys(ledger.snapshot().jobs).length===0);
  }
  check('all inspection and entry windows are released',BrowserWindow.getAllWindows().length===0);
  mkdirSync(new URL('../verification/',import.meta.url),{recursive:true});writeFileSync(new URL('../verification/electron-entry.json',import.meta.url),JSON.stringify({runtime:{platform:process.platform,electron:process.versions.electron,chromium:process.versions.chrome},environment:'Linux Electron45; synthetic HTTPS; PC exact entry and read-only preflight',checks:checks.length,passed:checks,actualProviderVerified:false,windowsVerified:false},null,2)+'\n');
