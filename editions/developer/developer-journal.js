@@ -2,6 +2,7 @@ import {readFileSync,statSync,mkdirSync,openSync,writeFileSync,fsyncSync,closeSy
 import {dirname} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {safeRuntimeFault} from '../../src/runtime-faults.js';
+import {cleanEntryEvent,entryMeta,entryRecords} from './entry-report.js';
 
 const DAY=86_400_000,WINDOW=7*DAY,MAX_BYTES=4_194_304,MAX_EVENTS=2000;
 const AREAS=new Set(['collection','browser','control','process','automation']);
@@ -11,6 +12,7 @@ const REASONS=new Set(['idle','reading','finished','cancelled','suspended','date
 const kstDay=at=>new Date(at+9*3_600_000).toISOString().slice(0,10);
 const number=value=>Number.isSafeInteger(value)&&value>=0&&value<=1_000_000_000_000_000;
 function clean(input,now){
+ if(input?.area==='entry'){const row=cleanEntryEvent(input);return row&&row.at<=now?{area:'entry',...row}:null;}
  if(!input||!AREAS.has(input.area)||!PHASES.has(input.phase)||!SITES.has(input.site??'')||!number(input.at)||input.at>now)return null;
  const out={area:input.area,phase:input.phase,site:input.site??'',at:input.at};
  for(const key of ['completed','total','heapUsedKb','rssKb'])if(number(input[key]))out[key]=input[key];
@@ -72,18 +74,35 @@ export class DeveloperJournal{
  setEnabled(value,now=Date.now()){
   if(typeof value!=='boolean'||!number(now))return false;
   if(this.#unavailable)return false;
-  const next=this.#pruned(now);next.startedAt=value?now:next.startedAt;next.until=value?now+WINDOW:0;
+  const next=this.#pruned(now);next.startedAt=value?now:next.startedAt;next.until=value?now+WINDOW:0;if(!value)next.events=[];
   return this.#save(next);
  }
  event(input,now=Date.now()){
   if(!this.status(now).enabled)return;
   const row=clean({...input,at:now},now);if(!row)return;
   const next=this.#pruned(now),day=kstDay(now);
+  if(row.area==='automation'&&row.kind==='entry'&&row.phase==='inspect'){
+   const previous=next.events.findLast(e=>e.area===row.area&&e.phase===row.phase&&e.key===row.key&&e.runId===row.runId&&e.reader===row.reader);
+   const meaningful=value=>{const {at,elapsedMs,heapUsedKb,rssKb,...rest}=value;return JSON.stringify(rest);};
+   if(previous&&meaningful(previous)===meaningful(row))return;
+  }
   if(next.events.filter(event=>kstDay(event.at)===day).length>=MAX_EVENTS)return;
   next.events.push(row);this.#save(next);
  }
  export(now=Date.now()){
-  const next=this.#pruned(now);return {schemaVersion:1,scope:'developer_opt_in_local_only',memoryScope:'electron_main_process_only',status:this.status(now),retainedKoreaCalendarDays:7,maxEventsPerDay:MAX_EVENTS,events:next.events};
+  const status=this.status(now),next=this.#pruned(now);return {schemaVersion:1,scope:'developer_opt_in_local_only',memoryScope:'electron_main_process_only',status,retainedKoreaCalendarDays:7,maxEventsPerDay:MAX_EVENTS,events:status.enabled?next.events.filter(row=>row.area!=='entry'):[],entryJournal:status.enabled?entryRecords(next.events):entryRecords([])};
+ }
+ entry(job,kind,phase,detail={},now=Date.now()){
+  if(!this.status(now).enabled)return;
+  const meta=entryMeta(job,kind);if(!meta)return;
+  const old=this.#pruned(now).events.filter(row=>row.area==='entry'&&row.reference===meta.reference&&row.slot===meta.slot&&row.entryKind===kind&&row.date===meta.date);
+  const last=old.at(-1),executionId=last?.executionId??randomUUID();
+  const attemptIndex=phase==='work_started'?Math.min(1000,(last?.attemptIndex??0)+1):last?.attemptIndex??0;
+  const row=cleanEntryEvent({...detail,...meta,executionId,phase,attemptIndex,at:now});if(!row)return;
+  const meaningful=value=>{const {at,elapsedMs,...rest}=value;return JSON.stringify(rest);};
+  const comparable=phase==='inspect'?old.findLast(e=>e.phase===phase&&e.owner===row.owner&&e.reader===row.reader):last;
+  if(comparable&&meaningful(row)===meaningful(cleanEntryEvent(comparable)))return;
+  this.event({area:'entry',...row},now);return executionId;
  }
  clear(){
   try{this.#commit(this.#file,{schemaVersion:1,startedAt:0,until:0,events:[]});this.#data={schemaVersion:1,startedAt:0,until:0,events:[]};this.#unavailable=false;return true;}

@@ -60,3 +60,5 @@ Electron 검사는 합성 HTTPS와 합성 계정만 사용한다. Windows에서�
 사용자의 2026-10-26 결정에 따라 소스와 distribution 실행파일을 같은 공개 PC 저장소에서 관리한다. 관리자가 정한 개발자만 collaborator로 초대한다. 선정 전에는 원본 쓰기 권한 없이 fork 후 PR로 작업할 수 있다. 공개 실행파일은 distribution만 대상이고 developer ZIP은 같은 PC 저장소의 협업자 전용 Draft로 공유한다. Draft 열람에는 쓰기 권한이 필요하며 코드·릴리스 편집 권한도 함께 생긴다. [권한 운영 기준](docs/ACCESS.md)을 따른다. 공개 라이선스·저작권 정책은 별도 결정 전 임의로 추가하지 않는다.
 
 CI 예시는 `docs/ci/manual-check.yml`에 있으며 자동 설치하지 않는다. 관리자가 무료 실행 한도와 권한을 확인한 뒤 원하면 `.github/workflows/`로 옮긴다. 자동 릴리스·정기 실행·계정 비밀정보는 연결하지 않는다.
+
+입력 SHA와 실제 검사 개수를 연결한 전체 소스·합성 검사는 `npm run verify:pc`다. 기존 개별 명령도 유지한다. [회차 진단·재현·검증 흐름](docs/QUALITY_WORKFLOW.md)에 선택 보고, 실패/부분 검사, Windows 검증과 배포의 구분을 설명한다.

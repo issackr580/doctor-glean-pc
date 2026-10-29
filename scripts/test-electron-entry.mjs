@@ -177,7 +177,7 @@ async function run(){
   check('Doctorville '+scenario+' requires fresh detail date/start/title before durable entry dispatch',scenario==='exact'?posts===1&&durable&&store.entries()[0].status==='clicked':posts===0&&Object.keys(ledger.snapshot().jobs).length===0);
  }
  check('all inspection and entry windows are released',BrowserWindow.getAllWindows().length===0);
- mkdirSync(new URL('../verification/',import.meta.url),{recursive:true});writeFileSync(new URL('../verification/electron-entry.json',import.meta.url),JSON.stringify({environment:'Linux Electron45; synthetic HTTPS; PC exact entry and read-only preflight',checks:checks.length,passed:checks,actualProviderVerified:false,windowsVerified:false},null,2)+'\n');
+ mkdirSync(new URL('../verification/',import.meta.url),{recursive:true});writeFileSync(new URL('../verification/electron-entry.json',import.meta.url),JSON.stringify({runtime:{platform:process.platform,electron:process.versions.electron,chromium:process.versions.chrome},environment:'Linux Electron45; synthetic HTTPS; PC exact entry and read-only preflight',checks:checks.length,passed:checks,actualProviderVerified:false,windowsVerified:false},null,2)+'\n');
  console.log('ELECTRON_ENTRY_PASS:'+checks.length);app.quit();
 }
 run().catch(error=>{console.error('ELECTRON_ENTRY_FAIL:'+error.stack);for(const window of BrowserWindow.getAllWindows())window.destroy();app.exit(1);});

@@ -1,5 +1,5 @@
 // Executed by Electron with synthetic HTTPS handlers. Never uses real accounts.
-import {app,BrowserWindow,session,dialog,clipboard} from 'electron';
+import {app,BrowserWindow,session,dialog,clipboard,shell as desktopShell} from 'electron';
 import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync,existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
@@ -47,8 +47,9 @@ for(const id of ['doctorville','keymedi','whodadoc','dtalks','hmp']){
   return new Response(shell(body),{headers:{'content-type':'text/html; charset=utf-8'}});
  });
 }
-const report=join(temporary,'report-'+edition.id+'.txt'),developerReport=join(temporary,'developer-report.json');
-dialog.showSaveDialog=async(_window,options)=>({canceled:false,filePath:options?.defaultPath?.includes('developer-diagnostics')?developerReport:report});
+const report=join(temporary,'report-'+edition.id+'.txt'),developerReport=join(temporary,'developer-report.json'),entryReport=join(temporary,'entry-report.txt'),openedPages=[];
+dialog.showSaveDialog=async(_window,options)=>({canceled:false,filePath:options?.defaultPath?.includes('entry-report')?entryReport:options?.defaultPath?.includes('developer-diagnostics')?developerReport:report});
+desktopShell.openExternal=async url=>{openedPages.push(url);};
 const exitTimer=setTimeout(()=>{console.error('ELECTRON_CATALOG_TIMEOUT');app.exit(2);},100_000);
 try{
  await import(pathToFileURL(join(application,'src/main.js')));
@@ -67,6 +68,10 @@ try{
  check('another edition did not supply cached results',Object.keys(initial.results).length===0);
  const hasDeveloper=await evaluate('typeof window.doctorGleanDeveloper!=="undefined"');
  check('developer bridge matches the built edition',hasDeveloper===edition.developer);
+ check('update page cannot be opened before an explicit check',!(await evaluate('window.doctorGlean.openUpdatePage()')).ok&&openedPages.length===0);
+ const update=await evaluate('window.doctorGlean.checkUpdate()');
+ check('PC update distinguishes collaborator delivery from unsupported synthetic Linux',update.status===(edition.developer?'private_delivery':'unknown'));
+ if(edition.developer){await evaluate('window.doctorGlean.openUpdatePage("https://foreign.invalid/")');check('developer update opens only the fixed PC release list',openedPages.length===1&&openedPages[0]==='https://github.com/issackr580/doctor-glean-pc/releases');}
  await evaluate('[...document.querySelectorAll("#sites button")].find(b=>b.textContent==="계정 저장·복구").click()');
  check('account settings open in the local control dialog',await evaluate('document.querySelector("#credential-dialog").open'));
  writeFileSync(new URL('../verification/account-settings-'+edition.id+'.png',import.meta.url),(await control.webContents.capturePage()).toPNG());
@@ -193,6 +198,19 @@ try{
   check('developer opt-in records collection milestones',exported.events.some(row=>row.area==='collection'));
   check('developer opt-in also records the entry preflight timeline',exported.events.some(row=>row.area==='automation'&&row.phase==='preflight'&&row.readOnly===true));
   check('developer journal excludes URLs and lecture titles',!/https:|합성 .*강의|outside.example.invalid|synthetic-login/.test(JSON.stringify(exported)));
+  const records=await evaluate('window.doctorGleanDeveloper.entryList()');
+  check('real preflight callbacks produce bounded PC-owned entry records',records.records.length>0&&exported.entryJournal.records.some(r=>r.kind==='preflight'&&r.events.some(e=>e.stage==='page_finished')&&r.events.some(e=>e.stage==='work_finished')));
+  const selected=records.records[0].executionId;
+  const preview=await evaluate('window.doctorGleanDeveloper.entryPreview('+JSON.stringify(selected)+')');
+  const saved=await evaluate('window.doctorGleanDeveloper.entrySave('+JSON.stringify(preview.token)+')'),copied=await evaluate('window.doctorGleanDeveloper.entryCopy('+JSON.stringify(preview.token)+')');
+  check('native focus save and copy acknowledge their frozen token',saved.ok&&copied.ok);
+  check('native file matches the frozen selected preview bytes',readFileSync(entryReport,'utf8')===preview.text);
+  check('native clipboard matches the frozen selected preview bytes',await clipboard.readText()===preview.text);
+  check('selected preview contains exactly the chosen execution',JSON.parse(preview.text).recordCount===1&&JSON.parse(preview.text).records[0].executionId===selected);
+  check('focus report exports no internal key or unselected activity',!preview.text.includes(seededKey)&&!preview.text.includes('currentState')&&!preview.text.includes('https:'));
+  await evaluate('[...document.querySelectorAll("button")].find(b=>b.textContent==="회차 목록 새로고침").click()');await until(()=>evaluate('document.querySelector("#entry-report-select").options.length>0'));
+  await evaluate('[...document.querySelectorAll("button")].find(b=>b.textContent==="선택 회차 미리보기").click()');await until(()=>evaluate('document.querySelector("#entry-report-preview").value.length>0'));
+  check('developer UI presents sanitized text before enabling focus export',await evaluate('document.querySelector("#entry-report-preview").readOnly&&[...document.querySelectorAll("button")].find(b=>b.textContent==="미리본 보고서 저장").disabled===false'));
  }else check('distribution report has no developer recorder state',!Object.hasOwn(JSON.parse(diagnostic),'developerDiagnostics'));
  check('single-site catalog action rejects non-catalog or arbitrary destinations',!(await evaluate('window.doctorGlean.collectSite("docple")')).ok&&!(await evaluate('window.doctorGlean.collectSite("https://outside.example.invalid")')).ok);
  const beforeDtalks=await state();modes.dtalks='calendar';
@@ -243,7 +261,7 @@ try{
  await evaluate('window.doctorGlean.cancelCollection()');
  await until(()=>BrowserWindow.getAllWindows().length===1);
  mkdirSync(new URL('../verification/',import.meta.url),{recursive:true});
- writeFileSync(resultFile,JSON.stringify({schemaVersion:1,edition:edition.id,version:appMetadata.version,environment:'Linux Electron 45 with virtual X display and synthetic HTTPS',osSandboxVerified:false,windowsVerified:false,authenticatedProviderVerified:false,checks:checks.length,passed:checks,requests:requests.length},null,2)+'\n');
+ writeFileSync(resultFile,JSON.stringify({schemaVersion:1,edition:edition.id,version:appMetadata.version,runtime:{platform:process.platform,electron:process.versions.electron,chromium:process.versions.chrome},environment:'Linux Electron 45 with virtual X display and synthetic HTTPS',osSandboxVerified:false,windowsVerified:false,authenticatedProviderVerified:false,checks:checks.length,passed:checks,requests:requests.length},null,2)+'\n');
  console.log('ELECTRON_CATALOG_PASS:'+checks.length);
  clearTimeout(exitTimer);app.quit();
 }catch(error){console.error('ELECTRON_CATALOG_FAIL:'+error.stack);clearTimeout(exitTimer);for(const window of BrowserWindow.getAllWindows())window.destroy();app.exit(1);}

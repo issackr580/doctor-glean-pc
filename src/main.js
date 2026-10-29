@@ -1,4 +1,4 @@
-import {app,BrowserWindow,Menu,Tray,nativeImage,ipcMain,session,dialog,clipboard,powerMonitor,safeStorage} from 'electron';
+import {app,BrowserWindow,Menu,Tray,nativeImage,ipcMain,session,dialog,clipboard,powerMonitor,safeStorage,net,shell} from 'electron';
 import {fileURLToPath} from 'node:url';
 import {join} from 'node:path';
 import {writeFile} from 'node:fs/promises';
@@ -28,6 +28,7 @@ import {credentialSite,safeCredentialStatus} from './credential-policy.js';
 import {credentialPageState} from './credential-page-state.js';
 import {manualLoadRecovery} from './site-load-policy.js';
 import {RuntimeFaults,faultNotice} from './runtime-faults.js';
+import {checkPcUpdate,PC_RELEASES} from './update-policy.js';
 
 const metadata=JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8'));
 const VERSION=metadata.version,EDITION=resolveEdition(metadata.doctorGleanEdition);
@@ -249,6 +250,17 @@ function registerIPC(channel,handler){
   });
 }
 function ipc(){
+  let updateResult,updatePending;
+  registerIPC('pc:update-check',async()=>{
+   if(updatePending)return updatePending;
+   updatePending=checkPcUpdate({fetch:(...args)=>net.fetch(...args),edition:EDITION.id,currentVersion:VERSION,platform:process.platform,arch:process.arch,channel:VERSION.includes('-preview.')?'preview':'stable'}).then(result=>(updateResult=result)).finally(()=>{updatePending=null;});return updatePending;
+  });
+  registerIPC('pc:update-page',async()=>{
+   if(!updateResult||!['available','private_delivery'].includes(updateResult.status))return {ok:false};
+   const page=updateResult.status==='private_delivery'?PC_RELEASES:updateResult.page;
+   if(page!==PC_RELEASES&&!/^https:\/\/github\.com\/issackr580\/doctor-glean-pc\/releases\/tag\/pc-v\d+\.\d+\.\d+(?:-preview\.\d+)?$/.test(page))return {ok:false};
+   await shell.openExternal(page);return {ok:true};
+  });
   developerTools.register();
   registerIPC('pc:state',()=>buildState());
   registerIPC('pc:set-date',date=>{
@@ -333,11 +345,12 @@ else{
     try{
       state=new LocalState(join(app.getPath('userData'),'state-v1.json'));
       catalog=new CatalogStore(join(app.getPath('userData'),'catalog-v1.json'));
-      developerTools=createDeveloperTools({directory:dataDirectory,register:registerIPC,notify,edition:EDITION,version:VERSION,
-        policy:{allowedNavigation,remotePreferences},snapshot:diagnosticSnapshot,save:async(defaultPath,content)=>{
-          const selected=await dialog.showSaveDialog(control,{title:'개발자 진단 저장',defaultPath,filters:[{name:'JSON',extensions:['json']}]});
+      developerTools=createDeveloperTools({directory:dataDirectory,register:registerIPC,notify,edition:EDITION,version:VERSION,build:{sourceCommit:BUILD_INFO.sourceCommit,electronVersion:process.versions.electron,chromiumVersion:process.versions.chrome},copy:text=>clipboard.writeText(text),
+        policy:{allowedNavigation,remotePreferences},snapshot:diagnosticSnapshot,save:async(defaultPath,content,valid=()=>true)=>{
+          const selected=await dialog.showSaveDialog(control,{title:'개발자 진단 저장',defaultPath,filters:[{name:'진단 파일',extensions:[defaultPath.endsWith('.txt')?'txt':'json']}]});
           if(selected.canceled||!selected.filePath)return {ok:true,cancelled:true};
-          await writeFile(selected.filePath,JSON.stringify(content,null,2)+'\n',{encoding:'utf8',mode:0o600});return {ok:true};
+          if(!valid())return {ok:false};
+          await writeFile(selected.filePath,typeof content==='string'?content:JSON.stringify(content,null,2)+'\n',{encoding:'utf8',mode:0o600});return {ok:true};
         }});
       if(developerTools.available!==EDITION.developer)throw Error('edition_mismatch');
       developerTools.event({area:'process',phase:'start',site:''});
@@ -358,7 +371,7 @@ else{
       catalogQueue=new CatalogQueue({start:async(date,ids)=>{await collector.start(date,ids);automation?.catalogFinished(date,ids,collector.snapshot());},busy:()=>collector.snapshot().running||!!automation?.busy||credentials.busy,validDate:validQueryDate,onChange:notify});
       automation=new AutomationController({file:join(dataDirectory,'workflows-v1.json'),ledger:state,
        createPage:(site,signal,options)=>credentials.wrapPage(site,new AutomationPage(site,signal,prepareSession(site),options)),
-       createInspectionPage:(site,signal,options)=>new AutomationPage(site,signal,prepareSession(site),options),onEvent:event=>developerTools.event(event),
+       createInspectionPage:(site,signal,options)=>new AutomationPage(site,signal,prepareSession(site),options),onEvent:event=>developerTools.event(event),traceEntry:(job,kind)=>developerTools.traceEntry(job,kind),observeEntry:(...args)=>developerTools.observeEntry(...args),
        isManualOpen:id=>[...manualOwners.values()].includes(id)||credentials.active?.site===id,catalog:date=>catalog.view(date).results,catalogBusy:()=>collector.snapshot().running||credentials.busy,
        queueCatalog:date=>{viewDate=date;catalogQueue.request(date,catalog.selected());},
        yieldCatalog:()=>{const current=collector.snapshot();if(current.running){catalogQueue.request(current.date,catalog.selected());collector.cancel('entry_priority');}},
