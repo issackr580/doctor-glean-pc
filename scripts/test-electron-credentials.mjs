@@ -415,7 +415,7 @@ async function run(){
  }
  check('no account values enter native diagnostics',!/SYNTHETIC_|https:|password|csrf/i.test(JSON.stringify(attempts.snapshot())));
  check('temporary validation windows are released',BrowserWindow.getAllWindows().length===0);
- mkdirSync(new URL('../verification/',import.meta.url),{recursive:true});writeFileSync(new URL('../verification/electron-credentials.json',import.meta.url),JSON.stringify({environment:'Linux Electron 45; synthetic HTTPS; immutable Android login assets',checks:checks.length,passed:checks,windowsDpapiVerified:false,actualAccountsVerified:false,posts:posts.length},null,2)+'\n');console.log('ELECTRON_CREDENTIALS_PASS:'+checks.length);app.quit();
+ mkdirSync(new URL('../verification/',import.meta.url),{recursive:true});writeFileSync(new URL('../verification/electron-credentials.json',import.meta.url),JSON.stringify({runtime:{platform:process.platform,electron:process.versions.electron,chromium:process.versions.chrome},environment:'Linux Electron 45; synthetic HTTPS; immutable Android login assets',checks:checks.length,passed:checks,windowsDpapiVerified:false,actualAccountsVerified:false,posts:posts.length},null,2)+'\n');console.log('ELECTRON_CREDENTIALS_PASS:'+checks.length);app.quit();
 }
 run().catch(error=>{console.error('ELECTRON_CREDENTIALS_FAIL:'+error.stack);for(const w of BrowserWindow.getAllWindows())w.destroy();app.exit(1);});
 app.on('quit',()=>{try{rmSync(root,{recursive:true,force:true});}catch{}});

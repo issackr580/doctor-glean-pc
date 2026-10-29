@@ -120,7 +120,7 @@ async function run(){
   await assert.rejects(lateEvaluation,{code:'cancelled'});await sleep(100);
   check('already-cancelled native evaluation cannot surface a late global rejection',unhandled.length===0&&BrowserWindow.getAllWindows().length===0);
  }finally{process.removeListener('unhandledRejection',observe);}
- mkdirSync(new URL('../verification/',import.meta.url),{recursive:true});writeFileSync(new URL('../verification/electron-automation.json',import.meta.url),JSON.stringify({environment:'Linux Electron 45 and synthetic HTTPS',windowsVerified:false,authenticatedProviderVerified:false,checks:checks.length,passed:checks},null,2)+'\n');
+ mkdirSync(new URL('../verification/',import.meta.url),{recursive:true});writeFileSync(new URL('../verification/electron-automation.json',import.meta.url),JSON.stringify({runtime:{platform:process.platform,electron:process.versions.electron,chromium:process.versions.chrome},environment:'Linux Electron 45 and synthetic HTTPS',windowsVerified:false,authenticatedProviderVerified:false,checks:checks.length,passed:checks},null,2)+'\n');
  console.log('ELECTRON_AUTOMATION_PASS:'+checks.length);app.quit();
 }
 run().catch(error=>{console.error('ELECTRON_AUTOMATION_FAIL:'+error.stack);for(const w of BrowserWindow.getAllWindows())w.destroy();app.exit(1);});

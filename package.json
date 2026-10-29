@@ -1,6 +1,6 @@
 {
   "name": "doctor-glean-pc",
-  "version": "0.1.0-preview.20",
+  "version": "0.1.0-preview.21",
   "doctorGleanEdition": "developer",
   "private": true,
   "type": "module",
@@ -15,7 +15,8 @@
     "test:electron": "node scripts/run-electron-tests.mjs",
     "build:developer": "node scripts/build-windows-preview.mjs --edition=developer",
     "build:distribution": "node scripts/build-windows-preview.mjs --edition=distribution",
-    "source:pack": "node scripts/export-source.mjs"
+    "source:pack": "node scripts/export-source.mjs",
+    "verify:pc": "node scripts/verify-pc.mjs"
   },
   "devDependencies": {
     "electron": "45.0.0"

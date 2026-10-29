@@ -7,13 +7,13 @@ import {DAILY_TASKS} from './automation-policy.js';
 import {kstDate,kstInstant,nextLoungePreparation} from './schedule.js';
 function nextMorning(now){const today=kstDate(now),at=kstInstant(today,'08:10');return at>now?at:kstInstant(kstDate(now+86400000),'08:10');}
 export class AutomationController{
- constructor({file,ledger,createPage,createInspectionPage,isManualOpen,catalog,catalogBusy,queueCatalog,yieldCatalog,onChange=()=>{},onEvent=()=>{},onError=()=>{},now=Date.now}){
+ constructor({file,ledger,createPage,createInspectionPage,isManualOpen,catalog,catalogBusy,queueCatalog,yieldCatalog,onChange=()=>{},onEvent=()=>{},onError=()=>{},now=Date.now,traceEntry,observeEntry}){
   Object.assign(this,{ledger,createPage,isManualOpen,catalog,catalogBusy,queueCatalog,yieldCatalog,onChange,onError,now});this.store=new WorkflowStore(file);this.active=null;this.pendingDaily=[];this.pendingReadOnly=true;this.closed=false;
   this.store.recover();
   const common={ledger,store:this.store,createPage,createInspectionPage,isManualOpen,onChange:()=>{onChange();},onEvent,now};
   this.quiz=new DoctorvilleQuizRunner(common);
   this.daily=new DailyRunner({...common,quiz:this.quiz,shouldYield:()=>this.allowed()&&!!this.entry.due(this.now())});
-  this.entry=new EntryRunner(common);this.entry.recover();this.lounge=new LoungeRunner(common);
+  this.entry=new EntryRunner({...common,traceEntry,observeEntry});this.entry.recover();this.lounge=new LoungeRunner(common);
   this.rearm();this.timer=setInterval(()=>this.tick(),250);this.timer.unref();
  }
  allowed(){return !this.closed&&!this.ledger.snapshot().paused&&!this.store.failed;}

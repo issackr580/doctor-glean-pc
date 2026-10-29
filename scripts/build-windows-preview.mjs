@@ -37,6 +37,7 @@ cpSync(join(root,'vendor'),join(application,'vendor'),{recursive:true});
 cpSync(join(root,'editions',edition.id,'developer-tools.js'),join(application,'src/developer-tools.js'));
 cpSync(join(root,'editions',edition.id,'edition-ui.js'),join(application,'ui/edition-ui.js'));
 if(edition.developer){
+ cpSync(join(root,'editions/developer/entry-report.js'),join(application,'src/entry-report.js'));
  const journal=readFileSync(join(root,'editions/developer/developer-journal.js'),'utf8');
  if(!journal.includes("from '../../src/runtime-faults.js'"))throw Error('developer_journal_import_changed');
  writeFileSync(join(application,'src/developer-journal.js'),journal.replace("from '../../src/runtime-faults.js'","from './runtime-faults.js'"));

@@ -13,24 +13,27 @@ const assets=new Map();
 const NAMES=new Set(['daily.js','auto-entry.js','pc-entry.js','keymedi-lounge.js','doctorville-quiz-pilot.js','doctorville-quiz-journey.js','doctorville-quiz-page.js','doctorville-survey.js','credential-login.js','credential-keymedi-proof.js','credential-background-keymedi-proof.js','credential-page-state.js','credential-docple-session.js']);
 const failure=code=>Object.assign(Error(code),{code});
 export class AutomationPage{
- constructor(site,signal,preferences,{onDialog=()=>({accept:false,status:'unknown',reason:'manual_confirmation'})}={}){
-  Object.assign(this,{site,signal,preferences,onDialog});this.windows=[];this.generation=0;this.popupAllowed=false;this.focusPopup=false;this.closed=false;this.dialogResult=null;this.dialogs=0;
+ constructor(site,signal,preferences,{onDialog=()=>({accept:false,status:'unknown',reason:'manual_confirmation'}),onDiagnostic=()=>{}}={}){
+  Object.assign(this,{site,signal,preferences,onDialog,onDiagnostic});this.windows=[];this.generation=0;this.popupAllowed=false;this.focusPopup=false;this.closed=false;this.dialogResult=null;this.dialogs=0;
   this.runtime={navigationBlocked:0,popupDenied:0,mainFrameFailures:0,consoleErrors:0,credentialRequestObservationSupported:['doctorville','dtalks','whodadoc','hmp'].includes(site),credentialNetworkEnabled:false,credentialRequests:0,credentialResponses:0,credentialHttpStatus:0,credentialNetworkFailures:0};this.root=this.#create();this.current=this.root;this.abort=()=>this.close();signal.addEventListener('abort',this.abort,{once:true});
  }
+ #diagnostic(stage,detail={}){if(!this.closed&&!this.signal.aborted)try{this.onDiagnostic(stage,{...detail,pageGeneration:this.generation});}catch{}}
  #create(){
   const window=new BrowserWindow({show:false,width:1100,height:1800,autoHideMenuBar:true,webPreferences:{...this.preferences,backgroundThrottling:false}});
   try{this.#guard(window);return window;}catch{window.destroy();throw failure('worker_closed');}
  }
  #guard(window){
   this.windows.push(window);const contents=window.webContents;
-  const guard=(event,url)=>{if(!allowedNavigation(this.site,typeof url==='string'?url:event.url)){this.runtime.navigationBlocked=Math.min(1000,this.runtime.navigationBlocked+1);event.preventDefault();}};
+  const guard=(event,url)=>{if(!allowedNavigation(this.site,typeof url==='string'?url:event.url)){this.runtime.navigationBlocked=Math.min(1000,this.runtime.navigationBlocked+1);event.preventDefault();this.#diagnostic('navigation_blocked');}};
   contents.on('will-navigate',guard);contents.on('will-redirect',(event,url,_inPlace,main)=>{if((main??event.isMainFrame)!==false)guard(event,url);});
   contents.on('will-attach-webview',event=>event.preventDefault());
-  contents.on('did-start-navigation',(event,_url,inPlace,main)=>{if((main??event.isMainFrame)&&!(inPlace??event.isInPlace))this.generation++;});
-  contents.on('did-fail-load',(_event,code,_description,_url,main)=>{if(main!==false&&code!==-3)this.runtime.mainFrameFailures=Math.min(1000,this.runtime.mainFrameFailures+1);});
+  contents.on('did-start-navigation',(event,_url,inPlace,main)=>{if((main??event.isMainFrame)&&!(inPlace??event.isInPlace)){this.generation++;this.#diagnostic('page_started',{mainFrame:true});}});
+  contents.on('did-finish-load',()=>this.#diagnostic('page_finished',{mainFrame:true}));
+  contents.on('render-process-gone',()=>this.#diagnostic('renderer_gone'));
+  contents.on('did-fail-load',(_event,code,_description,_url,main)=>{if(main!==false&&code!==-3){this.runtime.mainFrameFailures=Math.min(1000,this.runtime.mainFrameFailures+1);this.#diagnostic('network_error',{mainFrame:true});}});
   contents.on('console-message',(event,details)=>{const level=typeof details==='number'?details:details?.level??event.level;if(level==='error'||level===3)this.runtime.consoleErrors=Math.min(1000,this.runtime.consoleErrors+1);});
   contents.setWindowOpenHandler(({url})=>{if(this.popupAllowed&&this.windows.length<3&&allowedPopup(this.site,url,contents.getURL()))return {action:'allow',overrideBrowserWindowOptions:{show:false,width:1100,height:1800,webPreferences:{...this.preferences,backgroundThrottling:false}}};this.runtime.popupDenied=Math.min(1000,this.runtime.popupDenied+1);return {action:'deny'};});
-  contents.on('did-create-window',child=>{try{this.#guard(child);if(this.focusPopup)this.current=child;}catch{child.destroy();this.dialogResult={status:'unknown',reason:'worker_closed'};}});
+  contents.on('did-create-window',child=>{try{this.#guard(child);if(this.focusPopup)this.current=child;this.#diagnostic('popup_opened',{popup:true});}catch{child.destroy();this.dialogResult={status:'unknown',reason:'worker_closed'};}});
   // Browser dialogs are read only to fixed classifications, never logged raw.
   // Unknown confirmations are dismissed; only a task-specific original claim
   // confirmation can be accepted by the host's callback.
@@ -46,6 +49,7 @@ export class AutomationPage{
     else if(method==='Network.loadingFailed'&&requests.has(params.requestId)){this.runtime.credentialNetworkFailures=Math.min(1000,this.runtime.credentialNetworkFailures+1);requests.delete(params.requestId);}
    }
    if(method!=='Page.javascriptDialogOpening')return;
+   this.#diagnostic('dialog_observed');
    this.dialogs++;let decision={accept:false,status:'unknown',reason:'manual_confirmation'};
    if(!this.closed&&!this.signal.aborted&&this.dialogs<=5&&allowedNavigation(this.site,contents.getURL()))try{
     decision=this.credentialDialog?{accept:false,status:/비밀번호.*(?:틀|오류|일치하지)|아이디.*(?:틀|오류|일치하지)|invalid.*(?:password|credential)/i.test(params.message)?'rejected':/captcha|보안문자|인증번호|추가인증/i.test(params.message)?'challenge':'manual',reason:'site_dialog'}:this.onDialog(params.message,params.type)??decision;

@@ -3,6 +3,9 @@ import {reasonLabels,siteLabel,collectionSummary} from '../src/catalog-presentat
 import {renderAutomation} from './automation-view.js';
 import {setupCredentials,renderCredentials,openCredential,credentialLabel,resultLabel} from './credential-view.js';
 const api=window.doctorGlean,message=document.getElementById('message');let refreshing=false,repeat=false;
+const updateCheck=document.getElementById('update-check'),updatePage=document.getElementById('update-page'),updateText=document.getElementById('update-result');
+updateCheck.onclick=async()=>{updateCheck.disabled=true;updatePage.hidden=true;try{const result=await api.checkUpdate();updateText.textContent=result.status==='private_delivery'?'개발자용은 GitHub에 로그인한 지정 협업자용 Draft에서 확인해 주세요.':result.status==='available'?'새 PC '+result.version+' 버전이 있어요. 공개 메타데이터 확인이며 설치·서명 검증은 별도예요.':result.status==='current'?'현재 PC 채널에서 더 높은 공개 버전을 찾지 못했어요.':'업데이트를 확인하지 못했어요. 최신 버전이라는 뜻은 아니에요.';updatePage.hidden=!['available','private_delivery'].includes(result.status);}catch{updateText.textContent='업데이트를 확인하지 못했어요.';}finally{updateCheck.disabled=false;}};
+updatePage.onclick=()=>api.openUpdatePage().catch(()=>{updateText.textContent='공식 배포 페이지를 열지 못했어요.';});
 function say(text){message.textContent=text;}
 function node(tag,text,className){const el=document.createElement(tag);if(text!==undefined)el.textContent=text;if(className)el.className=className;return el;}
 async function perform(action,success){try{const r=await action();say(r?.ok?success:r?.reason==='busy'?'진행 중인 작업이나 직접 사용하는 사이트 창을 마친 뒤 다시 확인해 주세요.':r?.reason==='paused'?'자동 실행을 허용한 뒤 실행해 주세요. 상태만 확인은 중지 중에도 사용할 수 있어요.':r?.reason==='invalid_selection'?'조회할 사이트를 하나 이상 선택해 주세요.':r?.reason==='window_unavailable'?'사이트 창을 만들지 못했어요. 오류보고를 저장해 주세요.':r?.reason==='session_storage_error'?'세션 저장 요청을 마치지 못했어요. 사이트 창을 유지하고 다시 시도해 주세요.':'작업을 완료하지 못했어요.');await refresh();return r;}catch{say('프로그램 상태를 확인하지 못했어요.');}}

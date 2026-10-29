@@ -29,6 +29,8 @@ contextBridge.exposeInMainWorld('doctorGlean',Object.freeze({
   preflightUpcoming:()=>ipcRenderer.invoke('pc:entry-preflight-upcoming'),
   quit:()=>ipcRenderer.invoke('pc:quit'),
   exportReport:()=>ipcRenderer.invoke('pc:export-report'),
+  checkUpdate:()=>ipcRenderer.invoke('pc:update-check'),
+  openUpdatePage:()=>ipcRenderer.invoke('pc:update-page'),
   onChanged:callback=>{
     if(typeof callback!=='function')return ()=>{};
     const listener=()=>callback();ipcRenderer.on('pc:changed',listener);

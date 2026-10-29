@@ -1,5 +1,7 @@
 # 구조와 신뢰 경계
 
+preview.21의 PC 관찰 계약·선택 보고·현재 입력 검증·업데이트 확인은 [QUALITY_WORKFLOW](QUALITY_WORKFLOW.md)를 따른다. 추가 회차 모듈은 editions/developer/entry-report.js에만 있고 배포용 빌드에 넣지 않는다. 원래 작업 경계의 best-effort 진단 훅은 행동 권한이 아니며 기존 필수 저장·소유 창·취소·기한을 유지한다.
+
 기준: PC 0.1.0-preview.9. Electron 45.0.0, JavaScript ES modules, 로컬 파일 저장을 사용한다.
 
 ## 디렉터리

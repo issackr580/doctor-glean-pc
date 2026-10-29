@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,rmSync,existsSync} from 'node:fs';
+import {mkdtempSync,rmSync,existsSync,readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {LocalState} from '../src/local-state.js';
@@ -9,6 +9,7 @@ import {EntryRunner} from '../src/entry-runner.js';
 import {DailyRunner} from '../src/daily-runner.js';
 import {AutomationController} from '../src/automation-controller.js';
 import {DeveloperJournal} from '../editions/developer/developer-journal.js';
+import {createDeveloperTools} from '../editions/developer/developer-tools.js';
 import {dailyEvidenceLabel,entrySummary,entrySessionSummary,entryFailureLabel,entryEvidenceLabel,preflightLabel,entryRunVersion} from '../src/execution-presentation.js';
 import {kstDate,kstInstant} from '../src/schedule.js';
 const date=kstDate(),at=time=>kstInstant(date,time);
@@ -151,4 +152,17 @@ test('batch processed counts distinguish waiting for an entry button from login 
  const s=setup(t);let pages=0;
  const controller=batchController(t,s,async()=>{const n=++pages;return page(async()=>n===1?{status:'not_open',targetMatched:true,reason:'opens_later'}:{status:'login',reason:'login_required'});});
  await controller.preflightUpcoming();assert.deepEqual(controller.snapshot().preflight,{running:false,total:2,completed:2,skipped:0,ready:0,waiting:1,login:1,unresolved:0,reason:'finished'});assert.equal(Object.keys(s.ledger.snapshot().jobs).length,0);
+});
+
+test('entry diagnostic exceptions never interrupt the durable one-shot dispatch',async t=>{
+ const s=setup(t);s.ledger.setPaused(false);s.clock.set(at('13:00:30'));let clicks=0;
+ const runner=reserve(s,{traceEntry(){throw Error('diagnostics unavailable');},observeEntry(){throw Error('diagnostics unavailable');},createPage:async()=>page(async(_name,[_job,mode])=>{if(mode==='click'){assert.equal(Object.values(s.ledger.snapshot().jobs)[0].state,'attempting');clicks++;return {status:'clicked'};}return {status:'ready',targetMatched:true};})});
+ await runner.run(runner.due());assert.equal(clicks,1);assert.equal(s.store.entries()[0].entryAttempted,true);assert.equal(runner.retryJob(s.store.entries()[0].key),false);
+});
+test('clearing actual entry diagnostics preserves reservation and consumed attempt bytes',async t=>{
+ const s=setup(t);s.ledger.setPaused(false);s.clock.set(at('13:00:30'));const handlers=new Map();let clicks=0;
+ const tools=createDeveloperTools({directory:s.root,register:(k,fn)=>handlers.set(k,fn),save(){},copy(){},notify(){},policy:{},edition:{id:'developer',appId:'synthetic'},version:'0.1.0-preview.21',snapshot:()=>({})});tools.register();handlers.get('pc-dev:enabled')(true);
+ const runner=reserve(s,{traceEntry:(...args)=>tools.traceEntry(...args),observeEntry:(...args)=>tools.observeEntry(...args),createPage:async()=>page(async(_name,[_job,mode])=>{if(mode==='click'){clicks++;return {status:'clicked'};}return {status:'ready',targetMatched:true};})});
+ await runner.run(runner.due());const files=['state.json','workflows.json'],before=files.map(n=>readFileSync(join(s.root,n),'utf8'));
+ assert.equal(handlers.get('pc-dev:entry-list')().records.length,1);handlers.get('pc-dev:clear')();assert.deepEqual(files.map(n=>readFileSync(join(s.root,n),'utf8')),before);assert.equal(handlers.get('pc-dev:entry-list')().records.length,0);assert.equal(runner.retryJob(s.store.entries()[0].key),false);assert.equal(clicks,1);
 });

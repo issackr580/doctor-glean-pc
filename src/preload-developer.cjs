@@ -29,6 +29,8 @@ contextBridge.exposeInMainWorld('doctorGlean',Object.freeze({
   preflightUpcoming:()=>ipcRenderer.invoke('pc:entry-preflight-upcoming'),
   quit:()=>ipcRenderer.invoke('pc:quit'),
   exportReport:()=>ipcRenderer.invoke('pc:export-report'),
+  checkUpdate:()=>ipcRenderer.invoke('pc:update-check'),
+  openUpdatePage:()=>ipcRenderer.invoke('pc:update-page'),
   onChanged:callback=>{
     if(typeof callback!=='function')return ()=>{};
     const listener=()=>callback();ipcRenderer.on('pc:changed',listener);
@@ -43,4 +45,8 @@ contextBridge.exposeInMainWorld('doctorGleanDeveloper',Object.freeze({
   clear:()=>ipcRenderer.invoke('pc-dev:clear'),
   export:()=>ipcRenderer.invoke('pc-dev:export'),
   policyCheck:()=>ipcRenderer.invoke('pc-dev:policy-check'),
+  entryList:()=>ipcRenderer.invoke('pc-dev:entry-list'),
+  entryPreview:id=>ipcRenderer.invoke('pc-dev:entry-preview',id),
+  entrySave:token=>ipcRenderer.invoke('pc-dev:entry-save',token),
+  entryCopy:token=>ipcRenderer.invoke('pc-dev:entry-copy',token),
 }));
