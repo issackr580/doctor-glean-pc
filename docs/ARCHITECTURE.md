@@ -1,3 +1,11 @@
+# PC 구조
+
+preview.28/D27은 update-trust.js의 고정 Ed25519 공개키로 고정 저장소 updates/preview.json 또는 stable.json을 검증한다. PcUpdater는 서명된 같은 채널/에디션의 상향 버전과 검증된 호환 목록만 보관하고 로컬 최상위 관리 창의 매개변수 없는 확인/설치 IPC만 받는다. 피드에는 임의 규칙/명령·인증 토큰이 없다. 공개 다운로드는 Electron net.request의 각 리디렉션을 검증하고 세션 쿠키를 사용하지 않는다. ZIP reader는 크기/CRC/경로·Windows 별칭·중복/링크를 제한하고 전체 app 파일·package 버전/에디션/source commit·모든 기존 runtime 해시를 검증한다.
+
+developer 전용 update-download.js는 별도 GitHub 업데이트 프로필·Node/preload/관리 IPC 없는 sandbox 창에서 사용자 로그인을 받는다. 원래 로그인/2FA 내용을 읽거나 입력하지 않고 고정 Draft 페이지의 제목만 확인해 고정 첨부를 한 번 요청한다. 다운로드 체인의 출처·이름·크기를 제한하며 최종 서명/SHA 검증은 공통 updater가 수행한다. 다른 origin의 최상위 이동·새 창·권한·다른 파일은 차단한다. distribution에는 이 구현을 넣지 않고 같은 자리에 거절 stub만 넣는다. 임상 사이트 프로필·호스트 허용 정책은 유지한다.
+
+설치 준비는 같은 resources의 무작위 전용 폴더에 app 전체·필수 해시 plan·설치된 고정 helper를 준비한다. 현재 작업/수동 창/임박 입장 시 ready_busy로 미룬다. 실행 guard를 먼저 세워 새 dispatch를 막고 기존 Electron을 run-as-Node로 실행한 helper의 IPC 준비 ACK 뒤 종료한다. helper는 부모 종료 후 app→previous-app, staged app→app으로 교체하고 같은 EXE를 재시작한다. 새 앱은 UI 로드와 전체 주 프로세스 준비 뒤 nonce/버전/PID ACK를 보낸다. helper commit까지 자동 작업을 막고 시작 실패 시 새 프로세스를 종료하고 이전 app을 복구한다. 백업은 유지하며 데이터·세션·시도 파일은 읽거나 교체하지 않는다. 서명 개인키·계정/토큰은 helper plan과 배포물에 없다. 설치 권한/런타임 불일치는 명시적으로 실패하거나 전체 묶음을 안내한다.
+
 # 구조와 신뢰 경계
 
 preview.27의 entry-revision.js는 닥터빌의 당일 미입장 예약을 최신 조회와 새 상세로 확인한다. EntryRunner의 최대40개 메모리 후보는 새 조회와 미실행 읽기 재시도 뒤 준비하고 AutomationController의 schedule 읽기 작업으로 검증한다. 별도 검사 창은 원래 고정 main→관찰 단일 상세만 GET하고 schedule-inspect를 두 번 읽는다. 예약 snapshot·조회 checkedAt/identity·선택·중지·날짜·문서 세대/정확한 URL·미소비를 계속 확인한다. 같은 상세의 캐시 시각 충돌은 새 상세의 독립 날짜·완전 제목·첫 시작 시각으로 해소한다. 다른 정시 입장/닥터라운지에 양보하며 같은 예약의 예전 due보다 일정 확인을 먼저 하고, 진행 중 후보는 미래 후보보다 우선한다. 읽기에는 클릭/계정 제출/필수 시도 소비가 없다.

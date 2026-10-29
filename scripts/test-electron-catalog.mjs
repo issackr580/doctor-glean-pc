@@ -80,8 +80,10 @@ try{
  check('developer bridge matches the built edition',hasDeveloper===edition.developer);
  check('update page cannot be opened before an explicit check',!(await evaluate('window.doctorGlean.openUpdatePage()')).ok&&openedPages.length===0);
  const update=await evaluate('window.doctorGlean.checkUpdate()');
- check('PC update distinguishes collaborator delivery from unsupported synthetic Linux',update.status===(edition.developer?'private_delivery':'unknown'));
- if(edition.developer){await evaluate('window.doctorGlean.openUpdatePage("https://foreign.invalid/")');check('developer update opens only the fixed PC release list',openedPages.length===1&&openedPages[0]==='https://github.com/issackr580/doctor-glean-pc/releases');}
+ check('button updates are disabled on the unsupported synthetic Linux runtime',update.status==='unsupported');
+ if(edition.developer){await evaluate('window.doctorGlean.openUpdatePage("https://foreign.invalid/")');check('developer cannot open an unsigned update page or supplied URL',openedPages.length===0);}
+ check('renderer supplied update arguments cannot select a URL, local file or executable',(await evaluate('window.doctorGlean.installUpdate("https://foreign.invalid/", "/tmp/private")')).status==='failed'&&openedPages.length===0);
+ check('rendered control can acknowledge readiness without supplying a nonce, path or process',(await evaluate('window.doctorGlean.updateReady("untrusted", "/tmp/private", 1)')).ok===true);
  await evaluate('[...document.querySelectorAll("#sites button")].find(b=>b.textContent==="계정 저장·복구").click()');
  check('account settings open in the local control dialog',await evaluate('document.querySelector("#credential-dialog").open'));
  writeFileSync(new URL('../verification/account-settings-'+edition.id+'.png',import.meta.url),(await control.webContents.capturePage()).toPNG());

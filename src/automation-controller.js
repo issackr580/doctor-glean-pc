@@ -7,8 +7,8 @@ import {DAILY_TASKS} from './automation-policy.js';
 import {kstDate,kstInstant,nextLoungePreparation} from './schedule.js';
 function nextMorning(now){const today=kstDate(now),at=kstInstant(today,'08:10');return at>now?at:kstInstant(kstDate(now+86400000),'08:10');}
 export class AutomationController{
- constructor({file,ledger,createPage,createInspectionPage,isManualOpen,catalog,catalogBusy,queueCatalog,yieldCatalog,onChange=()=>{},onEvent=()=>{},onError=()=>{},now=Date.now,traceEntry,observeEntry}){
-  Object.assign(this,{ledger,createPage,isManualOpen,catalog,catalogBusy,queueCatalog,yieldCatalog,onChange,onError,now});this.store=new WorkflowStore(file);this.active=null;this.pendingDaily=[];this.pendingReadOnly=true;this.closed=false;
+ constructor({file,ledger,createPage,createInspectionPage,isManualOpen,catalog,catalogBusy,queueCatalog,yieldCatalog,onChange=()=>{},onEvent=()=>{},onError=()=>{},now=Date.now,traceEntry,observeEntry,executionAllowed=()=>true}){
+  Object.assign(this,{ledger,createPage,isManualOpen,catalog,catalogBusy,queueCatalog,yieldCatalog,onChange,onError,now,executionAllowed});this.store=new WorkflowStore(file);this.active=null;this.pendingDaily=[];this.pendingReadOnly=true;this.closed=false;
   this.store.recover();
   const common={ledger,store:this.store,createPage,createInspectionPage,isManualOpen,onChange:()=>{onChange();},onEvent,now};
   this.quiz=new DoctorvilleQuizRunner(common);
@@ -16,7 +16,7 @@ export class AutomationController{
   this.entry=new EntryRunner({...common,catalog,traceEntry,observeEntry});this.entry.recover();this.lounge=new LoungeRunner(common);
   this.rearm();this.timer=setInterval(()=>this.tick(),250);this.timer.unref();
  }
- allowed(){return !this.closed&&!this.ledger.snapshot().paused&&!this.store.failed;}
+ allowed(){return !this.closed&&this.executionAllowed()&&!this.ledger.snapshot().paused&&!this.store.failed;}
  get busy(){return !!this.active||this.daily.busy||this.entry.busy||this.lounge.busy;}
  rearm(){this.boundary=this.now();this.morningAt=nextMorning(this.now());this.loungeAt=nextLoungePreparation(this.now());}
  snapshot(){return {features:this.store.features(),entrySites:this.store.entrySites(),today:this.store.day(),entries:this.store.entries(),daily:this.daily.snapshot(),preflight:this.preflightProgress,active:this.active??'',queuedDaily:[...this.pendingDaily],nextMorning:this.store.features().morning?this.morningAt:0,nextLounge:this.store.features().lounge?this.loungeAt:0,storageUnavailable:this.store.failed};}
@@ -80,7 +80,7 @@ export class AutomationController{
   finally{this.active=null;this.onChange();if(!this.closed){queueMicrotask(()=>this.tick());}}
  }
  tick(){
-  if(this.closed)return;
+  if(this.closed||!this.executionAllowed())return;
   try{
    const now=this.now(),features=this.store.features(),entry=this.allowed()&&features.entry?this.entry.due(now,this.active==='schedule'?this.entry.active?.job.key:undefined):null;
    const loungeDue=this.allowed()&&features.lounge&&now>=this.loungeAt&&now<this.loungeAt+60000+20000&&!this.store.day(kstDate(now)).lounge;

@@ -28,7 +28,9 @@ import {credentialSite,safeCredentialStatus} from './credential-policy.js';
 import {credentialPageState} from './credential-page-state.js';
 import {manualLoadRecovery} from './site-load-policy.js';
 import {RuntimeFaults,faultNotice} from './runtime-faults.js';
-import {checkPcUpdate,PC_RELEASES} from './update-policy.js';
+import {PcUpdater} from './update-manager.js';
+import {downloadPrivateUpdate} from './private-update.js';
+import {electronPatchDownload} from './update-electron-download.js';
 import {RegistrationController,RegistrationStore,registrationKey} from './registration.js';
 import {pcEntryPage} from './entry-page.js';
 import {doctorvilleDetailNavigation} from './automation-policy.js';
@@ -45,7 +47,7 @@ if(app.getPath('userData')!==dataDirectory)app.setPath('userData',dataDirectory)
 if(app.getPath('sessionData')!==browserDirectory)app.setPath('sessionData',browserDirectory);
 if(process.platform==='win32')app.setAppUserModelId(EDITION.appId);
 const controlUrl=new URL('../ui/index.html',import.meta.url).href;
-let control,tray,state,catalog,collector,catalogQueue,automation,credentials,registration,developerTools,preload,quitting=false,viewDate=kstDate();
+let control,tray,state,catalog,collector,catalogQueue,automation,credentials,registration,developerTools,preload,updater,quitting=false,viewDate=kstDate();
 const registrationWindows=new Map(),registrationConfirmed=new Map();
 const siteWindows=new Map(),remoteWindows=new Set(),configuredSessions=new Set();
 const manualOwners=new Map();
@@ -74,7 +76,7 @@ const buildState=()=>({
   sites:SITES.map(({id,name,loginUrl})=>({id,name,open:[...manualOwners.values()].includes(id),loginEntry:!!loginUrl,session:effectiveSession(id),catalog:id!=='docple',selected:catalog.selected().includes(id)})),
   collection:collector.snapshot(),results:catalog.view(validQueryDate(viewDate)?viewDate:kstDate()).results,
   pendingQueries:catalogQueue?.snapshot()??[],
-  credentials:credentials?.snapshot(),
+  credentials:credentials?.snapshot(),update:updater?.snapshot(),
   automationAvailable:true,automation:automation?.snapshot(),registration:registrationState(),dailyTasks:DAILY_TASKS.map(({key,label,site})=>({key,label,site})),
 });
 
@@ -298,20 +300,19 @@ function openSite(id,login=false){
 function registerIPC(channel,handler){
   ipcMain.handle(channel,async(event,...args)=>{
     if(!trustedControl(event,control,controlUrl))throw Error('not_allowed');
+    if(updater?.guarded&&!['pc:state','pc:quit','pc:update-check','pc:update-install','pc:update-ready'].includes(channel))return {ok:false,reason:'busy'};
     try{return await handler(...args);}
     catch(error){return {ok:false,reason:['invalid_selection','invalid_date','collection_busy','window_unavailable'].includes(error.message)?error.message:'operation_unavailable'};}
   });
 }
 function ipc(){
-  let updateResult,updatePending;
-  registerIPC('pc:update-check',async()=>{
-   if(updatePending)return updatePending;
-   updatePending=checkPcUpdate({fetch:(...args)=>net.fetch(...args),edition:EDITION.id,currentVersion:VERSION,platform:process.platform,arch:process.arch,channel:VERSION.includes('-preview.')?'preview':'stable'}).then(result=>(updateResult=result)).finally(()=>{updatePending=null;});return updatePending;
-  });
+  registerIPC('pc:update-check',()=>updater.check());
+  registerIPC('pc:update-install',()=>updater.install());
+  registerIPC('pc:update-ready',()=>{updater.acknowledgeBoot().catch(()=>{});return {ok:true};});
   registerIPC('pc:update-page',async()=>{
-   if(!updateResult||!['available','private_delivery'].includes(updateResult.status))return {ok:false};
-   const page=updateResult.status==='private_delivery'?PC_RELEASES:updateResult.page;
-   if(page!==PC_RELEASES&&!/^https:\/\/github\.com\/issackr580\/doctor-glean-pc\/releases\/tag\/pc-v\d+\.\d+\.\d+(?:-preview\.\d+)?$/.test(page))return {ok:false};
+   const result=updater.snapshot();if(!['available','full_required'].includes(result.status))return {ok:false};
+   const page=result.page;
+   if(!/^https:\/\/github\.com\/issackr580\/doctor-glean-pc\/releases\/tag\/(?:pc-v\d+\.\d+\.\d+(?:-preview\.\d+)?|untagged-[a-zA-Z0-9-]{1,80}|pc-developer-v\d+\.\d+\.\d+(?:-preview\.\d+)?)$/.test(page))return {ok:false};
    await shell.openExternal(page);return {ok:true};
   });
   developerTools.register();
@@ -398,6 +399,11 @@ else{
   app.whenReady().then(()=>{
     try{
       state=new LocalState(join(app.getPath('userData'),'state-v1.json'));
+      updater=new PcUpdater({context:{appPath:app.getAppPath(),executable:process.execPath,edition:EDITION.id,currentVersion:VERSION,electronVersion:process.versions.electron,platform:process.platform,arch:process.arch,channel:VERSION.includes('-preview.')?'preview':'stable'},
+       fetch:(...args)=>net.fetch(...args),publicDownload:electronPatchDownload,privateDownload:(target,progress)=>downloadPrivateUpdate(target,progress,{parent:control}),
+       isBusy:()=>!!automation?.busy||!!credentials?.busy||!!registration?.active||!!collector?.snapshot().running||manualOwners.size>0||remoteWindows.size>0||!state.snapshot().paused&&automation?.store.features().entry&&!!automation?.store.entries().some(job=>job.status==='reserved'&&job.deadline>=Date.now()&&(job.nextAt??job.due)<=Date.now()+120000),
+       onChange:()=>{notify();if(!updater?.guarded){catalogQueue?.pump();automation?.tick();}},quit:()=>app.quit()});
+      if(updater.waitForHelper){app.quit();return;}
       catalog=new CatalogStore(join(app.getPath('userData'),'catalog-v1.json'));
       developerTools=createDeveloperTools({directory:dataDirectory,register:registerIPC,notify,edition:EDITION,version:VERSION,build:{sourceCommit:BUILD_INFO.sourceCommit,electronVersion:process.versions.electron,chromiumVersion:process.versions.chrome},copy:text=>clipboard.writeText(text),
         policy:{allowedNavigation,remotePreferences},snapshot:diagnosticSnapshot,save:async(defaultPath,content,valid=()=>true)=>{
@@ -411,7 +417,7 @@ else{
       preload=fileURLToPath(new URL('./'+developerTools.preloadName,import.meta.url));
       credentials=new CredentialManager({directory:dataDirectory,applicationId:EDITION.appId,developer:EDITION.developer,
        protect:{available:()=>process.platform==='win32'&&safeStorage.isEncryptionAvailable(),encrypt:text=>safeStorage.encryptString(text),decrypt:bytes=>safeStorage.decryptString(bytes)},
-       automaticAllowed:()=>!state.snapshot().paused,isManualOpen:id=>[...manualOwners.values()].includes(id),
+       automaticAllowed:()=>!state.snapshot().paused&&!updater.guarded,isManualOpen:id=>[...manualOwners.values()].includes(id),
        createPage:async(id,signal,{validation,partition}={})=>{
         const prefs=validation?{...remotePreferences(id,EDITION.id),partition}:prepareSession(id);
         if(validation){const profile=session.fromPartition(partition);profile.setPermissionRequestHandler((_c,_p,callback)=>callback(false));profile.setPermissionCheckHandler(()=>false);profile.on('will-download',event=>event.preventDefault());}
@@ -422,8 +428,8 @@ else{
       collector=new CatalogRunner({store:catalog,createPage:(profile,signal)=>electronCatalogPage(profile,signal,prepareSession(profile.id)),
         recoverLogin:async(id,signal)=>(await credentials.recover(id,{automatic:true,signal})).status==='authenticated',
         isManualOpen:id=>[...manualOwners.values()].includes(id)||credentials.active?.site===id,onChange:snapshot=>{developerTools.observe(snapshot);notify();if(!snapshot.running)queueMicrotask(()=>catalogQueue?.pump());}});
-      catalogQueue=new CatalogQueue({start:async(date,ids)=>{await collector.start(date,ids);automation?.catalogFinished(date,ids,collector.snapshot());},busy:()=>collector.snapshot().running||!!automation?.busy||credentials.busy,validDate:validQueryDate,onChange:notify});
-      automation=new AutomationController({file:join(dataDirectory,'workflows-v1.json'),ledger:state,
+      catalogQueue=new CatalogQueue({start:async(date,ids)=>{await collector.start(date,ids);automation?.catalogFinished(date,ids,collector.snapshot());},busy:()=>updater.guarded||collector.snapshot().running||!!automation?.busy||credentials.busy,validDate:validQueryDate,onChange:notify});
+      automation=new AutomationController({file:join(dataDirectory,'workflows-v1.json'),ledger:state,executionAllowed:()=>!updater.guarded,
        createPage:(site,signal,options)=>credentials.wrapPage(site,new AutomationPage(site,signal,prepareSession(site),options)),
        createInspectionPage:(site,signal,options)=>new AutomationPage(site,signal,prepareSession(site),options),onEvent:event=>developerTools.event(event),traceEntry:(job,kind)=>developerTools.traceEntry(job,kind),observeEntry:(...args)=>developerTools.observeEntry(...args),
        isManualOpen:id=>[...manualOwners.values()].includes(id)||credentials.active?.site===id,catalog:date=>catalog.view(date).results,catalogBusy:()=>collector.snapshot().running||credentials.busy,
