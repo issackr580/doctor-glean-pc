@@ -1,5 +1,7 @@
 # 구조와 신뢰 경계
 
+preview.22의 src/registration.js는 명시적인 관리 창 요청만 처리한다. 새 신청 시도 파일을 외부 동작 전에 저장하고 기존 입장/계정/진단 저장과 분리한다. 눈에 보이는 원래 사이트 창은 기존 하드닝과 전용 프로필을 유지한다. 원래 신청 버튼 호출은 격리 world1002에서 현재 URL/문서 세대·정확한 대상·기한에 묶이며 사이트에 새 preload/IPC를 주지 않는다. 자동 작업 창의 pc-registration.js는 inspect만 허용한다. 미확인 뒤에는 읽기만 하고 개인 입력·결제·동의·보안 확인은 자동 처리하지 않는다. 기존 v1 파일 형식/사이트 허용 범위를 변경하지 않는다.
+
 preview.21의 PC 관찰 계약·선택 보고·현재 입력 검증·업데이트 확인은 [QUALITY_WORKFLOW](QUALITY_WORKFLOW.md)를 따른다. 추가 회차 모듈은 editions/developer/entry-report.js에만 있고 배포용 빌드에 넣지 않는다. 원래 작업 경계의 best-effort 진단 훅은 행동 권한이 아니며 기존 필수 저장·소유 창·취소·기한을 유지한다.
 
 기준: PC 0.1.0-preview.9. Electron 45.0.0, JavaScript ES modules, 로컬 파일 저장을 사용한다.

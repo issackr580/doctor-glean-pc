@@ -4,6 +4,13 @@ export function dailyEvidenceLabel(receipt){
  if(receipt.attempted===true)return 'PC 시도 이력 있음 · 사이트 완료 상태 확인';
  return receipt.attempted===false?'기존 완료 상태 확인 · PC 새 제출 없음':'사이트 완료 상태 확인 · PC 제출 여부 미기록';
 }
+export function canRegisterEntry(job){return !!job&&!job.entryAttempted&&['reserved','not_registered','login','busy','network','target_missing','button_missing','not_open','unknown','ambiguous','blocked'].includes(job.status);}
+export const registrationButtonLabel=row=>row?'신청 상태 확인':'신청하기';
+export function registrationReplyLabel(result){
+ if(result?.ok){if(result.status==='confirmed')return '사이트에서 신청 완료 상태를 확인했어요. 열린 신청 창을 마치고 목록·자동 입장 예약을 확인해 주세요.';if(result.status==='requested')return '원래 신청 버튼을 실행했어요. 열린 사이트에서 최종 신청·동의를 마친 후 「신청 마침 · 상태 확인」을 눌러 주세요.';return '신청 완료를 확인하지 못했어요. 사이트에서 마무리한 뒤 신청 상태를 다시 확인해 주세요. 같은 신청은 자동으로 다시 보내지 않아요.';}
+ if(result?.reason==='storage_error')return result.attempted?'신청 시도 뒤 기록 저장에 문제가 있어요. 사이트에서 결과를 확인해 주세요. 자동으로 다시 보내지 않아요.':'신청 시도 기록을 저장하지 못해 버튼을 실행하지 않았어요.';
+ return ({busy:'진행 중인 작업을 마친 뒤 신청해 주세요.',manual_view_open:'이미 열린 해당 사이트 창을 마친 뒤 신청해 주세요.',login_required:'열린 신청 창에서 직접 로그인한 뒤 다시 신청해 주세요.',cancelled:result?.attempted?'신청 시도 뒤 중지됐어요. 사이트에서 결과를 확인해 주세요.':'신청 작업을 중지했어요.',registration_unavailable:'이 강의는 현재 신청할 수 없어요. 날짜·신청 마감과 예약 상태를 확인해 주세요.',invalid_registration:'현재 목록이나 예약의 강의를 선택해 주세요.'})[result?.reason]??'선택한 강의의 신청 버튼을 확인하지 못했어요. 열린 사이트에서 직접 확인해 주세요.';
+}
 export function entrySummary(entries){
  const summary={reservations:entries.length,waiting:0,pcClickedJobs:0,pcClicks:0,needsAttention:0,manual:0};
  for(const job of entries){

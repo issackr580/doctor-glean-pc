@@ -16,6 +16,7 @@ const dataDirectory=join(temporary,edition.directory),browserDirectory=join(data
 mkdirSync(browserDirectory,{recursive:true});app.setPath('appData',temporary);app.setPath('userData',dataDirectory);app.setPath('sessionData',browserDirectory);
 const resultFile=new URL('../verification/electron-edition-'+edition.id+'.json',import.meta.url);
 const modes={doctorville:'normal',keymedi:'normal',whodadoc:'normal',dtalks:'entry-error'},requests=[],checks=[];
+let registrationPosted=false,registrationDurable=false,registrationPostCount=0,hmpRegistered=false,hmpRegistrationPosts=0,hmpRegistrationDurable=false;
 const windowMenus=new WeakMap(),setMenu=BrowserWindow.prototype.setMenu;
 BrowserWindow.prototype.setMenu=function(menu){windowMenus.set(this,menu);return setMenu.call(this,menu);};
 const today=kstDate(),tomorrow=kstDate(Date.parse(today+'T12:00:00+09:00')+86_400_000);
@@ -38,10 +39,17 @@ for(const id of ['doctorville','keymedi','whodadoc','dtalks','hmp']){
  const profile=session.fromPartition(`persist:doctor-glean-pc-${edition.id}-v1-${id}`);
  await profile.protocol.handle('https',request=>{
   requests.push({site:id,method:request.method});
+  if(id==='doctorville'&&request.method==='POST'&&new URL(request.url).pathname==='/synthetic-registration'){
+   registrationPostCount++;registrationDurable=Object.values(JSON.parse(readFileSync(join(dataDirectory,'registration-attempts-v1.json'),'utf8')).rows).some(row=>row.site==='doctorville'&&row.date===today&&row.time==='13:00'&&row.attempted===true);registrationPosted=true;return new Response('{}',{headers:{'content-type':'application/json'}});
+  }
+  if(id==='hmp'&&request.method==='POST'&&new URL(request.url).pathname==='/synthetic-hmp-registration'){
+   hmpRegistrationPosts++;hmpRegistrationDurable=Object.values(JSON.parse(readFileSync(join(dataDirectory,'registration-attempts-v1.json'),'utf8')).rows).some(row=>row.site==='hmp'&&row.time==='23:59'&&row.attempted);hmpRegistered=true;return new Response('{}');
+  }
   if(request.method!=='GET')return new Response('not allowed',{status:405});
+  if(id==='hmp'&&modes.hmp==='registration')return new Response(shell(`<div class="area"><div class="top"><span class="date">${today}</span><span class="time">23:59 ~ 23:59</span></div><div class="subject"><strong>합성 한미 신청 강의</strong></div>${hmpRegistered?'<span>신청완료</span>':`<button onclick="event.preventDefault();event.stopPropagation();fetch('/synthetic-hmp-registration',{method:'POST'}).then(()=>this.outerHTML='<span>신청완료</span>')">신청하기</button>`}</div><a href="/logout">로그아웃</a>`),{headers:{'content-type':'text/html; charset=utf-8'}});
   if(id==='dtalks'&&(modes.dtalks==='all-error'||modes.dtalks==='entry-error'&&new URL(request.url).pathname!=='/login.do'))return Response.error();
   if(id==='dtalks'&&modes.dtalks==='calendar')return new Response(shell(`<div class="calendar_wrap"><div class="btn_month_wrap active"><span class="date_txt">${today.slice(0,7).replace('-','.')}</span></div><div class="calendar_box active"><div class="calendar_grid"><div class="day" data-date="${today}"><div class="day_txt">${Number(today.slice(8))}</div><div class="day_box"><div class="time">13:00</div><div class="memo">합성 디톡스 강의</div></div></div></div></div></div>`),{headers:{'content-type':'text/html; charset=utf-8'}});
-  const doctorReady=modes.doctorville==='entry-ready'?doctorCards.replaceAll('</a>','<button onclick="fetch(\'/synthetic-entry\',{method:\'POST\'})">입장하기</button></a>'):doctorCards;
+  const doctorReady=modes.doctorville==='registration'?doctorCards.replaceAll('</a>',registrationPosted?'<span>신청완료</span></a>':`<button onclick="event.preventDefault();event.stopPropagation();fetch('/synthetic-registration',{method:'POST'}).then(()=>this.outerHTML='<span>신청완료</span>')">신청하기</button></a>`):modes.doctorville==='entry-ready'?doctorCards.replaceAll('</a>','<button onclick="fetch(\'/synthetic-entry\',{method:\'POST\'})">입장하기</button></a>'):doctorCards;
   const ready=(id==='doctorville'?doctorReady:id==='keymedi'?keyCards:'<main>웨비나</main>')+'<a href="/logout">로그아웃</a>';
   const body=modes[id]==='login'?login:`<script>document.write(localStorage.getItem('synthetic-login')==='ready'?${JSON.stringify(ready)}:${JSON.stringify(login)});const b=document.getElementById('synthetic-login');if(b)b.onclick=()=>{localStorage.setItem('synthetic-login','ready');location.reload();};</script>`;
   return new Response(shell(body),{headers:{'content-type':'text/html; charset=utf-8'}});
@@ -234,6 +242,35 @@ try{
  check('hidden worker windows released',BrowserWindow.getAllWindows().length===1);
  control.close();check('closing control retains resident app',!control.isDestroyed());
  check('synthetic protocol only made catalog GET requests',requests.every(request=>request.method==='GET'));
+ control.show();modes.doctorville='registration';await evaluate('window.doctorGlean.preflightEntry('+JSON.stringify(seededKey)+')');
+ await until(()=>evaluate('[...document.querySelectorAll("#entry-results button")].some(b=>b.textContent==="신청하기")'));
+ check('missing registration exposes a real control action',(await state()).automation.entries.find(r=>r.key===seededKey).preflight.status==='not_registered');
+ check('registration IPC rejects arbitrary targets before opening a provider',!(await evaluate('window.doctorGlean.requestRegistration("url","https://foreign.invalid/")')).ok&&registrationPostCount===0);
+ const entryLedger=()=>existsSync(join(dataDirectory,'state-v1.json'))?readFileSync(join(dataDirectory,'state-v1.json'),'utf8'):null;
+ const ledgerBeforeRegistration=entryLedger();
+ await evaluate('[...document.querySelectorAll("#entry-results button")].find(b=>b.textContent==="신청하기").click()');
+ await until(async()=>{const s=await state();return !s.registration.active&&s.registration.entries[seededKey]?.state==='confirmed';});
+ const applicationWindow=await until(()=>BrowserWindow.getAllWindows().find(w=>w!==control));
+ check('explicit application is durable before exactly one native provider POST',registrationPostCount===1&&registrationDurable);
+ check('application uses a visible isolated site window',applicationWindow.isVisible()&&await applicationWindow.webContents.executeJavaScript('typeof require==="undefined"&&typeof doctorGlean==="undefined"'));
+ check('registration confirmation is not an entry click or a cleared attempt ledger',entryLedger()===ledgerBeforeRegistration&&!(await state()).automation.entries.find(r=>r.key===seededKey).entryAttempted);
+ const checkedRegistration=await evaluate('window.doctorGlean.requestRegistration("entry",'+JSON.stringify(seededKey)+')');
+ check('the same application action becomes a read-only status check',checkedRegistration.status==='confirmed'&&registrationPostCount===1);
+ const finishRegistration=windowMenus.get(applicationWindow).getMenuItemById('finish-registration');finishRegistration.click();
+ await until(async()=>{const s=await state();return BrowserWindow.getAllWindows().length===1&&!s.collection.running&&!s.pendingQueries.length;});
+ check('finishing a confirmed application preserves its reservation',registrationPostCount===1&&(await state()).automation.entries.find(r=>r.key===seededKey).status===entryBefore.status);
+ check('registration state is scoped to this edition',existsSync(join(dataDirectory,'registration-attempts-v1.json')));
+ modes.hmp='registration';await evaluate('window.doctorGlean.setDate('+JSON.stringify(today)+')');await evaluate('window.doctorGlean.selectSites(["doctorville","keymedi","hmp"])');await evaluate('window.doctorGlean.collectSite("hmp")');
+ const hmpCatalog=await until(async()=>{const s=await state();return !s.collection.running&&s.results.hmp?.events.some(e=>e.registrationStatus==='not_registered')?s:null;},40000);
+ check('unregistered HMP catalog offers application before creating an entry reservation',!hmpCatalog.automation.entries.some(e=>e.site==='hmp'&&e.time==='23:59')&&await evaluate('[...document.querySelectorAll("#lectures article")].some(row=>row.textContent.includes("합성 한미 신청 강의")&&[...row.querySelectorAll("button")].some(b=>b.textContent==="신청하기"))'));
+ await evaluate('window.doctorGlean.setFeature("entry",true)');
+ await evaluate('[...document.querySelectorAll("#lectures article")].find(row=>row.textContent.includes("합성 한미 신청 강의")).querySelector("button").click()');
+ await until(async()=>{const s=await state();return !s.registration.active&&Object.values(s.registration.lectures).some(r=>r?.site==='hmp'&&r.state==='confirmed');});
+ check('HMP catalog uses its fixed lecture identity and one durable original POST',hmpRegistrationPosts===1&&hmpRegistrationDurable);
+ const hmpApplication=await until(()=>BrowserWindow.getAllWindows().find(w=>w!==control));windowMenus.get(hmpApplication).getMenuItemById('finish-registration').click();
+ await until(async()=>{const s=await state();return BrowserWindow.getAllWindows().length===1&&!s.collection.running&&!s.pendingQueries.length&&s.automation.entries.some(e=>e.site==='hmp'&&e.time==='23:59');},40000);
+ check('fresh HMP enrollment creates a normal unattempted reservation without entering the lecture',(await state()).automation.entries.some(e=>e.site==='hmp'&&e.time==='23:59'&&e.status==='reserved'&&!e.entryAttempted)&&hmpRegistrationPosts===1);
+ await evaluate('window.doctorGlean.setFeature("entry",false)');
  // Emit only the monitor event: the real fatal/default behavior is covered in
  // a separate Node subprocess, so the synthetic suite never hides a popup.
  const exceptionHandlers=process.listenerCount('uncaughtException'),rejectionHandlers=process.listenerCount('unhandledRejection');

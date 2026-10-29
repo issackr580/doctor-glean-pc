@@ -8,7 +8,7 @@ const repository=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const ROOT_FILES=['package.json','package-lock.json','README.md','CONTRIBUTING.md','AGENTS.md','SECURITY.md','.gitignore','.gitattributes','.editorconfig','.nvmrc'];
 const AREAS=['src','ui','editions','vendor','test','scripts','docs','.github'];
 const extensions=new Set(['.js','.mjs','.cjs','.json','.md','.html','.css','.png','.yml','.yaml']);
-const prohibited=/(?:^|\/)(?:node_modules|verification|attachments|browser|private|user-data|\.git)(?:\/|$)|(?:^|\/)(?:credentials-v1|credential-attempts-v1|state-v1|workflows-v1|catalog-v1|developer-diagnostics-v1)\.json$|(?:^|\/)(?:\.env(?:\..*)?|credential\.json)$|\.(?:exe|dll|zip|pem|key|jks|keystore|p12|pfx|dmp|log)$/i;
+const prohibited=/(?:^|\/)(?:node_modules|verification|attachments|browser|private|user-data|\.git)(?:\/|$)|(?:^|\/)(?:credentials-v1|credential-attempts-v1|registration-attempts-v1|state-v1|workflows-v1|catalog-v1|developer-diagnostics-v1)\.json$|(?:^|\/)(?:\.env(?:\..*)?|credential\.json)$|\.(?:exe|dll|zip|pem|key|jks|keystore|p12|pfx|dmp|log)$/i;
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 export function sourceInventory(root=repository){
  root=resolve(root);const files={};
