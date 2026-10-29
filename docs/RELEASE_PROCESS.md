@@ -117,3 +117,7 @@ node scripts/build-app-patch.mjs --from=/old/artifact/developer --to=/new/artifa
 ## preview.26 게시 확인
 
 [수동 runner](https://github.com/issackr580/doctor-glean-pc/actions/runs/40860461062)는 고정 소스 `5f1c2c26da5028f022b9ab1f63643204e9111692`·검증본 전체 파일 해시·기존 v25 자산 SHA를 대조해 기존 두 Draft에만 업로드했다. Node247·구문·Linux Electron45/Xvfb 합성 HTTPS 관리106·자동30·계정121·입장157·replay136·신청193, Electron 전체743개·최종 Windows resources/app의 Linux Electron 개발자106/배포92·같은 상위 appData의 분리·깨끗한 소스176파일·의존성·Node247·구문 재현·같은 에디션20/21/22/23/24/25의 실제 runtime·작은 패치 전체 app 교체가 목표 전체 ZIP과 같은12경우를 확인했다.12개 자산 재다운로드·서버 SHA·체크섬·ZIP 내부 파일 전체를 대조한 뒤 배포용만 공개했다. 개발자 Draft·독립 웹 공개/404 경계를 확인했고 완료한 임시 workflow를 제거한다. 자동 게시·예약 실행·공개 개발자 artifact는 남기지 않는다. 실제 Windows/인증 사이트는 별도 확인이며 과거 릴리스/자산·모바일은 변경하지 않았다.
+
+## preview.27 게시 확인
+
+[수동 runner](https://github.com/issackr580/doctor-glean-pc/actions/runs/40871660909)는 고정 소스 `c1b6637d04484064f3f347f7982350f79f325bab`·검증본 전체 파일 해시·기존 v26 자산 SHA를 대조해 기존 두 Draft에만 업로드했다. Node276·구문·Linux Electron45/Xvfb 합성 HTTPS 관리107·자동30·계정121·입장218·replay136·신청193, Electron 전체805개·최종 Windows resources/app의 Linux Electron 개발자107/배포93·같은 상위 appData의 분리·깨끗한 소스179파일·의존성·Node276·구문 재현·같은 에디션20/21/22/23/24/25/26의 실제 runtime·작은 패치 전체 app 교체가 목표 전체 ZIP과 같은14경우를 확인했다.12개 자산 재다운로드·서버 SHA·체크섬·ZIP 내부 파일 전체를 대조한 뒤 배포용만 공개했다. 개발자 Draft·독립 웹 공개/404 경계를 확인했고 완료한 임시 workflow를 제거한다. 자동 게시·예약 실행·공개 개발자 artifact는 남기지 않는다. 실제 Windows/인증 사이트는 별도 확인이며 과거 릴리스/자산·모바일은 변경하지 않았다.
