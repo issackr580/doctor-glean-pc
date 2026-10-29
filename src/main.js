@@ -383,7 +383,7 @@ function ipc(){
   registerIPC('pc:export-report',async()=>{
     const result=await dialog.showSaveDialog(control,{title:'오류보고 저장',defaultPath:`doctor-glean-pc-${kstDate()}.txt`,filters:[{name:'텍스트 파일',extensions:['txt']}]});
     if(result.canceled||!result.filePath)return {ok:true,cancelled:true};
-    const report=diagnosticSnapshot();
+    const report={...diagnosticSnapshot(),...developerTools?.reportDetails?.()};
     await writeFile(result.filePath,JSON.stringify(report,null,2)+'\n',{encoding:'utf8',mode:0o600});
     return {ok:true};
   });

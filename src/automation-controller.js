@@ -13,7 +13,7 @@ export class AutomationController{
   const common={ledger,store:this.store,createPage,createInspectionPage,isManualOpen,onChange:()=>{onChange();},onEvent,now};
   this.quiz=new DoctorvilleQuizRunner(common);
   this.daily=new DailyRunner({...common,quiz:this.quiz,shouldYield:()=>this.allowed()&&!!this.entry.due(this.now())});
-  this.entry=new EntryRunner({...common,traceEntry,observeEntry});this.entry.recover();this.lounge=new LoungeRunner(common);
+  this.entry=new EntryRunner({...common,catalog,traceEntry,observeEntry});this.entry.recover();this.lounge=new LoungeRunner(common);
   this.rearm();this.timer=setInterval(()=>this.tick(),250);this.timer.unref();
  }
  allowed(){return !this.closed&&!this.ledger.snapshot().paused&&!this.store.failed;}

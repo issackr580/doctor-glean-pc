@@ -1,12 +1,14 @@
 # 공동 개발용 진단 수집
 
+preview.25는 개발자용의 일반 TXT 오류보고에도 진단을 켠 동안 기존 entryJournal을 포함한다. 동일한 최근64회차/48event/compact256KiB·7일 동의/한도·명시적 내보내기만 사용한다. 꺼짐·사용 불가·배포용에는 추가하지 않는다. inspect의 targetSource=catalog와 catalogReference=missing/matched/ambiguous/unsafe는 고정 분류이며 실제 URL/ID/제목 값은 내보내지 않는다. matched는 읽을 단일 링크가 있다는 뜻이며 실제 일정 대조·클릭·영상/적립 성공의 증거가 아니다. 새로운 필수 저장 형식·동작 권한·IPC·자동 전송은 없다.
+
 preview.24의 개발자 입장 회차 inspect는 닥터빌 목록의 제목 후보별 `dateMissingCards`(날짜 근거 없음), `dateInvalidCards`(잘못된 날짜/요일), `dateConflictCards`(복수/묶음과 충돌), `dateMismatchCards`(예약일과 다름), `startInvalidCards`(전용 시작 필드 누락/복수/형식 오류), `startMismatchCards`(시작시각 불일치), `sharedDateCards`(같은 묶음의 날짜 대조 통과)를0~1000의 고정 개수로 남긴다. 한 후보는 처음 실패한 단계까지만 집계하며 시작 필드 개수 오류는 날짜 검사보다 먼저 기록할 수 있다. 공유 날짜 대조 통과는 시각/대상/입장 성공이 아니다. 여러 제목 후보는 서로 다른 이유로 실패할 수 있다. 원문 날짜·제목·HTML은 없고 기존 일반 receipt/inspection에는 새 필드를 저장하지 않는다. 따라서 과거 진단에서 이 원인을 소급 복원하지 않는다.
 
 preview.21은 기존 동의와 보관 한도를 공유하는 PC 회차 경과·선택 보고를 추가한다. 개발자용의 입장 회차별 경과에서 미리본 고정 내용을 그대로 저장/복사한다. 필수 시도 저장과 독립적이며 진단 실패·삭제·철회로 제출 권한을 되살리지 않는다. 배포용에는 추가되지 않는다. [검증 흐름과 PC 관찰 계약](QUALITY_WORKFLOW.md)을 따른다.
 
 preview.20은 한미의 공개 로그인 처리기가 쓰는 정확한 `/login/loginProcess.hm` POST에도 기존 Network 개수·HTTP 상태 관찰을 적용한다. URL·본문·쿠키·계정값은 기록하지 않는다. trace의 `route=login_result`, `hmpLoginResult`, `hmpAdditionalStep`는 고정 분류와 boolean이며 인증 근거가 아니다. 실제 제출 ACK·정상 인증 응답 뒤 허용 조건에서만 고정 보호 목록을1회 읽고 기존 인증 판독을 다시 한다. 비밀번호 변경·추가 인증·실패 응답은 통과시키지 않는다.
 
-닥터빌의 상세 재확인은 자동 입장 실행 중인 읽기 단계다. 단일 제목 카드의 관찰된 고정 상세 링크만1회 GET하며 새로운 상세 문서의 실제 제목·날짜·첫 시작시각과 버튼을 대조한다. 이 읽기는 클릭/입장/적립 성공이 아니며 사전 검사는 이동하지 않는다. 기존 `open_detail` 단계와 `read_only` 이유를 사용해 안정된 receipt·시도 저장 형식을 유지하고 실제 링크/제목 원문을 내보내지 않는다.
+닥터빌의 상세 재확인은 읽기 단계다. 기존 단일 제목 카드의 관찰된 고정 링크 외에 preview.25는 날짜 누락일 때 기존 조회의 동일 일정에 연결된 단일 고정 링크도1회 GET한다. 새 상세 문서의 실제 제목·날짜·첫 시작시각과 버튼을 대조한다. 사전 검사도 이 한정된 읽기를 허용하며 계정 제출·입장/신청 클릭·팝업/재생·필수 시도 소비는 하지 않는다. `open_detail`·`read_only`·관찰 단계는 클릭/입장/적립 성공이 아니다. 안정된 receipt/inspection·시도 형식은 유지하며 원문 링크/제목을 내보내지 않는다.
 
 preview.19의 일반 보고에는 `runtimeFaults`가 추가된다. 주 프로세스의 미처리 예외/미처리 Promise가 예외로 승격된 경우와 호스트가 처리한 자동 작업·관리·시작 오류를 현재 프로세스에서 최근10개까지 메모리로만 보관한다. 오류 시 새 자동 제출을 중지하고 기존 시도·계정·수동 창은 유지한다. `uncaughtExceptionMonitor`만 사용하므로 Electron/Node의 원래 예외 처리·팝업·종료를 대체하지 않는다. 원시 메시지·stack·절대 경로·URL은 남기지 않고 origin/code와 알려진 PC src 파일·행/열만 기록하며 해당 위치가 없으면 unknown이다. 파일/행은 그 실행판의 build.sourceCommit에 맞춰 읽는다. 사이트 자체의 모든 alert·console 오류·Windows 오류를 포괄하는 기록이 아니며 기존 v18 팝업 원문은 복원할 수 없다.
 

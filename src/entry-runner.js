@@ -5,11 +5,28 @@ import {kstDate,kstInstant} from './schedule.js';
 import {waitFor} from './async-work.js';
 import {randomUUID} from 'node:crypto';
 import {BUILD_INFO,executionEvent} from './build-info.js';
+import {catalogEntryReference} from './entry-reference.js';
+import {canPreflightEntry} from './execution-presentation.js';
 const navigable=(site,raw)=>{try{const u=new URL(raw);return allowedNavigation(site,raw)&&!/(?:login|logout|regist|apply|enroll|payment|order|cart|token|auth|session|password|email|ticket|delete|withdraw)/i.test(decodeURIComponent(u.pathname+u.search));}catch{return false;}};
 export class EntryRunner{
- constructor({ledger,store,createPage,createInspectionPage,isManualOpen=()=>false,onChange=()=>{},onEvent=()=>{},now=Date.now,sleep=waitFor,traceEntry=()=>({}),observeEntry=()=>{}}){Object.assign(this,{ledger,store,createPage,createInspectionPage,isManualOpen,onChange,onEvent,now,sleep,traceEntry,observeEntry});this.active=null;}
+ constructor({ledger,store,createPage,createInspectionPage,catalog=()=>({}),isManualOpen=()=>false,onChange=()=>{},onEvent=()=>{},now=Date.now,sleep=waitFor,traceEntry=()=>({}),observeEntry=()=>{}}){Object.assign(this,{ledger,store,createPage,createInspectionPage,catalog,isManualOpen,onChange,onEvent,now,sleep,traceEntry,observeEntry});this.active=null;}
  #trace(job,kind){let trace;try{trace=this.traceEntry(job,kind);}catch{}return {event:(...args)=>{try{trace?.event?.(...args);}catch{}},finish:(...args)=>{try{trace?.finish?.(...args);}catch{}}};}
  #observe(job,phase,detail){try{this.observeEntry(job,phase,detail);}catch{}}
+ async #catalogDetail(job,page,trace,signal){
+  const ref=catalogEntryReference(job,this.catalog(job.date));
+  trace.event('inspect',{targetSource:'catalog',catalogReference:!ref?'missing':ref.status==='navigate'?'matched':ref.status==='ambiguous'?'ambiguous':'unsafe',readOnly:true});
+  if(!ref)return {used:false};
+  if(ref.status!=='navigate')return {used:false,reply:ref};
+  if(!doctorvilleDetailNavigation(page.url,ref.url))return {used:false,reply:{status:'blocked',reason:'policy_rejected'}};
+  trace.event('target_open_requested',{status:'navigate',reason:'read_only',readOnly:true,targetSource:'catalog'});
+  this.emit('open_detail',job,{reason:'read_only',readOnly:true});
+  await page.load(ref.url);
+  if(signal.aborted||job.date!==kstDate(this.now()))throw Error('cancelled');
+  const exact=page.url===ref.url;
+  trace.event('target_open_response',{status:exact?'detail_opened':'target_missing',readOnly:true,targetSource:'catalog'});
+  if(!exact&&!['login','provider'].includes(page.route))return {used:true,reply:{status:'blocked',reason:'policy_rejected'}};
+  return {used:true};
+ }
  emit(phase,job,detail={}){executionEvent(this.onEvent,{area:'automation',phase,kind:'entry',site:job.site,key:job.key,slot:job.slot,due:job.due,...detail});}
  get busy(){return !!this.active;}
  cancel(){this.active?.controller.abort();this.active?.page?.close();}
@@ -74,6 +91,7 @@ export class EntryRunner{
  async preflight(key){
   const job=this.store.entries().find(row=>row.key===key);
   if(!job||!this.createInspectionPage||this.active||this.isManualOpen(job.site))return {ok:false,reason:'busy'};
+  if(!canPreflightEntry(job))return {ok:false,reason:'duplicate_prevented'};
   const controller=new AbortController(),run={job,controller,page:null};this.active=run;
   const began=this.now(),runId=randomUUID().replace(/-/g,'');let receipt={status:'unknown',reason:'provider_result_unconfirmed'},reply={},reads=0,trace;
   this.emit('preflight',job,{runId,status:'running',readOnly:true});this.onChange();
@@ -81,7 +99,7 @@ export class EntryRunner{
    if(job.date!==kstDate(this.now()))return {ok:false,reason:'date_mismatch'};
    trace=this.#trace(job,'preflight');run.page=await this.createInspectionPage(job.site,controller.signal,{onDiagnostic:(phase,detail)=>{if(this.active===run&&!controller.signal.aborted)trace.event(phase,detail);}});await run.page.load(siteById(job.site).url);
    if(controller.signal.aborted)throw Error('cancelled');
-   const observedAt=this.now();let fingerprint='',stable=0;
+   let observedAt=this.now(),fingerprint='',stable=0,detailRead=false;
    // A loaded document can still be hydrating its catalog or redirecting to
    // login. Re-read only; never turn this observation into credential recovery.
    while(reads<21&&this.now()-observedAt<=8000){
@@ -93,6 +111,11 @@ export class EntryRunner{
     const next=JSON.stringify([reply.status,reply.reason,reply.targetMatched,reply.candidateCards,reply.titleMatches,reply.scheduleMatches,reply.entryControls]);
     trace.event('inspect',{...reply,readOnly:true,pageGeneration:run.page.version});
     stable=next===fingerprint?stable+1:1;fingerprint=next;
+    if(!detailRead&&stable>=2&&job.site==='doctorville'&&reply.status==='target_missing'&&reply.titleMatches>0&&reply.dateMissingCards===reply.titleMatches){
+     detailRead=true;const detail=await this.#catalogDetail(job,run.page,trace,controller.signal);
+     if(detail.reply){reply=detail.reply;break;}
+     if(detail.used){observedAt=this.now();fingerprint='';stable=0;continue;}
+    }
     if(['login','blocked','not_registered','lecture_ended'].includes(reply.status))break;
     if(stable>=2&&['ready','ambiguous'].includes(reply.status)||stable>=2&&reply.status==='not_open'&&reply.targetMatched===true)break;
     if(reads>=21||this.now()-observedAt>=8000)break;
@@ -131,9 +154,14 @@ export class EntryRunner{
      emit('inspect',{...cleanReceipt(supplement,this.now()),reader:'pc',dateMatches:supplement.dateMatches,timeMatches:supplement.timeMatches,duplicateEquivalent:supplement.duplicateEquivalent});
      this.store.updateEntry(job.key,{inspection:cleanEntryInspection({...supplement,readOnly:false},this.now())});
      trace.event('inspect',{...supplement,reader:'pc',pageGeneration:page.version});
+     if(job.site==='doctorville'&&!prepare&&supplement.titleMatches>0&&supplement.dateMissingCards===supplement.titleMatches&&['target_missing','navigate'].includes(supplement.status)){
+      const detail=await this.#catalogDetail(job,page,trace,controller.signal);
+      if(detail.reply){receipt=detail.reply;break;}
+      if(detail.used){pcDetailRead=true;detailOpened=true;navigations++;continue;}
+     }
      if(supplement.status==='ready'){reply=supplement;adapter='pc-entry.js';}
      else if(['target_missing','button_missing'].includes(reply.status)&&supplement.status==='navigate'&&supplement.reason==='read_only'){reply=supplement;adapter='pc-entry.js';}
-     else if(['target_missing','button_missing'].includes(reply.status)&&supplement.status==='target_missing'&&supplement.titleMatches>0)reply=supplement;
+     else if(['target_missing','button_missing'].includes(reply.status)&&supplement.status==='target_missing'&&supplement.titleMatches>0){reply=supplement;adapter='pc-entry.js';}
     }
     receipt={...reply,reason:safeReason(reply.reason)};emit('inspect',{...cleanReceipt(receipt,this.now()),reader:adapter==='pc-entry.js'?'pc':'original'});
     trace.event('inspect',{...reply,reader:adapter==='pc-entry.js'?'pc':'original',pageGeneration:page.version});

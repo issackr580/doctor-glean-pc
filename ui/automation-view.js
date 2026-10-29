@@ -1,5 +1,5 @@
 const FEATURES=[['dailyClaim','출석·캡슐 자동 수령'],['quizAuto','닥터빌 당일 퀴즈 · 조회 후 하루 1회 제출'],['brand','키메디 브랜드관 · 하루 최대 2회'],['entry','오늘 강의 자동 입장'],['morning','매일 오전 8:10 한 번에 실행'],['lounge','평일 00:01:02 닥터라운지 미션']];
-import {dailyEvidenceLabel,entrySummary,entrySessionSummary,entryFailureLabel,entryEvidenceLabel,preflightLabel,entryRunVersion,canRegisterEntry,registrationButtonLabel,registrationReplyLabel} from '../src/execution-presentation.js';
+import {dailyEvidenceLabel,entrySummary,entrySessionSummary,entryFailureLabel,entryEvidenceLabel,preflightLabel,entryRunVersion,canRegisterEntry,canPreflightEntry,registrationButtonLabel,registrationReplyLabel} from '../src/execution-presentation.js';
 const LABELS={complete:'완료',success:'완료',pending:'직접 참여 가능',none:'오늘 참여 기회 없음',offday:'진행 없는 날',scheduled:'시작 전',login:'로그인 필요',ended:'배너 없음 · 오늘 종료',running:'확인 중',reserved:'예약됨',attempting:'버튼 실행 · 결과 확인 중',clicked:'입장 버튼 실행',manual_clicked:'직접 입장 기록',expired:'기한 종료',cancelled:'취소됨',blocked:'사이트에서 직접 확인 필요',ambiguous:'대상 강의 확인 필요',not_registered:'미신청',lecture_ended:'강의 종료',not_open:'입장 버튼 아직 없음',button_missing:'입장 버튼 확인 필요',target_missing:'대상 강의 확인 필요',busy:'다른 창 사용 중',network:'연결 확인 필요',wrong:'오답 안내 · 자동 재제출 안 함',missed:'실행 기한 지남',stopped:'확인 종료',unknown:'결과 확인 필요'};
 const reasonLabels={brand_recommendation_unavailable:'추천 배너가 없어 오늘 확인을 종료했어요.',brand_previous_no_banner:'추천 배너가 없어 남은 회차도 종료했어요.',brand_daily_limit:'오늘 참여 기회를 모두 사용했어요.',brand_closed:'선착순 참여가 마감됐어요.',duplicate_prevented:'이미 시도한 기록이 있어 다시 제출하지 않아요.',manual_view_open:'열린 사이트 창을 마친 뒤 다시 확인해 주세요.',login_required:'사이트를 열어 로그인해 주세요.',today_quiz_missing:'오늘 퀴즈를 찾지 못했어요. 제출하지 않았어요.',already_participated:'사이트에서 이미 참여한 상태를 확인했어요.',success_receipt:'사이트의 정답·포인트 완료 안내를 확인했어요.',read_only:'상태만 확인했어요.',navigation_unconfirmed:'강의창 이동을 확인하지 못했어요.'};
 const playback={playing_observed:'영상 진행 관찰',requested:'재생 요청 · 확인 필요',gesture_required:'직접 재생 필요',play_failed:'재생 요청 실패',inaccessible:'영상 상태 읽기 불가',no_video:'동영상 확인 못 함',navigation_unconfirmed:'강의창 이동 확인 못 함',not_checked:'재생 미확인',not_ready:'재생 준비 미확인'};
@@ -27,10 +27,10 @@ export function renderAutomation(state,api,perform){
   const row=el('article',undefined,'lecture entry-row'),content=el('div'),site=state.sites.find(s=>s.id===job.site)?.name??'';
   content.append(el('p',site+' · '+job.time,'lecture-site'),el('p',job.title,'lecture-title'),el('p',LABELS[job.status]??'확인 필요','site-status'));
   if(job.status==='reserved')content.append(el('p','다음 확인 '+clock(job.nextAt??job.due),'muted'));
-  const failure=entryFailureLabel(job);if(failure)content.append(el('p',failure,'site-status'));
+  const failure=entryFailureLabel(job);if(failure)content.append(el('p',(job.status==='reserved'&&job.preflight?.targetMatched&&job.preflight.checkedAt>job.receipt?.checkedAt?'이전 실행: ':'')+failure,'site-status'));
   const evidence=entryEvidenceLabel(job);if(evidence)content.append(el('p',evidence,'muted'));
   if(job.receipt?.checkedAt){const version=entryRunVersion(job);content.append(el('p','최근 결과 '+clock(job.receipt.checkedAt)+(job.receipt.checkedAt<state.processStartedAt?' · 이번 프로그램 시작 전 기록':'')+(version&&job.lastStartedAt?' · 실제 시작 '+clock(job.lastStartedAt):'')+(version?' · PC '+version:' · 실행 버전 미기록'),'muted'));}
-  if(job.preflight)content.append(el('p','사전 검사 '+clock(job.preflight.checkedAt)+' · '+preflightLabel(job.preflight)+(job.preflight.reads!==undefined?' · 판독 '+job.preflight.reads+'회':''),'muted'));
+  if(job.preflight&&canPreflightEntry(job))content.append(el('p','사전 검사 '+clock(job.preflight.checkedAt)+' · '+preflightLabel(job.preflight)+(job.preflight.reads!==undefined?' · 판독 '+job.preflight.reads+'회':''),'muted'));
   const registration=state.registration?.entries[job.key];if(registration)content.append(el('p',(registration.state==='confirmed'?'수강 신청 완료 상태 확인':'수강 신청 시도 · 완료 미확인')+' · '+clock(registration.updatedAt),'muted'));
   if(job.site==='hmp'){
    content.append(el('p','시작 기준 10분 간격 · 최대 5회 · 종료 확인 시 중단','muted'));
@@ -38,7 +38,7 @@ export function renderAutomation(state,api,perform){
   }
   const actions=el('div',undefined,'query-controls');
   if(canRegisterEntry(job)&&api.requestRegistration){const apply=button(registrationButtonLabel(state.registration?.entries[job.key]),()=>perform(()=>api.requestRegistration('entry',job.key),registrationReplyLabel));apply.disabled=!!state.registration?.active||!!a.active||state.collection.running||!!state.credentials?.active||state.registration?.storageUnavailable===true;actions.append(apply);}
-  if(api.preflightEntry){const check=button('사전 검사 · 클릭 없음',()=>perform(()=>api.preflightEntry(job.key),'읽기 전용 사전 검사를 마쳤어요. 실제 입장·적립 성공은 별도 확인해 주세요.'));check.disabled=!!a.active||state.collection.running||!!state.credentials?.active;actions.append(check);}
+  if(api.preflightEntry&&canPreflightEntry(job)){const check=button('사전 검사 · 클릭 없음',()=>perform(()=>api.preflightEntry(job.key),'읽기 전용 사전 검사를 마쳤어요. 실제 입장·적립 성공은 별도 확인해 주세요.'));check.disabled=!!a.active||state.collection.running||!!state.credentials?.active;actions.append(check);}
   if(!['clicked','manual_clicked','cancelled','expired','lecture_ended'].includes(job.status))actions.append(button('예약 취소',()=>perform(()=>api.cancelEntry(job.key),'예약을 취소했어요.')),button('직접 입장했어요',()=>perform(()=>api.markManualEntry(job.key),'직접 입장한 기록을 남겼어요.')));
   if(!job.entryAttempted&&['login','busy','network','target_missing','button_missing','not_open','unknown'].includes(job.status))actions.append(button('다시 예약',()=>perform(()=>api.retryEntry(job.key),'원래 기한 안에서 다시 예약했어요.')));
   content.append(actions);row.append(content);return row;

@@ -13,6 +13,7 @@ import {remotePreferences} from '../src/security.js';
 import {kstDate} from '../src/schedule.js';
 import {CatalogPage} from '../src/catalog-page.js';
 import {initialSettings} from '../vendor/engine/core.js';
+import {CatalogStore} from '../src/catalog-store.js';
 app.on('window-all-closed',()=>{});
 const root=mkdtempSync(join(tmpdir(),'pc-entry-electron-'));app.setPath('userData',root);app.setPath('sessionData',join(root,'browser'));
 const date=kstDate(),checks=[],check=(name,value)=>{assert.ok(value,name);checks.push(name);},shell=body=>'<!doctype html><html><meta charset="utf-8"><body>'+body+'</body></html>';
@@ -251,6 +252,47 @@ async function run(){
   check('Doctorville '+scenario+' reads a single observed detail only when the list title and link are unique',details===(['duplicate','unsafe_link'].includes(scenario)?0:1));
   check('Doctorville '+scenario+' requires fresh detail date/start/title before durable entry dispatch',['exact','plain_detail'].includes(scenario)?posts===1&&durable&&store.entries()[0].status==='clicked':posts===0&&Object.keys(ledger.snapshot().jobs).length===0);
   if(scenario==='ended_detail')check('Doctorville closed detail is recorded as ended without consuming an entry lease',store.entries()[0].status==='lecture_ended'&&posts===0&&Object.keys(ledger.snapshot().jobs).length===0);
+ }
+ // The reported failure class is a missing list date with valid start fields
+ // and repeated titles. No private DOM, titles, dates or IDs are reproduced.
+ const refUrl='https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=17';
+ const refCard=id=>`<div><a class="list_detail" href="/seminar/seminarDetail?seminarId=${id}"><strong class="tit">${title}</strong><div class="time"><span class="start">${clock}</span> ~ 23:59</div></a></div>`;
+ const refList=`<main><h2>2020.01.01</h2>${refCard(16)}<h2>${date.replaceAll('-','.')}</h2>${refCard(17)}</main>`;
+ let observed;
+ await inspect('doctorville',refList,{work:async page=>{
+  const r=await page.call('pc-entry.js',[job('doctorville'),'preflight']),c=await catalog(page,'doctorville');observed=c.events;
+  check('raw list inspection reproduces missing dates while its dedicated starts and repeated titles are present',r.status==='target_missing'&&r.dateMissingCards===2&&r.startInvalidCards===0&&r.sharedDateCards===0);
+  check('the original collector retains the exact dated lecture identity despite the failed list entry inspection',observed.length===1&&observed[0].url===refUrl&&observed[0].time===clock);
+ }});
+ for(const scenario of ['preflight','entry','wrong_date','wrong_start','wrong_title','ambiguous_reference','login_redirect','unexpected_redirect','changed_before_click','waiting_button']){
+  const dir=join(root,'catalog-reference-'+scenario),partition='catalog-reference-'+randomUUID(),ledger=new LocalState(join(dir,'state.json')),store=new WorkflowStore(join(dir,'workflows.json'));let now=Date.now(),posts=0,durable=false;const details=[];
+  const isEntry=['entry','wrong_start','changed_before_click'].includes(scenario);
+  if(isEntry){ledger.setPaused(false);store.setFeature('entry',true);}
+  const catalogStore=new CatalogStore(join(dir,'catalog.json'));
+  catalogStore.record('doctorville',date,{status:'review',coverage:true,events:scenario==='ambiguous_reference'?[...observed,{...observed[0],id:'b'.repeat(64),url:refUrl.replace('=17','=18')}]:observed});
+  const savedCatalog=new CatalogStore(join(dir,'catalog.json'));
+  const detail=detailHeader(scenario==='waiting_button'?'<button>신청취소</button>':`<button onclick="fetch('/synthetic-entry',{method:'POST'})">입장하기</button>`,(scenario==='wrong_date'?'2020-01-01':date)+' '+(scenario==='wrong_start'?(clock==='00:00'?'00:01':'00:00'):clock)+' ~ 23:59',scenario==='wrong_title'?'별도 합성 강의':title);
+  await session.fromPartition(partition).protocol.handle('https',request=>{
+   if(request.method!=='GET'){posts++;durable=Object.values(JSON.parse(readFileSync(join(dir,'state.json'))).jobs).some(r=>r.state==='attempting');return new Response('{}');}
+   const u=new URL(request.url),isDetail=u.pathname==='/seminar/seminarDetail';
+   if(isDetail){details.push(u.searchParams.get('seminarId'));if(['login_redirect','unexpected_redirect'].includes(scenario))return new Response(null,{status:302,headers:{location:scenario==='login_redirect'?'/login':'/'}});}
+   return new Response(shell(isDetail?detail:u.pathname==='/login'?'<input type="password">':refList),{headers:{'content-type':'text/html; charset=utf-8'}});
+  });
+  const entry={...job('doctorville'),start:now,status:'reserved',nextAt:now-1,retries:0,attempts:[],entryAttempted:false,...(scenario==='waiting_button'?{due:now+300000,deadline:now+900000}:{})};store.putEntry(entry);
+  const create=async(_site,signal)=>{
+   const page=new AutomationPage('doctorville',signal,{...remotePreferences('doctorville'),partition});
+   if(scenario==='changed_before_click'){
+    const call=page.call.bind(page);page.call=async(name,args,options)=>{if(args[1]==='click')await page.current.webContents.executeJavaScript("document.querySelector('section>div>div').textContent='2020-01-01'");return call(name,args,options);};
+   }return page;
+  };
+  let recoveryPages=0;
+  const runner=new EntryRunner({ledger,store,catalog:d=>savedCatalog.view(d).results,createInspectionPage:create,createPage:isEntry?create:async()=>{recoveryPages++;throw Error('read-only preflight cannot recover');},now:()=>now,sleep:async ms=>{now+=ms;await new Promise(resolve=>setTimeout(resolve,0));}});
+  if(isEntry)await runner.run(entry);else await runner.preflight(key);
+  const result=store.entries()[0],receipt=isEntry?result.receipt:result.preflight;
+  const expected={preflight:'complete',entry:'clicked',wrong_date:'target_missing',wrong_start:'target_missing',wrong_title:'target_missing',ambiguous_reference:'ambiguous',login_redirect:'login',unexpected_redirect:'blocked',changed_before_click:'unknown',waiting_button:'not_open'}[scenario];
+  check('catalog detail '+scenario+' retains fresh detail validation and its exact result',receipt.status===expected);
+  check('catalog detail '+scenario+' reads only its single observed identity',details.length===(scenario==='ambiguous_reference'?0:1)&&details.every(id=>id==='17'));
+  check('catalog detail '+scenario+' preserves read-only checks and durable dispatch',scenario==='entry'?posts===1&&durable:posts===0&&recoveryPages===0&&(scenario==='changed_before_click'?runner.retryJob(key)===false:Object.keys(ledger.snapshot().jobs).length===0));
  }
  check('all inspection and entry windows are released',BrowserWindow.getAllWindows().length===0);
  mkdirSync(new URL('../verification/',import.meta.url),{recursive:true});writeFileSync(new URL('../verification/electron-entry.json',import.meta.url),JSON.stringify({runtime:{platform:process.platform,electron:process.versions.electron,chromium:process.versions.chrome},environment:'Linux Electron45; synthetic HTTPS; PC exact entry and read-only preflight',checks:checks.length,passed:checks,actualProviderVerified:false,windowsVerified:false},null,2)+'\n');
