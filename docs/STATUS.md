@@ -59,3 +59,7 @@ Node201·구문, 실제 Linux Electron45/Xvfb 합성 HTTPS 관리 창78·자동 
 - PC-005/006/009: 종근당 새 로그인·설문·미참여일 퀴즈 검증은 별도 범위다.
 
 모바일 소스·APK·서명·릴리스는 수정하지 않는다. 운영 서버·유료 API·기기 동기화·iPhone 조작·WOL·절전 해제·지속 영상 재생은 추가하지 않는다. 공개 실행파일은 distribution만 대상이고 developer는 협업자 전용 Draft다. [개발 방침](DEVELOPMENT_POLICY.md)·[공동작업](../CONTRIBUTING.md)·[접근](ACCESS.md)·[인계](CODEX_HANDOFF.md)·[PC 검증](ENTRY_VALIDATION.md)을 따른다.
+
+## preview.22 수동 Draft 업로드 준비
+
+관리자의 게시 요청에 따라 고정 소스를 재현하고 기존 두 Draft에만 파일을 올리는 일회성 workflow_dispatch를 준비했다. 검증본 전체 파일 해시·기존 v21 자산을 대조하며 공개는 다운로드 검증 뒤 배포용에만 별도로 수행한다. 개발자용은 Draft다. 예약·push/PR 실행·공개 Actions artifact는 없고 완료 뒤 workflow를 제거한다.
