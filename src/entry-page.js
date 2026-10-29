@@ -3,6 +3,9 @@
 export function pcEntryPage(job,mode='preflight'){
  const registration=['registration-inspect','registration-click'].includes(mode);
  const diag={candidateCards:0,titleMatches:0,dateMatches:0,timeMatches:0,scheduleMatches:0,matchedTargets:0,entryControls:0,identifiedTargets:0,distinctIdentities:0,stateVariants:0,targetMatched:false,duplicateEquivalent:false};
+// Keep the existing v1 reason vocabulary readable by previous builds.
+ // In entry inspection, target_missing + scope_changed means a changed start.
+ let doctorStartMismatch=false;
  const out=(status,reason)=>({status,reason,...diag});
  const hosts={doctorville:['www.doctorville.co.kr','doctorville.co.kr'],medigate:['new.medigate.net','www.medigate.net','m.medigate.net','medigate.net'],keymedi:['www.keymedi.com','keymedi.com'],hmp:['www.hmp.co.kr','hmp.co.kr'],intermd:['www.intermd.co.kr','moa.intermd.co.kr','intermd.co.kr'],bluepharm:['bluepharmkorea.co.kr','www.bluepharmkorea.co.kr']};
  let here;try{here=new URL(location.href);}catch{return out('blocked','document_origin');}
@@ -107,7 +110,8 @@ export function pcEntryPage(job,mode='preflight'){
   const fields=records.filter(row=>!records.some(other=>other!==row&&other.time&&other.element!==row.element&&other.element.contains(row.element)));
   const dates=new Set(fields.map(row=>row.date).filter(Boolean)),times=new Set(fields.map(row=>row.time).filter(Boolean));
   if(fields.some(row=>row.invalid)||dates.size!==1||!dates.has(job.date))return false;diag.dateMatches++;
-  if(times.size!==1||!times.has(job.time))return false;diag.timeMatches++;return true;
+  if(times.size!==1)return false;
+  if(!times.has(job.time)){doctorStartMismatch=true;return false;}diag.timeMatches++;return true;
  };
  const schedule=root=>{
   if(/(?:강의|방송|행사|세미나)\s*취소|취소된\s*(?:강의|행사)/.test(text(root)))return false;
@@ -293,7 +297,7 @@ export function pcEntryPage(job,mode='preflight'){
  }
  diag.entryControls=unique.reduce((count,root)=>count+controls(root).length,0);
  diag.scheduleMatches=unique.length;diag.matchedTargets=unique.length;diag.targetMatched=unique.length===1;
- if(unique.length!==1)return out(unique.length?'ambiguous':'target_missing',unique.length?'duplicate_target':diag.titleMatches?'schedule_unmatched':'title_unmatched');
+ if(unique.length!==1)return out(unique.length?'ambiguous':'target_missing',unique.length?'duplicate_target':doctorStartMismatch?'scope_changed':diag.titleMatches?'schedule_unmatched':'title_unmatched');
  const root=unique[0],words=all('button,a,[role="button"],span,p,strong,dt,dd'+(job.site==='doctorville'?',div,em,small':''),root).map(label);
  if(job.site==='doctorville'&&words.some(doctorEnded))return out('lecture_ended','lecture_ended');
  if(registration){

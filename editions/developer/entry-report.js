@@ -3,6 +3,7 @@ const SITES=new Set(['doctorville','medigate','intermd','bluepharm','keymedi','h
 export const ENTRY_STAGES=new Set(['reservation_observed','state_observed','work_started','page_started','page_finished','popup_opened','navigation_blocked','popup_blocked','network_error','renderer_gone','dialog_observed','inspect','target_open_requested','target_open_response','click_requested','click_response','navigation_observed','playback_observed','work_finished','retry_scheduled']);
 const STATES=new Set(['reserved','running','attempting','ready','complete','clicked','manual_clicked','cancelled','expired','not_open','target_missing','button_missing','ambiguous','not_registered','blocked','login','invalid','navigate','open_target','detail_opened','lecture_ended','busy','network','unknown','already_attempted']);
 const REASONS=new Set(['unknown','unknown_result','entry_ready','clicked','entry_clicked','navigation_unconfirmed','duplicate_prevented','entry_control_missing','registered_button_missing','title_unmatched','schedule_unmatched','duplicate_target','multiple_entry_controls','registration_conflict','registration_required','entry_disabled','unsafe_entry_action','login_required','manual_confirmation','document_loading','page_loading','document_origin','policy_rejected','outside_window','cancelled','expired','manual_clicked','manual_view_open','network_error','read_only','opens_later','before_window','target_card','target_card_opened','target_card_unconfirmed','detail_already_opened','hmp_target','hmp_ended','hmp_schedule_unmatched','hmp_title_unmatched','hmp_duplicate_target','hmp_unavailable','lecture_ended','click_already_sent']);
+REASONS.add('scope_changed');
 const PLAYBACK=new Set(['not_checked','no_video','requested','playing_observed','gesture_required','play_failed','inaccessible','not_ready','navigation_unconfirmed']);
 const integer=(n,max=1e15)=>Number.isSafeInteger(n)&&n>=0&&n<=max;
 const uuid=value=>typeof value==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(value);
@@ -23,7 +24,7 @@ export function cleanEntryEvent(input){
  if(input.playback!==undefined)out.playback=PLAYBACK.has(input.playback)?input.playback:'not_checked';
  if(['pc','original'].includes(input.reader))out.reader=input.reader;
  if(input.targetSource==='catalog')out.targetSource='catalog';
- if(['missing','matched','ambiguous','unsafe'].includes(input.catalogReference))out.catalogReference=input.catalogReference;
+ if(['missing','matched','schedule_changed','ambiguous','unsafe'].includes(input.catalogReference))out.catalogReference=input.catalogReference;
  for(const k of ['attempted','submitted','targetMatched','navigationObserved','readOnly','duplicateEquivalent','mainFrame','popup'])if(typeof input[k]==='boolean')out[k]=input[k];
  for(const k of ['candidateCards','titleMatches','dateMatches','timeMatches','scheduleMatches','matchedTargets','entryControls','identifiedTargets','distinctIdentities','stateVariants','navigationBlocked','popupDenied','mainFrameFailures','dateMissingCards','dateInvalidCards','dateConflictCards','dateMismatchCards','startInvalidCards','startMismatchCards','sharedDateCards'])if(integer(input[k],1000))out[k]=input[k];
  for(const k of ['elapsedMs','pageGeneration','retryCount'])if(integer(input[k],k==='elapsedMs'?190000:10000))out[k]=input[k];

@@ -77,3 +77,5 @@ v18은 제공자 공개 코드의 direct_login/account_home/profile_required/acc
 작업 중인 v10은 후다닥의 고정 `/auth/login` POST에도 같은 요청/응답 개수·HTTP 상태 관찰을 적용한다. 차단 목적지·본문·헤더는 남기지 않는다. 후다닥의 refresh는 실제 제출 ACK/응답 뒤 원래 PC 페이지를1회 다시 읽은 단계다. 성공 여부는 그 페이지의 인증 근거로 별도 확인한다.
 
 `authEvidenceSource=docple_server_calendar`는 고정 보호 페이지의 현재 토큰으로 정상 출석 calendar 응답을 확인했다는 뜻이다. 토큰·회원·과거 출석 날짜는 내보내지 않는다. 토큰·문서·날짜가 바뀐 이전 응답은 인증 근거로 재사용하지 않는다. 로그인 복구의 성공과 이후 출석 수령·적립은 별개다.
+
+preview.26부터 catalogReference의 schedule_changed는 조회 힌트의 시작 시각과 기존 예약이 다름을 뜻한다. 이것만으로 사이트 일정 변경을 확정하지 않는다. 새 상세의 독립 날짜·제목·단일 첫 시작 시각을 읽고 기존 예약과 다를 때만 target_missing + scope_changed로 구분한다. 원문·강의 ID·URL·계정은 추가하지 않으며 기존7일 opt-in·기록/내보내기 한도를 유지한다.
