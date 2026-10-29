@@ -20,15 +20,17 @@ let registrationPosted=false,registrationDurable=false,registrationPostCount=0,h
 const windowMenus=new WeakMap(),setMenu=BrowserWindow.prototype.setMenu;
 BrowserWindow.prototype.setMenu=function(menu){windowMenus.set(this,menu);return setMenu.call(this,menu);};
 const today=kstDate(),tomorrow=kstDate(Date.parse(today+'T12:00:00+09:00')+86_400_000);
-const seededStore=new WorkflowStore(join(dataDirectory,'workflows-v1.json')),seededEvent={site:'doctorville',date:today,time:'13:00',title:'합성 닥터빌 강의 1'},seededKey=seededStore.entryKey(seededEvent),seededStart=kstInstant(today,'13:00');
+// Keep synthetic enrollment open regardless of the developer's daytime clock.
+const syntheticClock='23:50';
+const seededStore=new WorkflowStore(join(dataDirectory,'workflows-v1.json')),seededEvent={site:'doctorville',date:today,time:syntheticClock,title:'합성 닥터빌 강의 1'},seededKey=seededStore.entryKey(seededEvent),seededStart=kstInstant(today,syntheticClock);
 seededStore.putEntry({key:seededKey,...seededEvent,start:seededStart,due:seededStart-3000000,deadline:seededStart+600000,nextAt:seededStart-3000000,status:'reserved',slot:0,retries:0,attempts:[],entryAttempted:false});
 const historicalEvent={site:'hmp',date:today,time:'00:00',title:'합성 이전 실행 강의'},historicalAt=Date.now()-120000;
 seededStore.putEntry({key:seededStore.entryKey(historicalEvent),...historicalEvent,start:kstInstant(today,'00:00'),due:kstInstant(today,'00:00'),deadline:kstInstant(today,'00:00')+90000,nextAt:0,status:'clicked',slot:4,retries:0,entryAttempted:true,attempts:Array.from({length:5},(_,slot)=>cleanReceipt({status:'clicked',attempted:true,slot,playback:'inaccessible'},historicalAt+slot))});
 const check=(name,condition)=>{assert.ok(condition,name);checks.push(name);};
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(fn,ms=25_000){const end=Date.now()+ms;while(Date.now()<end){const v=await fn();if(v)return v;await pause(80);}throw Error('wait_timeout');}
-const doctorCards=`<main><h1>라이브세미나</h1><ul>${[today,tomorrow].map((date,i)=>`<li><a class="list_detail" href="/seminar/seminarDetail?seminarId=${i+1}"><strong class="tit">합성 닥터빌 강의 ${i+1}</strong><span>${date}</span><div class="time"><span class="start">13:00</span> ~ 14:00</div></a></li>`).join('')}</ul></main>`;
-function keyCard(id,date,reward=true){return `<div data-gtm-event-name="content_click" data-gtm-content-category="메디 TV_메디TV Live" data-gtm-content-title="합성 키메디 강의 ${id}"><p>${date}(월) 13:00 ~ ${date}(월) 14:00</p><p>합성 강연자</p><div class="_3daYPVTCXASH39HyfXlu1A==">${reward?'<svg width="20" height="20"></svg>':''}</div></div>`;}
+const doctorCards=`<main><h1>라이브세미나</h1><ul>${[today,tomorrow].map((date,i)=>`<li><a class="list_detail" href="/seminar/seminarDetail?seminarId=${i+1}"><strong class="tit">합성 닥터빌 강의 ${i+1}</strong><span>${date}</span><div class="time"><span class="start">${syntheticClock}</span> ~ 23:59</div></a></li>`).join('')}</ul></main>`;
+function keyCard(id,date,reward=true){return `<div data-gtm-event-name="content_click" data-gtm-content-category="메디 TV_메디TV Live" data-gtm-content-title="합성 키메디 강의 ${id}"><p>${date}(월) ${syntheticClock} ~ ${date}(월) 23:59</p><p>합성 강연자</p><div class="_3daYPVTCXASH39HyfXlu1A==">${reward?'<svg width="20" height="20"></svg>':''}</div></div>`;}
 const keyCards='<main>'+keyCard(1,today)+keyCard(2,tomorrow)+keyCard(3,today,false)+'</main>';
 const shell=body=>'<!doctype html><html><head><meta charset="utf-8"></head><body>'+body+'</body></html>';
 const login='<form><label>합성 로그인 <input type="password"></label><button type="button" id="synthetic-login">로그인</button></form>';
@@ -40,7 +42,7 @@ for(const id of ['doctorville','keymedi','whodadoc','dtalks','hmp']){
  await profile.protocol.handle('https',request=>{
   requests.push({site:id,method:request.method});
   if(id==='doctorville'&&request.method==='POST'&&new URL(request.url).pathname==='/synthetic-registration'){
-   registrationPostCount++;registrationDurable=Object.values(JSON.parse(readFileSync(join(dataDirectory,'registration-attempts-v1.json'),'utf8')).rows).some(row=>row.site==='doctorville'&&row.date===today&&row.time==='13:00'&&row.attempted===true);registrationPosted=true;return new Response('{}',{headers:{'content-type':'application/json'}});
+   registrationPostCount++;registrationDurable=Object.values(JSON.parse(readFileSync(join(dataDirectory,'registration-attempts-v1.json'),'utf8')).rows).some(row=>row.site==='doctorville'&&row.date===today&&row.time===syntheticClock&&row.attempted===true);registrationPosted=true;return new Response('{}',{headers:{'content-type':'application/json'}});
   }
   if(id==='hmp'&&request.method==='POST'&&new URL(request.url).pathname==='/synthetic-hmp-registration'){
    hmpRegistrationPosts++;hmpRegistrationDurable=Object.values(JSON.parse(readFileSync(join(dataDirectory,'registration-attempts-v1.json'),'utf8')).rows).some(row=>row.site==='hmp'&&row.time==='23:59'&&row.attempted);hmpRegistered=true;return new Response('{}');
@@ -177,7 +179,7 @@ try{
  await control.webContents.executeJavaScript('window.scrollTo(0,0)');
  writeFileSync(new URL('../verification/catalog-preview-'+edition.id+'.png',import.meta.url),(await control.webContents.capturePage()).toPNG());
  await evaluate('window.doctorGlean.copySchedule()');
- check('real clipboard receives compact schedule',(await clipboard.readText()).includes('1300 닥빌 키메'));
+ check('real clipboard receives compact schedule',(await clipboard.readText()).includes(syntheticClock.replace(':','')+' 닥빌 키메'));
  check('copy omits deselected sites',!(await clipboard.readText()).includes('미확인: 한미'));
  modes.doctorville='entry-ready';
  const entryBefore=(await state()).automation.entries.find(row=>row.key===seededKey);
