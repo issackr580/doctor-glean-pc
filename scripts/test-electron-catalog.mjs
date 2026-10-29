@@ -23,7 +23,7 @@ const today=kstDate(),tomorrow=kstDate(Date.parse(today+'T12:00:00+09:00')+86_40
 // Keep synthetic enrollment open regardless of the developer's daytime clock.
 const syntheticClock='23:50';
 const seededStore=new WorkflowStore(join(dataDirectory,'workflows-v1.json')),seededEvent={site:'doctorville',date:today,time:syntheticClock,title:'합성 닥터빌 강의 1'},seededKey=seededStore.entryKey(seededEvent),seededStart=kstInstant(today,syntheticClock);
-seededStore.putEntry({key:seededKey,...seededEvent,start:seededStart,due:seededStart-3000000,deadline:seededStart+600000,nextAt:seededStart-3000000,status:'reserved',slot:0,retries:0,attempts:[],entryAttempted:false});
+seededStore.putEntry({key:seededKey,...seededEvent,start:seededStart,due:seededStart-3000000,deadline:seededStart+600000,nextAt:seededStart-3000000,status:'reserved',slot:0,retries:0,attempts:[],entryAttempted:false,scheduleChanges:[{oldTime:'23:40',time:syntheticClock,oldStart:seededStart-600000,start:seededStart,oldDue:seededStart-3600000,due:seededStart-3000000,oldDeadline:seededStart,deadline:seededStart+600000,checkedAt:Date.now()-300000}]});
 const historicalEvent={site:'hmp',date:today,time:'00:00',title:'합성 이전 실행 강의'},historicalAt=Date.now()-120000;
 seededStore.putEntry({key:seededStore.entryKey(historicalEvent),...historicalEvent,start:kstInstant(today,'00:00'),due:kstInstant(today,'00:00'),deadline:kstInstant(today,'00:00')+90000,nextAt:0,status:'clicked',slot:4,retries:0,entryAttempted:true,attempts:Array.from({length:5},(_,slot)=>cleanReceipt({status:'clicked',attempted:true,slot,playback:'inaccessible'},historicalAt+slot))});
 const check=(name,condition)=>{assert.ok(condition,name);checks.push(name);};
@@ -188,6 +188,7 @@ try{
  check('real control IPC provides a read-only entry preflight',preflight.ok&&checked.preflight?.status==='complete'&&!checked.preflight.attempted);
  check('preflight preserves the reservation and never dispatches its provider button',checked.status===entryBefore.status&&checked.attempts.length===0&&requests.every(request=>request.method==='GET'));
  check('control shows entry evidence and the read-only inspection result',await evaluate('document.getElementById("entry-results").textContent.includes("실제 클릭 없음")'));
+ check('control shows the previous and verified start without replacing execution evidence',await evaluate('document.getElementById("entry-results").textContent.includes("23:40 → 23:50 · 예약 갱신")'));
  modes.doctorville='login';await evaluate('window.doctorGlean.preflightEntry('+JSON.stringify(seededKey)+')');
  check('preflight reports login need without credential submission',(await state()).automation.entries.find(row=>row.key===seededKey).preflight.status==='login'&&requests.every(request=>request.method==='GET'));
  modes.doctorville='normal';

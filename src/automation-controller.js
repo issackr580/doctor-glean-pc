@@ -12,7 +12,7 @@ export class AutomationController{
   this.store.recover();
   const common={ledger,store:this.store,createPage,createInspectionPage,isManualOpen,onChange:()=>{onChange();},onEvent,now};
   this.quiz=new DoctorvilleQuizRunner(common);
-  this.daily=new DailyRunner({...common,quiz:this.quiz,shouldYield:()=>this.allowed()&&!!this.entry.due(this.now())});
+  this.daily=new DailyRunner({...common,quiz:this.quiz,shouldYield:()=>this.allowed()&&!!(this.entry.due(this.now())||this.entry.revisionDue())});
   this.entry=new EntryRunner({...common,catalog,traceEntry,observeEntry});this.entry.recover();this.lounge=new LoungeRunner(common);
   this.rearm();this.timer=setInterval(()=>this.tick(),250);this.timer.unref();
  }
@@ -82,14 +82,18 @@ export class AutomationController{
  tick(){
   if(this.closed)return;
   try{
-   const now=this.now(),features=this.store.features(),entry=this.allowed()&&features.entry?this.entry.due(now):null;
+   const now=this.now(),features=this.store.features(),entry=this.allowed()&&features.entry?this.entry.due(now,this.active==='schedule'?this.entry.active?.job.key:undefined):null;
    const loungeDue=this.allowed()&&features.lounge&&now>=this.loungeAt&&now<this.loungeAt+60000+20000&&!this.store.day(kstDate(now)).lounge;
    if(this.active){
-    if((entry||loungeDue)&&this.active==='daily'&&!this.daily.claimPending)this.daily.cancel('entry_priority');
+    if((entry||loungeDue||this.entry.revisionDue())&&this.active==='daily'&&!this.daily.claimPending)this.daily.cancel('entry_priority');
     if(entry&&this.active==='lounge')this.lounge.cancel();
-    if(entry&&this.active==='prepare'||(entry||loungeDue)&&this.active==='preflight'){this.preflightBatch?.abort();this.entry.cancel();}return;
+    if(entry&&this.active==='prepare'||(entry||loungeDue)&&['preflight','schedule'].includes(this.active)){this.preflightBatch?.abort();this.entry.cancel();}return;
    }
-   if(entry){this.#work('entry',()=>this.entry.run(entry),{priority:true});return;}
+   if(entry){
+    const revision=!this.catalogBusy()&&this.entry.revisionDue(entry.key);
+    if(revision)this.#work('schedule',()=>this.entry.reviseSchedule(revision.key));
+    else this.#work('entry',()=>this.entry.run(entry),{priority:true});return;
+   }
    if(loungeDue){const at=this.loungeAt;this.loungeAt=nextLoungePreparation(now+1000);this.#work('lounge',()=>this.lounge.run(kstDate(at),at),{priority:true});return;}
    if(features.lounge&&now>this.loungeAt+80000)this.loungeAt=nextLoungePreparation(now);
    if(this.allowed()&&features.morning&&now>=this.morningAt){
@@ -99,6 +103,8 @@ export class AutomationController{
    if(this.catalogBusy())return;
    const prep=this.allowed()&&features.entry?this.entry.prepareDue(now):null;
    if(prep){this.#work('prepare',()=>this.entry.run(prep,{prepare:true}));return;}
+   const revision=this.allowed()&&features.entry?this.entry.revisionDue():null;
+   if(revision){this.#work('schedule',()=>this.entry.reviseSchedule(revision.key));return;}
    if(this.pendingDaily.length){
     const keys=this.pendingDaily;this.pendingDaily=[];const readOnly=this.pendingReadOnly;this.pendingReadOnly=true;
     if(!readOnly&&!this.allowed())return;

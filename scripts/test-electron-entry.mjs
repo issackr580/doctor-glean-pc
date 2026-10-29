@@ -10,7 +10,8 @@ import {EntryRunner} from '../src/entry-runner.js';
 import {WorkflowStore} from '../src/workflow-store.js';
 import {LocalState} from '../src/local-state.js';
 import {remotePreferences} from '../src/security.js';
-import {kstDate} from '../src/schedule.js';
+import {kstDate,kstInstant} from '../src/schedule.js';
+import {atomicJson} from '../src/atomic-json.js';
 import {CatalogPage} from '../src/catalog-page.js';
 import {initialSettings} from '../vendor/engine/core.js';
 import {CatalogStore} from '../src/catalog-store.js';
@@ -296,6 +297,67 @@ async function run(){
   check('catalog detail '+scenario+' preserves read-only checks and durable dispatch',['entry','changed_catalog_original_detail'].includes(scenario)?posts===1&&durable:posts===0&&recoveryPages===0&&(scenario==='changed_before_click'?runner.retryJob(key)===false:Object.keys(ledger.snapshot().jobs).length===0));
   if(['changed_catalog_preflight','changed_catalog_entry','wrong_start'].includes(scenario))check('catalog detail '+scenario+' identifies a fresh start mismatch without rewriting timing',receipt.reason==='scope_changed'&&result.time===entry.time&&result.start===entry.start&&result.due===entry.due&&result.deadline===entry.deadline);
  }
+
+ for(const scenario of ['later','earlier','retry','wrong_detail','ambiguous','changed_identity','cancelled','consumed','expired','storage_failure','redirect','detail_corrects_catalog','live_after_expiry','live_until_end','live_missing_end','live_ended','live_unregistered']){
+  const dir=join(root,'schedule-refresh-'+scenario),partition='refresh-'+randomUUID(),ledger=new LocalState(join(dir,'state.json'));ledger.setPaused(false);let fail=false,posts=0,reads=0,actionPages=0,now=kstInstant(date,'09:00');
+  const store=new WorkflowStore(join(dir,'workflows.json'),{commit:(file,data)=>{if(fail)throw Error('disk_full');atomicJson(file,data);}});store.setFeature('entry',true);
+  const catalogStore=new CatalogStore(join(dir,'catalog.json')),oldTime=scenario==='earlier'?'13:30':'12:20',newTime=scenario==='earlier'?'12:20':'12:45';
+  const event={site:'doctorville',date,time:oldTime,title,url:refUrl};catalogStore.record('doctorville',date,{status:'review',events:[event]},now);
+  const detailTime=scenario==='wrong_detail'?oldTime:scenario==='detail_corrects_catalog'?'13:05':newTime,detailEnd=scenario==='live_ended'?'13:00':scenario.startsWith('live_')?'14:00':'23:59';
+  const detail=detailHeader(scenario==='live_unregistered'?'<button>신청하기</button>':`<button onclick="fetch('/synthetic-entry',{method:'POST'})">입장하기</button>`,date+' '+detailTime+(scenario==='live_missing_end'?'':' ~ '+detailEnd));
+  await session.fromPartition(partition).protocol.handle('https',request=>{
+   if(request.method!=='GET'){posts++;return new Response('{}');}
+   const u=new URL(request.url),isDetail=u.pathname==='/seminar/seminarDetail';if(isDetail){reads++;if(scenario==='redirect')return new Response(null,{status:302,headers:{location:'/'}});}
+   const datedOldList=doctor('',date,oldTime).replace('seminarId=11','seminarId=17');
+   return new Response(shell((isDetail?detail:datedOldList)+`<script>Date.now=()=>${now}</script>`),{headers:{'content-type':'text/html; charset=utf-8'}});
+  });
+  const runner=new EntryRunner({ledger,store,catalog:d=>catalogStore.view(d).results,now:()=>now,sleep:async ms=>{now+=ms;await new Promise(resolve=>setTimeout(resolve,0));},createInspectionPage:async(_site,signal)=>new AutomationPage('doctorville',signal,{...remotePreferences('doctorville'),partition}),createPage:async()=>{actionPages++;throw Error('revision cannot recover credentials or enter');}});
+  runner.reserveCatalog(date,catalogStore.view(date).results);let row=store.entries()[0];
+  if(scenario==='retry')store.updateEntry(row.key,{retries:2,nextAt:kstInstant(date,'12:15')});
+  if(scenario==='cancelled')runner.cancelJob(row.key);
+  if(scenario==='consumed'){
+   now=row.due;const input={site:row.site,kind:'entry',date,target:row.key,slot:0,dueAt:row.due,deadline:row.deadline},ticket=ledger.reserve(input,now);ledger.beginDispatch(ticket,now);ledger.finish(ticket,'unknown',now);
+  }
+  if(scenario==='expired')now=kstInstant(date,'12:31');
+  if(scenario.startsWith('live_')){now=kstInstant(date,scenario==='live_until_end'?'13:58':'13:30');store.updateEntry(row.key,{status:'expired'});}
+  const changed={...event,time:newTime},events=scenario==='ambiguous'?[changed,{...changed,id:'b'.repeat(64),url:refUrl.replace('17','18')}]:scenario==='changed_identity'?[{...changed,url:refUrl.replace('17','18')}]:[changed];
+  catalogStore.record('doctorville',date,{status:'review',events},now);const before=readFileSync(join(dir,'workflows.json'),'utf8'),ledgerBefore=readFileSync(join(dir,'state.json'),'utf8');runner.reserveCatalog(date,catalogStore.view(date).results);
+  if(scenario==='storage_failure')fail=true;
+  let threw=false;try{await runner.reviseSchedule(row.key);}catch(error){threw=error.message==='storage_error';}
+  row=store.entries()[0];const updated=['later','earlier','retry','expired','detail_corrects_catalog','live_after_expiry','live_until_end'].includes(scenario),eligible=!['ambiguous','changed_identity','cancelled','consumed'].includes(scenario),late=['live_after_expiry','live_until_end'].includes(scenario);
+  check('fresh schedule '+scenario+' changes persisted timing only after exact detail evidence',updated?row.time===detailTime&&row.start===kstInstant(date,detailTime)&&row.due===(late?now:kstInstant(date,detailTime)-3000000)&&row.deadline===(late?Math.min(kstInstant(date,detailEnd),now+600000):kstInstant(date,detailTime)+600000)&&row.nextAt===Math.max(row.due,now)&&row.scheduleChanges.length===1:scenario==='wrong_detail'?row.time===oldTime&&row.scheduleChanges===undefined:readFileSync(join(dir,'workflows.json'),'utf8')===before);
+  check('fresh schedule '+scenario+' reads at most its one observed detail',reads===(eligible?1:0));
+  check('fresh schedule '+scenario+' is read-only and leaves durable entry bytes unchanged',posts===0&&actionPages===0&&readFileSync(join(dir,'state.json'),'utf8')===ledgerBefore);
+  if(scenario==='retry')check('fresh schedule retry retains its previous retry allowance',row.retries===2);
+  if(scenario==='storage_failure')check('fresh schedule failed persistence is visible and produces no new reservation',threw&&store.failed===true&&row.time===oldTime);
+  if(['live_after_expiry','detail_corrects_catalog'].includes(scenario)){
+   runner.createPage=async(_site,signal)=>{actionPages++;return new AutomationPage('doctorville',signal,{...remotePreferences('doctorville'),partition});};
+   now=Math.max(now,row.due);await runner.run(row);
+   check('fresh schedule '+scenario+' reopens the verified detail despite the dated stale list and dispatches once',reads===2&&posts===1&&actionPages===1&&store.entries()[0].status==='clicked'&&Object.keys(ledger.snapshot().jobs).length===1);
+  }
+ }
+ for(const scenario of ['end_clock','title_clock']){
+  const shownTitle=scenario==='title_clock'?'합성 입장 12:20':title,actualStart=scenario==='end_clock'?'11:50':'12:45',actualEnd=scenario==='end_clock'?'12:20':'13:45',wanted='12:20';
+  const card=`<a class="list_detail" href="/seminar/seminarDetail?seminarId=17"><strong class="tit">${shownTitle}</strong><p class="date">${date}</p><div class="time"><span class="start">${actualStart}</span> ~ ${actualEnd}</div><button onclick="fetch('/synthetic-entry',{method:'POST'})">입장하기</button></a>`;
+  await inspect('doctorville',card,{work:async page=>{const r=await page.call('auto-entry.js',[{...job('doctorville'),title:shownTitle,time:wanted},'inspect']);check('original Doctorville '+scenario+' reproduces permissive clock acceptance',r.status==='ready');}});
+  const dir=join(root,'strict-original-'+scenario),partition='strict-'+randomUUID(),ledger=new LocalState(join(dir,'state.json')),store=new WorkflowStore(join(dir,'workflows.json'));ledger.setPaused(false);store.setFeature('entry',true);let posts=0,now=Date.now();
+  await session.fromPartition(partition).protocol.handle('https',request=>{
+   if(request.method!=='GET'){posts++;return new Response('{}');}
+   const detail=new URL(request.url).pathname==='/seminar/seminarDetail';return new Response(shell(detail?detailHeader(`<button onclick="fetch('/synthetic-entry',{method:'POST'})">입장하기</button>`,date+' '+actualStart+' ~ '+actualEnd,shownTitle):card),{headers:{'content-type':'text/html; charset=utf-8'}});
+  });
+  const entry={...job('doctorville'),title:shownTitle,time:wanted,start:now,status:'reserved',nextAt:now-1,retries:0,attempts:[],entryAttempted:false};store.putEntry(entry);
+  await new EntryRunner({ledger,store,now:()=>now,sleep:async ms=>{now+=ms;await new Promise(resolve=>setTimeout(resolve,0));},createPage:async(_site,signal)=>new AutomationPage('doctorville',signal,{...remotePreferences('doctorville'),partition})}).run(entry);
+  check('PC host '+scenario+' rejects a ready original reader before any durable dispatch',posts===0&&Object.keys(ledger.snapshot().jobs).length===0&&store.entries()[0].receipt.reason==='scope_changed');
+ }
+
+ await inspect('doctorville',refList,{work:async page=>{
+  await assert.rejects(page.call('pc-entry.js',[job('doctorville'),'schedule-inspect']),/policy_rejected/);
+  check('schedule observation cannot run on a list or grant navigation permission',true);
+ }});
+ await inspect('doctorville',detailHeader('<button onclick="window.syntheticEntryClicks++">입장하기</button>','2020-01-01 12:45 ~ 13:45'),{url:refUrl,job:{date:'2020-01-01',time:'12:45',entryClosesAt:Date.now()+600000},mode:'click',work:async page=>{
+  const r=await page.call('pc-entry.js',[{...job('doctorville'),date:'2020-01-01',time:'12:45',entryClosesAt:Date.now()+600000},'click']);
+  check('a recovered entry still rejects a freshly ended detail before the original click',r.status==='lecture_ended');
+ }});
  check('all inspection and entry windows are released',BrowserWindow.getAllWindows().length===0);
  mkdirSync(new URL('../verification/',import.meta.url),{recursive:true});writeFileSync(new URL('../verification/electron-entry.json',import.meta.url),JSON.stringify({runtime:{platform:process.platform,electron:process.versions.electron,chromium:process.versions.chrome},environment:'Linux Electron45; synthetic HTTPS; PC exact entry and read-only preflight',checks:checks.length,passed:checks,actualProviderVerified:false,windowsVerified:false},null,2)+'\n');
  console.log('ELECTRON_ENTRY_PASS:'+checks.length);app.quit();

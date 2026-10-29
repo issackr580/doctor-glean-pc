@@ -9,6 +9,7 @@ import {credentialProviderLanding} from './credential-provider-landing.js';
 import {doctorvilleQuizPage} from './doctorville-quiz-page.js';
 import {credentialDocpleSession} from './credential-session-page.js';
 import {pcEntryPage} from './entry-page.js';
+import {doctorvilleDetailNavigation} from './automation-policy.js';
 const assets=new Map();
 const NAMES=new Set(['daily.js','auto-entry.js','pc-entry.js','keymedi-lounge.js','doctorville-quiz-pilot.js','doctorville-quiz-journey.js','doctorville-quiz-page.js','doctorville-survey.js','credential-login.js','credential-keymedi-proof.js','credential-background-keymedi-proof.js','credential-page-state.js','credential-docple-session.js']);
 const failure=code=>Object.assign(Error(code),{code});
@@ -99,7 +100,8 @@ export class AutomationPage{
   // This credential-prefixed session read cannot dispatch an attendance action.
   // It retains native document binding and bypasses the recovery wrapper itself.
   if(name==='credential-docple-session.js'&&(this.site!=='docple'||args?.[0]?.site!=='docple'||args[0].mode!=='verify'||args[0].kind!=='attendance'||args[0].autoClaim!==false||args[0].attempted!==false||args[0].phase!==undefined||args[0].action!==undefined||navigation))throw failure('policy_rejected');
-  if(name==='pc-entry.js'&&(args?.[0]?.site!==this.site||!['preflight','inspect','click'].includes(args?.[1])||navigation&&args[1]!=='click'))throw failure('policy_rejected');
+  if(name==='pc-entry.js'&&(args?.[0]?.site!==this.site||!['preflight','inspect','click','schedule-inspect'].includes(args?.[1])||navigation&&args[1]!=='click'))throw failure('policy_rejected');
+  if(name==='pc-entry.js'&&args[1]==='schedule-inspect'&&(this.site!=='doctorville'||!doctorvilleDetailNavigation('https://www.doctorville.co.kr/seminar/main',this.url)||navigation))throw failure('policy_rejected');
   if(!assets.has(name))assets.set(name,name==='pc-registration.js'?`(job)=>(${pcEntryPage.toString()})(job,'registration-inspect')`:landing?credentialProviderLanding.toString():name==='pc-entry.js'?pcEntryPage.toString():name==='credential-page-state.js'?credentialPageState.toString():name==='credential-docple-session.js'?credentialDocpleSession.toString():name==='doctorville-quiz-page.js'?doctorvilleQuizPage.toString():readFileSync(new URL('../vendor/'+(name.startsWith('credential-')?'credentials/':'automation/')+name,import.meta.url),'utf8'));
   const contents=this.current.webContents,url=this.url,version=this.version;
   const credential=name.startsWith('credential-'),reading=credential&&['probe','verify','cancel'].includes(args?.[0]?.mode);

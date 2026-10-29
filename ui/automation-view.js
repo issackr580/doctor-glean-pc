@@ -17,7 +17,7 @@ export function renderAutomation(state,api,perform){
  entrySites.replaceChildren(...state.sites.filter(site=>['doctorville','medigate','intermd','bluepharm','keymedi','hmp'].includes(site.id)).map(site=>{
   const label=el('label',undefined,'feature');const check=document.createElement('input');check.type='checkbox';check.checked=a.entrySites.includes(site.id);check.onchange=()=>{const ids=check.checked?[...a.entrySites,site.id]:a.entrySites.filter(id=>id!==site.id);perform(()=>api.setEntrySites(ids),'자동 입장 사이트를 저장했어요.');};label.append(check,document.createTextNode(site.name+(site.id==='hmp'?' · 10분 간격 최대 5회':'')+(check.checked&&!site.selected?' · 강의 조회 선택·갱신 필요':'')));return label;
  }));
- document.getElementById('automation-state').textContent=state.paused?'자동 실행 중지됨 · 상태 확인과 수동 조회는 사용할 수 있어요.':a.active?'작업 중 · '+({daily:'출석·퀴즈·브랜드관',entry:'자동 입장',prepare:'한미 입장 준비',lounge:'닥터라운지',preflight:'예약 사전 검사 · 클릭 없음'})[a.active]:'자동 실행 허용됨 · 체크한 기능만 실행해요.';
+ document.getElementById('automation-state').textContent=state.paused?'자동 실행 중지됨 · 상태 확인과 수동 조회는 사용할 수 있어요.':a.active?'작업 중 · '+({daily:'출석·퀴즈·브랜드관',entry:'자동 입장',prepare:'한미 입장 준비',lounge:'닥터라운지',preflight:'예약 사전 검사 · 클릭 없음',schedule:'예약 일정 확인 · 클릭 없음'})[a.active]:'자동 실행 허용됨 · 체크한 기능만 실행해요.';
  document.getElementById('daily-progress').textContent=a.daily.running?(a.daily.readOnly?'상태만 확인 · 제출 없음 · ':'자동 기능 확인 · ')+a.daily.progress:a.queuedDaily.length?'현재 작업을 마치면 출석·퀴즈를 확인해요.':a.daily.readOnly===true?'최근 상태 확인 종료 · 로그인·출석·퀴즈 제출은 하지 않았어요.':a.today.morning?.status==='complete'?'오전 자동 점검 종료 · 사이트별 결과와 실제 제출 여부는 아래에서 확인해 주세요.':'';
  document.getElementById('daily-results').replaceChildren(...state.dailyTasks.map(task=>{
   const r=a.today.daily[task.key],row=el('div',undefined,'task-row');row.append(el('strong',task.label),el('span',r?(LABELS[r.status]??'확인 필요'):'미확인'));
@@ -27,6 +27,7 @@ export function renderAutomation(state,api,perform){
   const row=el('article',undefined,'lecture entry-row'),content=el('div'),site=state.sites.find(s=>s.id===job.site)?.name??'';
   content.append(el('p',site+' · '+job.time,'lecture-site'),el('p',job.title,'lecture-title'),el('p',LABELS[job.status]??'확인 필요','site-status'));
   if(job.status==='reserved')content.append(el('p','다음 확인 '+clock(job.nextAt??job.due),'muted'));
+  const revision=job.scheduleChanges?.at(-1);if(revision)content.append(el('p','일정 확인 '+clock(revision.checkedAt)+' · '+revision.oldTime+' → '+revision.time+(revision.recovered?' · 미입장 예약 복구':' · 예약 갱신'),'muted'));
   const failure=entryFailureLabel(job);if(failure)content.append(el('p',(canPreflightEntry(job)&&job.preflight?.checkedAt>job.receipt?.checkedAt?'이전 실행: ':'')+failure,'site-status'));
   const evidence=entryEvidenceLabel(job);if(evidence)content.append(el('p',evidence,'muted'));
   if(job.receipt?.checkedAt){const version=entryRunVersion(job);content.append(el('p','최근 결과 '+clock(job.receipt.checkedAt)+(job.receipt.checkedAt<state.processStartedAt?' · 이번 프로그램 시작 전 기록':'')+(version&&job.lastStartedAt?' · 실제 시작 '+clock(job.lastStartedAt):'')+(version?' · PC '+version:' · 실행 버전 미기록'),'muted'));}

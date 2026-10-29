@@ -65,3 +65,10 @@ test('ordinary developer error reports include the same bounded entry journal on
  const data=tools.reportDetails();assert.equal(data.entryJournal.records[0].events.at(-1).dateMissingCards,2);assert.equal(data.entryJournal.records[0].events.at(-1).targetSource,'catalog');assert.doesNotMatch(JSON.stringify(data),/PRIVATE|https:|rawDate|owner|reference/);
  handlers.get('pc-dev:enabled')(false);assert.deepEqual(tools.reportDetails(),{});
 });
+test('schedule verification keeps its original execution identity and exports only bounded clock evidence',t=>{
+ const {journal}=fixture(t);journal.setEnabled(true,now);
+ journal.entry({...job,site:'doctorville'},'prepare','schedule_updated',{status:'reserved',reason:'scope_changed',oldTime:'12:20',confirmedTime:'12:45',url:'https://PRIVATE/',html:'PRIVATE'},now+1);
+ const r=journal.export(now+2).entryJournal.records[0];assert.equal(r.time,job.time);assert.equal(r.events[0].oldTime,'12:20');assert.equal(r.events[0].confirmedTime,'12:45');assert.doesNotMatch(JSON.stringify(r),/PRIVATE|https:|html/);
+ journal.entry({...job,site:'doctorville'},'prepare','schedule_updated',{oldTime:'25:00',confirmedTime:'PRIVATE'},now+3);
+ const bad=journal.export(now+4).entryJournal.records[0].events.at(-1);assert.equal(bad.oldTime,undefined);assert.equal(bad.confirmedTime,undefined);
+});

@@ -2,6 +2,7 @@
 // changes the clock, or calls the provider's handlers.
 export function pcEntryPage(job,mode='preflight'){
  const registration=['registration-inspect','registration-click'].includes(mode);
+ const scheduleRead=mode==='schedule-inspect';
  const diag={candidateCards:0,titleMatches:0,dateMatches:0,timeMatches:0,scheduleMatches:0,matchedTargets:0,entryControls:0,identifiedTargets:0,distinctIdentities:0,stateVariants:0,targetMatched:false,duplicateEquivalent:false};
 // Keep the existing v1 reason vocabulary readable by previous builds.
  // In entry inspection, target_missing + scope_changed means a changed start.
@@ -10,10 +11,11 @@ export function pcEntryPage(job,mode='preflight'){
  const hosts={doctorville:['www.doctorville.co.kr','doctorville.co.kr'],medigate:['new.medigate.net','www.medigate.net','m.medigate.net','medigate.net'],keymedi:['www.keymedi.com','keymedi.com'],hmp:['www.hmp.co.kr','hmp.co.kr'],intermd:['www.intermd.co.kr','moa.intermd.co.kr','intermd.co.kr'],bluepharm:['bluepharmkorea.co.kr','www.bluepharmkorea.co.kr']};
  let here;try{here=new URL(location.href);}catch{return out('blocked','document_origin');}
  const trusted=u=>u.protocol==='https:'&&!u.username&&!u.password&&!u.port&&hosts[job?.site]?.includes(u.hostname);
- if(!trusted(here)||!job||!/^[a-f0-9]{64}$/.test(job.key)||typeof job.title!=='string'||!job.title.trim()||job.title.length>800||!/^20\d{2}-\d{2}-\d{2}$/.test(job.date)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(job.time)||!Number.isSafeInteger(job.due)||!Number.isSafeInteger(job.deadline)||job.deadline<job.due||!['preflight','inspect','click','registration-inspect','registration-click'].includes(mode))return out('blocked','policy_rejected');
+ if(!trusted(here)||!job||!/^[a-f0-9]{64}$/.test(job.key)||typeof job.title!=='string'||!job.title.trim()||job.title.length>800||!/^20\d{2}-\d{2}-\d{2}$/.test(job.date)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(job.time)||!Number.isSafeInteger(job.due)||!Number.isSafeInteger(job.deadline)||job.deadline<job.due||!['preflight','inspect','click','registration-inspect','registration-click','schedule-inspect'].includes(mode))return out('blocked','policy_rejected');
  const doctorDetail=job.site==='doctorville'&&here.pathname==='/seminar/seminarDetail'&&!here.hash&&[...here.searchParams.keys()].length===1&&here.searchParams.getAll('seminarId').length===1&&/^[1-9]\d{0,11}$/.test(here.searchParams.get('seminarId'));
  if(job.site==='doctorville'&&here.pathname==='/seminar/seminarDetail'&&!doctorDetail)return out('blocked','policy_rejected');
- if(mode!=='preflight'&&(Date.now()<job.due||Date.now()>job.deadline))return out('not_open','outside_window');
+ if(scheduleRead&&!doctorDetail)return out('blocked','policy_rejected');
+ if(mode!=='preflight'&&!scheduleRead&&(Date.now()<job.due||Date.now()>job.deadline))return out('not_open','outside_window');
  if(job.site==='hmp'&&!registration&&mode!=='preflight'&&(job.hmpRepeatSchema!==1||!Number.isInteger(job.hmpSlot)||job.hmpSlot<0||job.hmpSlot>4||job.slot!==job.hmpSlot))return out('blocked','policy_rejected');
  const visible=e=>{
   if(!e?.getClientRects().length||e.closest('[hidden],[aria-hidden="true"],[inert]'))return false;
@@ -90,7 +92,7 @@ export function pcEntryPage(job,mode='preflight'){
    const m=value.match(/^(?:(오전|오후)\s*)?([01]?\d|2[0-3]):([0-5]\d)(?:\s*[~～∼–—-]\s*(?:(오전|오후)\s*)?([01]?\d|2[0-3]):([0-5]\d))?$/);if(!m)return null;
    const hour=(h,period)=>period?(+h>=1&&+h<=12?+h%12+(period==='오후'?12:0):-1):+h;
    const start=hour(m[2],m[1]),end=m[5]===undefined?start:hour(m[5],m[4]);if(start<0||end<0||end*60+ +(m[6]??m[3])<start*60+ +m[3])return {invalid:true};
-   return {time:String(start).padStart(2,'0')+':'+m[3]};
+   return {time:String(start).padStart(2,'0')+':'+m[3],...(m[5]===undefined?{}:{endTime:String(end).padStart(2,'0')+':'+m[6]})};
   };
   const parse=value=>{
    value=value.replace(/^(?:일시|일정|날짜|강의일|방송일)\s*[:：]?\s*/,'');
@@ -111,6 +113,11 @@ export function pcEntryPage(job,mode='preflight'){
   const dates=new Set(fields.map(row=>row.date).filter(Boolean)),times=new Set(fields.map(row=>row.time).filter(Boolean));
   if(fields.some(row=>row.invalid)||dates.size!==1||!dates.has(job.date))return false;diag.dateMatches++;
   if(times.size!==1)return false;
+  const ends=new Set(fields.map(row=>row.endTime).filter(Boolean));
+  if(ends.size>1)return false;
+  if(scheduleRead)diag.observedTime=[...times][0];
+  if(ends.size===1)diag.endsAt=Date.parse(job.date+'T'+[...ends][0]+':00+09:00');
+  if(scheduleRead){if(times.has(job.time))diag.timeMatches++;return true;}
   if(!times.has(job.time)){doctorStartMismatch=true;return false;}diag.timeMatches++;return true;
  };
  const schedule=root=>{
@@ -299,6 +306,8 @@ export function pcEntryPage(job,mode='preflight'){
  diag.scheduleMatches=unique.length;diag.matchedTargets=unique.length;diag.targetMatched=unique.length===1;
  if(unique.length!==1)return out(unique.length?'ambiguous':'target_missing',unique.length?'duplicate_target':doctorStartMismatch?'scope_changed':diag.titleMatches?'schedule_unmatched':'title_unmatched');
  const root=unique[0],words=all('button,a,[role="button"],span,p,strong,dt,dd'+(job.site==='doctorville'?',div,em,small':''),root).map(label);
+ if(!registration&&mode!=='preflight'&&!scheduleRead&&diag.endsAt&&Date.now()>=diag.endsAt)return out('lecture_ended','lecture_ended');
+ if(!registration&&mode!=='preflight'&&!scheduleRead&&job.entryClosesAt&&!diag.endsAt)return out('target_missing','scope_changed');
  if(job.site==='doctorville'&&words.some(doctorEnded))return out('lecture_ended','lecture_ended');
  if(registration){
   const buttons=all('button,a,[role="button"],input[type="button"],input[type="submit"]',root).filter(e=>/^(?:신청하기|사전신청|사전신청하기|수강신청|수강신청하기|강의신청|강의신청하기|세미나신청|세미나신청하기|등록하기)$/.test(label(e)||norm(e.value)));
