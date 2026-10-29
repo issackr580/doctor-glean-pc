@@ -101,3 +101,7 @@ node scripts/build-app-patch.mjs --from=/old/artifact/developer --to=/new/artifa
 ## preview.22 게시 확인
 
 [수동 runner](https://github.com/issackr580/doctor-glean-pc/actions/runs/40800093777)는 고정 소스 `e456938bc4fb82a4405ae76864b0453ebb147e05`와 검증본 전체 파일 해시·기존 v21 자산 SHA를 대조해 기존 두 Draft에만 업로드했다. Node233·Linux Electron651·최종 Windows 묶음의 Linux Electron 관리 창 개발자105/배포91·에디션 분리·깨끗한 소스170파일·21→22 동일 runtime 패치를 확인했다.12개 자산을 재다운로드해 서버 SHA·체크섬·ZIP 내부 파일 전체를 대조한 뒤 배포용만 별도 API 동작으로 공개했다. 개발자용은 Draft이고 독립 웹 공개/404 경계를 확인했다. 완료한 임시 workflow를 제거하며 자동 게시·예약 실행·공개 개발자 artifact는 남기지 않는다. 실제 Windows/실계정은 별도 확인이며 과거 릴리스/자산·모바일은 변경하지 않았다.
+
+## preview.23 게시 확인
+
+[수동 runner](https://github.com/issackr580/doctor-glean-pc/actions/runs/40823807440)는 고정 소스 `d8f4e707ad65233e0d75ffc2c95aab3165176796`와 검증본 전체 파일 해시·기존 v22 자산 SHA를 대조해 기존 두 Draft에만 업로드했다. Node233·Linux Electron672·최종 Windows 묶음의 Linux Electron 관리 창 개발자105/배포91·에디션 분리·깨끗한 소스171파일·22→23 동일 runtime 패치를 확인했다.12개 자산을 재다운로드해 서버 SHA·체크섬·ZIP 내부 파일 전체를 대조한 뒤 배포용만 별도 API 동작으로 공개했다. 개발자용은 Draft이고 독립 웹 공개/404 경계를 확인했다. 완료한 임시 workflow를 제거하며 자동 게시·예약 실행·공개 개발자 artifact는 남기지 않는다. 실제 Windows/실계정은 별도 확인이며 과거 릴리스/자산·모바일은 변경하지 않았다.
