@@ -94,12 +94,13 @@ export class AutomationPage{
   if(landing){
    const input=args?.[0],keys=['site','mode','nonce','pageTag','expectedUrl','diagnostics','backgroundRecovery','backgroundSubmitted'];
    if(this.site!=='doctorville'||!bareDoctorvilleProvider(this.url)||navigation||args?.length!==1||!input||Object.keys(input).some(key=>!keys.includes(key))||input.site!=='doctorville'||input.mode!=='verify'||input.backgroundRecovery!==true||input.backgroundSubmitted!==false)throw failure('policy_rejected');
-  }else if(!NAMES.has(name)||!allowedNavigation(this.site,this.url))throw failure('policy_rejected');
+  }else if((name!=='pc-registration.js'&&!NAMES.has(name))||!allowedNavigation(this.site,this.url))throw failure('policy_rejected');
+  if(name==='pc-registration.js'&&(args?.length!==2||args[0]?.site!==this.site||args[1]!=='inspect'||navigation))throw failure('policy_rejected');
   // This credential-prefixed session read cannot dispatch an attendance action.
   // It retains native document binding and bypasses the recovery wrapper itself.
   if(name==='credential-docple-session.js'&&(this.site!=='docple'||args?.[0]?.site!=='docple'||args[0].mode!=='verify'||args[0].kind!=='attendance'||args[0].autoClaim!==false||args[0].attempted!==false||args[0].phase!==undefined||args[0].action!==undefined||navigation))throw failure('policy_rejected');
   if(name==='pc-entry.js'&&(args?.[0]?.site!==this.site||!['preflight','inspect','click'].includes(args?.[1])||navigation&&args[1]!=='click'))throw failure('policy_rejected');
-  if(!assets.has(name))assets.set(name,landing?credentialProviderLanding.toString():name==='pc-entry.js'?pcEntryPage.toString():name==='credential-page-state.js'?credentialPageState.toString():name==='credential-docple-session.js'?credentialDocpleSession.toString():name==='doctorville-quiz-page.js'?doctorvilleQuizPage.toString():readFileSync(new URL('../vendor/'+(name.startsWith('credential-')?'credentials/':'automation/')+name,import.meta.url),'utf8'));
+  if(!assets.has(name))assets.set(name,name==='pc-registration.js'?`(job)=>(${pcEntryPage.toString()})(job,'registration-inspect')`:landing?credentialProviderLanding.toString():name==='pc-entry.js'?pcEntryPage.toString():name==='credential-page-state.js'?credentialPageState.toString():name==='credential-docple-session.js'?credentialDocpleSession.toString():name==='doctorville-quiz-page.js'?doctorvilleQuizPage.toString():readFileSync(new URL('../vendor/'+(name.startsWith('credential-')?'credentials/':'automation/')+name,import.meta.url),'utf8'));
   const contents=this.current.webContents,url=this.url,version=this.version;
   const credential=name.startsWith('credential-'),reading=credential&&['probe','verify','cancel'].includes(args?.[0]?.mode);
   // A read may wait across a POST redirect, but its caller must bind a fresh

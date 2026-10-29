@@ -29,6 +29,11 @@ import {credentialPageState} from './credential-page-state.js';
 import {manualLoadRecovery} from './site-load-policy.js';
 import {RuntimeFaults,faultNotice} from './runtime-faults.js';
 import {checkPcUpdate,PC_RELEASES} from './update-policy.js';
+import {RegistrationController,RegistrationStore,registrationKey} from './registration.js';
+import {pcEntryPage} from './entry-page.js';
+import {doctorvilleDetailNavigation} from './automation-policy.js';
+import {boundedWork,waitFor} from './async-work.js';
+import {canRegisterEntry} from './execution-presentation.js';
 
 const metadata=JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8'));
 const VERSION=metadata.version,EDITION=resolveEdition(metadata.doctorGleanEdition);
@@ -40,7 +45,8 @@ if(app.getPath('userData')!==dataDirectory)app.setPath('userData',dataDirectory)
 if(app.getPath('sessionData')!==browserDirectory)app.setPath('sessionData',browserDirectory);
 if(process.platform==='win32')app.setAppUserModelId(EDITION.appId);
 const controlUrl=new URL('../ui/index.html',import.meta.url).href;
-let control,tray,state,catalog,collector,catalogQueue,automation,credentials,developerTools,preload,quitting=false,viewDate=kstDate();
+let control,tray,state,catalog,collector,catalogQueue,automation,credentials,registration,developerTools,preload,quitting=false,viewDate=kstDate();
+const registrationWindows=new Map(),registrationConfirmed=new Map();
 const siteWindows=new Map(),remoteWindows=new Set(),configuredSessions=new Set();
 const manualOwners=new Map();
 const siteSessions=new Map(),navigationVersions=new WeakMap(),loadRequests=new WeakMap(),closingWindows=new WeakSet(),flushingSessions=new Map();
@@ -49,7 +55,7 @@ const runtimeFaults=new RuntimeFaults({onFault:fault=>{
  try{developerTools?.event({area:'process',phase:'fault',site:'',...fault,appVersion:VERSION,sourceCommit:BUILD_INFO.sourceCommit});}catch{}
  // Stop new dispatches before cancelling workers. Never clear attempt records.
  try{state?.setPaused(true);}catch{}
- for(const stop of [()=>catalogQueue?.clear(),()=>collector?.cancel(),()=>automation?.cancel(),()=>credentials?.cancel()])try{stop();}catch{}
+ for(const stop of [()=>catalogQueue?.clear(),()=>collector?.cancel(),()=>automation?.cancel(),()=>credentials?.cancel(),()=>registration?.cancel()])try{stop();}catch{}
  try{if(tray&&!tray.isDestroyed())updateTray();notify();}catch{}
 }});
 runtimeFaults.install();
@@ -69,7 +75,7 @@ const buildState=()=>({
   collection:collector.snapshot(),results:catalog.view(validQueryDate(viewDate)?viewDate:kstDate()).results,
   pendingQueries:catalogQueue?.snapshot()??[],
   credentials:credentials?.snapshot(),
-  automationAvailable:true,automation:automation?.snapshot(),dailyTasks:DAILY_TASKS.map(({key,label,site})=>({key,label,site})),
+  automationAvailable:true,automation:automation?.snapshot(),registration:registrationState(),dailyTasks:DAILY_TASKS.map(({key,label,site})=>({key,label,site})),
 });
 
 function diagnosticSnapshot(){
@@ -77,8 +83,55 @@ function diagnosticSnapshot(){
  return {appName:EDITION.name,applicationId:EDITION.appId,edition:EDITION.id,appVersion:VERSION,build:BUILD_INFO,exportedAt:Date.now(),processStartedAt:PROCESS_STARTED_AT,date:kstDate(),automationPaused:snapshot.paused,
   runtime:{platform:process.platform,arch:process.arch,electron:process.versions.electron,chromium:process.versions.chrome,osRelease:release()},runtimeFaults:runtimeFaults.snapshot(),
   stage:'automation',automationAvailable:true,collection:collector.snapshot(),selectedCatalogSites:catalog.selected(),pendingQueries:catalogQueue?.snapshot()??[],sites:catalog.diagnostics(viewDate),automation:automation?.diagnostics(),
-  siteSessions:SITES.map(({id})=>({site:id,open:[...manualOwners.values()].includes(id),...effectiveSession(id)})),credentials:credentials?.snapshot(),browserEvents:[...browserEvents],developerDiagnostics:developerTools?.status(),
+  siteSessions:SITES.map(({id})=>({site:id,open:[...manualOwners.values()].includes(id),...effectiveSession(id)})),credentials:credentials?.snapshot(),registration:registration?.store.snapshot(),browserEvents:[...browserEvents],developerDiagnostics:developerTools?.status(),
   attempts:Object.values(snapshot.jobs).map(({site,kind,date,slot,state,updatedAt})=>({site,kind,date,slot,state,updatedAt}))};
+}
+function registrationState(){
+ if(!registration)return undefined;
+ const entries={},lectures={},lectureKeys={};for(const job of automation?.store.entries()??[])entries[job.key]=registration.store.status(job);
+ for(const row of Object.values(catalog.view(viewDate).results))for(const event of row.events){lectures[event.id]=registration.store.status(event);if(event.site==='hmp')lectureKeys[event.id]=registrationKey(event);}
+ return {active:registration.active?.job.site??'',storageUnavailable:registration.store.failed,entries,lectures,lectureKeys};
+}
+function registrationFinished(target){
+ if(quitting)return;
+ automation?.entry.registrationConfirmed(target);
+ if(validQueryDate(target.date))catalogQueue?.request(target.date,[target.site]);
+ notify();
+}
+function createRegistrationPage(job,signal,{check}){
+ let window=registrationWindows.get(job.key);
+ if(window?.isDestroyed()){registrationWindows.delete(job.key);window=null;}
+ if([...manualOwners].some(([other,site])=>site===job.site&&other!==window))throw Error('manual_view_open');
+ if(!window){
+  window=new BrowserWindow({width:1100,height:820,show:false,parent:control,title:siteById(job.site).name,autoHideMenuBar:false,webPreferences:prepareSession(job.site)});
+  registrationWindows.set(job.key,window);siteWindows.set(job.site,window);hardenSiteWindow(window,job.site);browserEvent(job.site,'window_opened');
+  window.setTitle(siteById(job.site).name+' · 강의 신청 · 완료 후 상단의 신청 마침을 눌러 주세요');
+  window.setMenu(Menu.buildFromTemplate([
+   {id:'finish-registration',label:'신청 마침 · 상태 확인',click:async()=>{try{const result=await check();if(result.ok&&result.status==='confirmed')await finishSiteLogin(job.site);else if(!window.isDestroyed())await dialog.showMessageBox(window,{type:'info',message:'선택한 강의의 신청 완료 상태를 확인하지 못했어요. 사이트에서 최종 신청을 마친 뒤 다시 확인해 주세요.'});}catch{}}},
+   {id:'open-login',label:'로그인 화면',click:()=>{registration?.cancel(job.site);navigateSite(window,job.site,siteById(job.site).loginUrl);}},
+  ]));
+  const owned=window;
+  window.on('closed',()=>{
+   if(registrationWindows.get(job.key)!==owned)return;registrationWindows.delete(job.key);registration?.cancel(job.site);
+   const confirmed=registrationConfirmed.get(job.key);registrationConfirmed.delete(job.key);
+   try{if(confirmed)registrationFinished(confirmed);else if(!quitting&&validQueryDate(job.date))catalogQueue?.request(job.date,[job.site]);}catch(error){operationError(error,'control');}
+  });
+ }
+ const contents=window.webContents,alive=()=>{if(signal.aborted||window.isDestroyed())throw Error('cancelled');};
+ const page={
+  get url(){return window.isDestroyed()?'':contents.getURL();},get version(){return navigationVersions.get(window)??0;},
+  async load(url){alive();if(url!==siteById(job.site).url&&!doctorvilleDetailNavigation(page.url,url))throw Error('policy_rejected');window.show();window.focus();await boundedWork(window.loadURL(url),signal,30000);alive();},
+  async ready(){for(let i=0;i<125;i++){alive();if(!contents.isLoadingMainFrame()&&page.url!=='about:blank')return;await waitFor(80,signal);}throw Error('time_limit');},
+  async call(target,mode,binding){
+   await page.ready();alive();const url=page.url,version=page.version;
+   if(['login','provider'].includes(pageRole(url)))return {status:'login',reason:'login_required'};
+   if(!allowedNavigation(job.site,url)||mode==='click'&&(!binding||binding.url!==url||binding.version!==version))throw Error('page_changed');
+   const code=`(()=>{if(location.href!==${JSON.stringify(url)})return null;return JSON.stringify((${pcEntryPage.toString()})(${JSON.stringify(target)},${JSON.stringify('registration-'+mode)}));})()`;
+   let encoded;try{encoded=await boundedWork(contents.executeJavaScriptInIsolatedWorld(1002,[{code}]),signal,10000);}catch(error){if(mode==='click'&&!signal.aborted&&!window.isDestroyed()&&page.version!==version)return {status:'unconfirmed'};throw error;}
+   alive();if(mode!=='click'&&(page.version!==version||page.url!==url))throw Error('page_changed');
+   if(typeof encoded!=='string'||encoded.length>32000)throw Error('invalid_response');return JSON.parse(encoded);
+  },close(){},
+ };return page;
 }
 
 async function flushProfile(id){
@@ -138,8 +191,8 @@ async function finishSiteLogin(id){
 function updateTray(){
   tray.setContextMenu(Menu.buildFromTemplate([
     {label:EDITION.name+' 열기',click:showControl},
-    {label:state.snapshot().paused?'자동 실행 허용':'자동 실행 중지',click:()=>{try{const paused=!state.snapshot().paused;if(paused){catalogQueue.clear();collector.cancel();automation?.cancel();credentials?.cancel();}state.setPaused(paused);automation?.resumed();updateTray();notify();}catch(error){operationError(error,'control');}}},
-    {label:'전체 중지',click:()=>{try{catalogQueue.clear();collector.cancel();automation?.cancel();credentials?.cancel();state.setPaused(true);updateTray();notify();}catch(error){operationError(error,'control');}}},
+    {label:state.snapshot().paused?'자동 실행 허용':'자동 실행 중지',click:()=>{try{const paused=!state.snapshot().paused;if(paused){catalogQueue.clear();collector.cancel();automation?.cancel();credentials?.cancel();registration?.cancel();}state.setPaused(paused);automation?.resumed();updateTray();notify();}catch(error){operationError(error,'control');}}},
+    {label:'전체 중지',click:()=>{try{catalogQueue.clear();collector.cancel();automation?.cancel();credentials?.cancel();registration?.cancel();state.setPaused(true);updateTray();notify();}catch(error){operationError(error,'control');}}},
     {type:'separator'},
     {label:'프로그램 종료',click:()=>app.quit()},
   ]));
@@ -229,7 +282,7 @@ function openSite(id,login=false){
   const site=siteById(id);if(!site)throw Error('invalid_site');
   if(collector.snapshot().running&&collector.snapshot().site===id)collector.cancel();
   automation?.manualOpened(id);
-  credentials?.cancel(id);
+  credentials?.cancel(id);registration?.cancel(id);
   const existing=siteWindows.get(id);
   if(existing&&!existing.isDestroyed()){
     if(existing.isMinimized())existing.restore();existing.show();existing.focus();
@@ -285,7 +338,7 @@ function ipc(){
   registerIPC('pc:copy-schedule',async()=>{await clipboard.writeText(formatPcSchedule(viewDate,catalog.selected(),catalog.view(viewDate).results));return {ok:true};});
   registerIPC('pc:pause',value=>{
     if(typeof value!=='boolean')return {ok:false,reason:'invalid_setting'};
-    if(value){catalogQueue.clear();collector.cancel();automation?.cancel();credentials?.cancel();}state.setPaused(value);if(!value)automation?.resumed();updateTray();notify();return {ok:true,state:buildState()};
+    if(value){catalogQueue.clear();collector.cancel();automation?.cancel();credentials?.cancel();registration?.cancel();}state.setPaused(value);if(!value)automation?.resumed();updateTray();notify();return {ok:true,state:buildState()};
   });
   registerIPC('pc:set-feature',(key,value)=>{automation.setFeature(key,value);return {ok:true,state:buildState()};});
   registerIPC('pc:set-entry-sites',ids=>{automation.setEntrySites(ids);return {ok:true,state:buildState()};});
@@ -298,7 +351,7 @@ function ipc(){
    await flushProfile(site);
    if(site!=='docple'){if(!validQueryDate(viewDate))viewDate=kstDate();catalogQueue.request(viewDate,[site]);}
   };
-  const prepareCredential=id=>{if(!credentialSite(id))throw Error('invalid_site');if(collector.snapshot().running&&collector.snapshot().site===id)collector.cancel();automation.manualOpened(id);};
+  const prepareCredential=id=>{if(!credentialSite(id))throw Error('invalid_site');if(collector.snapshot().running&&collector.snapshot().site===id)collector.cancel();automation.manualOpened(id);registration?.cancel(id);};
   registerIPC('pc:credential-save',async(site,id,password,automatic)=>{
    prepareCredential(site);try{
     const saved=await credentials.save(site,id,password,automatic);id='';password='';if(saved.status!=='saved')return credentialReply(saved);
@@ -316,6 +369,7 @@ function ipc(){
   registerIPC('pc:entry-manual',key=>({ok:automation.entry.cancelJob(key,true)}));
   registerIPC('pc:entry-preflight',key=>automation.preflightEntry(key));
   registerIPC('pc:entry-preflight-upcoming',()=>automation.preflightUpcoming());
+  registerIPC('pc:registration-request',(source,key)=>registration.request(source,key));
   registerIPC('pc:quit',()=>{setImmediate(()=>app.quit());return {ok:true};});
   registerIPC('pc:open-site',id=>{
     if(!siteById(id))return {ok:false,reason:'invalid_site'};
@@ -338,7 +392,7 @@ function ipc(){
 if(!app.requestSingleInstanceLock())app.quit();
 else{
   app.on('second-instance',()=>{if(state)showControl();});
-  app.on('before-quit',()=>{quitting=true;try{developerTools?.event({area:'process',phase:'quit',site:''});catalogQueue?.close();automation?.close();credentials?.cancel();collector?.cancel();developerTools?.close();}catch{}});
+  app.on('before-quit',()=>{quitting=true;try{developerTools?.event({area:'process',phase:'quit',site:''});registration?.cancel();catalogQueue?.close();automation?.close();credentials?.cancel();collector?.cancel();developerTools?.close();}catch{}});
   app.on('window-all-closed',()=>{});
   app.on('quit',()=>runtimeFaults.close());
   app.whenReady().then(()=>{
@@ -376,13 +430,22 @@ else{
        queueCatalog:date=>{viewDate=date;catalogQueue.request(date,catalog.selected());},
        yieldCatalog:()=>{const current=collector.snapshot();if(current.running){catalogQueue.request(current.date,catalog.selected());collector.cancel('entry_priority');}},
        onChange:()=>{notify();if(!automation?.busy)queueMicrotask(()=>catalogQueue?.pump());},onError:operationError});
+      registration=new RegistrationController({store:new RegistrationStore(join(dataDirectory,'registration-attempts-v1.json')),
+       resolve:(source,key)=>{
+        if(source==='entry'){const job=automation.store.entries().find(row=>row.key===key);return canRegisterEntry(job)?job:null;}
+        const rows=Object.values(catalog.view(viewDate).results).filter(row=>!row.stale&&['ok','review'].includes(row.status)).flatMap(row=>row.events).filter(event=>event.site==='hmp'&&registrationKey(event)===key&&event.registrationStatus==='not_registered');return rows.length===1?rows[0]:null;
+       },createPage:createRegistrationPage,
+       createInspectionPage:(job,signal)=>{
+        const page=new AutomationPage(job.site,signal,prepareSession(job.site));return {get url(){return page.url;},get version(){return page.version;},load:url=>page.load(url),ready:()=>page.ready(),call:(target,mode)=>{if(mode!=='inspect')throw Error('policy_rejected');return page.call('pc-registration.js',[target,'inspect']);},close:()=>page.close()};
+       },isBusy:()=>automation.busy||credentials.busy||collector.snapshot().running,
+       onConfirmed:target=>{const key=registrationKey(target);if([...manualOwners.values()].includes(target.site))registrationConfirmed.set(key,target);else registrationFinished(target);},onChange:notify});
     }
     catch(error){
       const notice=faultNotice(runtimeFaults.record('startup',error),{startup:true});dialog.showErrorBox(notice.title,notice.message);
       app.quit();return;
     }
     ipc();
-    powerMonitor.on('suspend',()=>{try{developerTools.event({area:'process',phase:'suspend',site:''});catalogQueue.clear();collector.cancel('suspended');automation.suspended();credentials.cancel();}catch{}});
+    powerMonitor.on('suspend',()=>{try{developerTools.event({area:'process',phase:'suspend',site:''});registration.cancel();catalogQueue.clear();collector.cancel('suspended');automation.suspended();credentials.cancel();}catch{}});
     powerMonitor.on('resume',()=>{developerTools.event({area:'process',phase:'resume',site:''});automation.resumed();});
     tray=new Tray(nativeImage.createFromPath(fileURLToPath(new URL('../ui/tray.png',import.meta.url))));
     tray.setToolTip(EDITION.name);tray.on('double-click',showControl);updateTray();showControl();

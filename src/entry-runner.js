@@ -48,6 +48,12 @@ export class EntryRunner{
   const job=this.store.entries().find(row=>row.key===key);if(!job||job.entryAttempted||['clicked','manual_clicked','cancelled','lecture_ended'].includes(job.status)||this.now()>job.deadline)return false;
   this.store.updateEntry(key,{status:'reserved',nextAt:Math.max(job.due,this.now()),retries:0});this.onChange();return true;
  }
+ registrationConfirmed(target){
+  const job=this.store.entries(target.date).find(row=>row.site===target.site&&row.date===target.date&&row.time===target.time&&row.title.replace(/\s+/g,' ').trim()===target.title.replace(/\s+/g,' ').trim());
+  if(!job||job.date!==kstDate(this.now())||!this.store.features().entry||!this.store.entrySites().includes(job.site)||job.status!=='not_registered'||job.entryAttempted||this.now()>job.deadline)return false;
+  const input={site:job.site,kind:'entry',date:job.date,target:job.key,slot:job.slot,dueAt:job.due,deadline:job.deadline};if(this.ledger.consumed(input))return false;
+  return this.retryJob(job.key);
+ }
  #finish(job,raw){
   const current=this.store.entries(job.date).find(row=>row.key===job.key);if(current&&['cancelled','manual_clicked'].includes(current.status))return;
   const now=this.now(),receipt=cleanReceipt({...raw,slot:job.slot,due:job.due},now),attempts=[...(job.attempts??[]),receipt].slice(-5);

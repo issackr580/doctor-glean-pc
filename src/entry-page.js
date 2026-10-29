@@ -1,14 +1,15 @@
 // PC-only exact-card inspection. Preflight never clicks, navigates, logs in,
 // changes the clock, or calls the provider's handlers.
 export function pcEntryPage(job,mode='preflight'){
+ const registration=['registration-inspect','registration-click'].includes(mode);
  const diag={candidateCards:0,titleMatches:0,dateMatches:0,timeMatches:0,scheduleMatches:0,matchedTargets:0,entryControls:0,identifiedTargets:0,distinctIdentities:0,stateVariants:0,targetMatched:false,duplicateEquivalent:false};
  const out=(status,reason)=>({status,reason,...diag});
  const hosts={doctorville:['www.doctorville.co.kr','doctorville.co.kr'],medigate:['new.medigate.net','www.medigate.net','m.medigate.net','medigate.net'],keymedi:['www.keymedi.com','keymedi.com'],hmp:['www.hmp.co.kr','hmp.co.kr'],intermd:['www.intermd.co.kr','moa.intermd.co.kr','intermd.co.kr'],bluepharm:['bluepharmkorea.co.kr','www.bluepharmkorea.co.kr']};
  let here;try{here=new URL(location.href);}catch{return out('blocked','document_origin');}
  const trusted=u=>u.protocol==='https:'&&!u.username&&!u.password&&!u.port&&hosts[job?.site]?.includes(u.hostname);
- if(!trusted(here)||!job||!/^[a-f0-9]{64}$/.test(job.key)||typeof job.title!=='string'||!job.title.trim()||job.title.length>800||!/^20\d{2}-\d{2}-\d{2}$/.test(job.date)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(job.time)||!Number.isSafeInteger(job.due)||!Number.isSafeInteger(job.deadline)||job.deadline<job.due||!['preflight','inspect','click'].includes(mode))return out('blocked','policy_rejected');
+ if(!trusted(here)||!job||!/^[a-f0-9]{64}$/.test(job.key)||typeof job.title!=='string'||!job.title.trim()||job.title.length>800||!/^20\d{2}-\d{2}-\d{2}$/.test(job.date)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(job.time)||!Number.isSafeInteger(job.due)||!Number.isSafeInteger(job.deadline)||job.deadline<job.due||!['preflight','inspect','click','registration-inspect','registration-click'].includes(mode))return out('blocked','policy_rejected');
  if(mode!=='preflight'&&(Date.now()<job.due||Date.now()>job.deadline))return out('not_open','outside_window');
- if(job.site==='hmp'&&mode!=='preflight'&&(job.hmpRepeatSchema!==1||!Number.isInteger(job.hmpSlot)||job.hmpSlot<0||job.hmpSlot>4||job.slot!==job.hmpSlot))return out('blocked','policy_rejected');
+ if(job.site==='hmp'&&!registration&&mode!=='preflight'&&(job.hmpRepeatSchema!==1||!Number.isInteger(job.hmpSlot)||job.hmpSlot<0||job.hmpSlot>4||job.slot!==job.hmpSlot))return out('blocked','policy_rejected');
  const visible=e=>{
   if(!e?.getClientRects().length||e.closest('[hidden],[aria-hidden="true"],[inert]'))return false;
   for(let p=e;p;p=p.parentElement){const s=getComputedStyle(p);if(s.display==='none'||s.opacity==='0'||['hidden','collapse'].includes(s.visibility))return false;}return true;
@@ -185,7 +186,7 @@ export function pcEntryPage(job,mode='preflight'){
  // A list card can omit the date that its detail exposes. Read one exact,
  // observed detail link; this is never permission to click an entry control.
  // Preflight and click modes do not navigate, and duplicate titles stay put.
- if(job.site==='doctorville'&&mode==='inspect'&&!unique.length&&here.origin==='https://www.doctorville.co.kr'&&here.pathname==='/seminar/main'&&!here.search&&!here.hash){
+ if(job.site==='doctorville'&&['inspect','registration-inspect'].includes(mode)&&!unique.length&&here.origin==='https://www.doctorville.co.kr'&&here.pathname==='/seminar/main'&&!here.search&&!here.hash){
   const matching=cards.filter(titled);
   if(matching.length===1){
    const raw=safeLink(matching[0].getAttribute('href'));
@@ -197,7 +198,7 @@ export function pcEntryPage(job,mode='preflight'){
  }
  const label=e=>norm(e.getAttribute('aria-label')||text(e)||all('img[alt]',e).map(i=>i.getAttribute('alt')).join(' '));
  const controls=root=>[...(root.matches('a,button,[role="button"]')?[root]:[]),...all('a,button,[role="button"]',root)].filter(e=>/^(?:(?:live|라이브|강의|세미나|웨비나|온라인|웹심포지엄|웹심포지움))?(?:입장|입장하기|바로입장|시청하기|시청)$/.test(label(e))||['강의보기','시청하러가기','바로시청하기','라이브보기'].includes(label(e))||job.site==='hmp'&&/^강의시청(?:하기)?$/.test(label(e))||job.site==='bluepharm'&&label(e)==='참여하기'&&all('.W_status.ongoing',root).length>0);
- if(unique.length>1&&job.site==='medigate'){
+ if(unique.length>1&&job.site==='medigate'&&!registration){
   const ids=unique.map(identity),states=unique.map(r=>({registered:/신청완료|등록완료/.test(norm(text(r))),unregistered:/미신청|신청하기|등록하기/.test(norm(text(r))),ended:/강의종료|방송종료|다시보기/.test(norm(text(r)))})),counts=unique.map(r=>controls(r).length);
   diag.identifiedTargets=ids.filter(Boolean).length;diag.distinctIdentities=new Set(ids.filter(Boolean)).size;diag.stateVariants=new Set(states.map(s=>JSON.stringify(s))).size;
   // A read-only hero can repeat the same observed detail link without an
@@ -210,6 +211,23 @@ export function pcEntryPage(job,mode='preflight'){
  diag.scheduleMatches=unique.length;diag.matchedTargets=unique.length;diag.targetMatched=unique.length===1;
  if(unique.length!==1)return out(unique.length?'ambiguous':'target_missing',unique.length?'duplicate_target':diag.titleMatches?'schedule_unmatched':'title_unmatched');
  const root=unique[0],words=all('button,a,[role="button"],span,p,strong,dt,dd',root).map(label);
+ if(registration){
+  const buttons=all('button,a,[role="button"],input[type="button"],input[type="submit"]',root).filter(e=>/^(?:신청하기|사전신청|사전신청하기|수강신청|수강신청하기|강의신청|강의신청하기|세미나신청|세미나신청하기|등록하기)$/.test(label(e)||norm(e.value)));
+  diag.registrationControls=buttons.length;
+  const complete=words.some(s=>/^(?:신청완료|신청완료됨|사전신청완료|수강신청완료|등록완료)$/.test(s));
+  if(complete)return out(buttons.length?'ambiguous':'registered',buttons.length?'registration_conflict':'registered');
+  if(words.some(s=>/^(?:강의종료|방송종료|다시보기|신청마감|접수마감|신청종료|모집마감)$/.test(s)))return out('lecture_ended','registration_closed');
+  if(buttons.length!==1)return out(buttons.length?'ambiguous':'button_missing',buttons.length?'multiple_registration_controls':'registration_control_missing');
+  const button=buttons[0];if(button.disabled||button.closest('[disabled],[aria-disabled="true"],.disabled'))return out('not_open','registration_disabled');
+  if(/유료|결제|구매|(?:참가|수강|등록)비|[₩￦]|(?:^|\s)\d[\d,]*\s*원(?:\s|$)/.test(text(root)))return out('blocked','manual_confirmation');
+  if(controls(root).length||all('input:not([type="hidden"]):not([type="button"]):not([type="submit"]),textarea,select',root).length)return out('blocked','manual_confirmation');
+  const safe=raw=>{try{const u=new URL(raw,here);return trusted(u)&&u.origin===here.origin&&!/(?:logout|payment|order|cart|purchase|delete|withdraw|cancel|token|auth|password|email|ticket)/i.test(decodeURIComponent(u.pathname+u.search));}catch{return false;}};
+  const anchor=button.closest('a[href]'),href=anchor?.getAttribute('href'),form=button.closest('form'),action=button.getAttribute('formaction')||form?.getAttribute('action');
+  if(href&&!/^\s*(?:#|javascript:)/i.test(href)&&!safe(href)||form&&(action&&!safe(action)||all('input:not([type="hidden"]):not([type="button"]):not([type="submit"]),textarea,select',form).length))return out('blocked','manual_confirmation');
+  if(mode==='registration-inspect')return out('registration_ready','registration_ready');
+  if(window.__doctorGleanPcRegistrationAttempt===job.key)return out('already_attempted','registration_already_attempted');
+  window.__doctorGleanPcRegistrationAttempt=job.key;button.click();return out('registration_clicked','registration_requested');
+ }
  if(words.some(s=>/^(?:미신청|신청하기|사전신청|수강신청|등록하기|신청후입장하기)$/.test(s)))return out('not_registered','registration_required');
  if(words.some(s=>/^(?:강의종료|방송종료|다시보기)$/.test(s)))return out('lecture_ended','lecture_ended');
  const buttons=controls(root);diag.entryControls=buttons.length;

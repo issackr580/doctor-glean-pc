@@ -22,6 +22,7 @@
 *.key
 **/credentials-v1.json
 **/credential-attempts-v1.json
+**/registration-attempts-v1.json
 **/workflows-v1.json
 **/state-v1.json
 **/catalog-v1.json

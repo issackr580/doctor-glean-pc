@@ -1,6 +1,7 @@
 'use strict';
 import {reasonLabels,siteLabel,collectionSummary} from '../src/catalog-presentation.js';
 import {renderAutomation} from './automation-view.js';
+import {registrationButtonLabel,registrationReplyLabel} from '../src/execution-presentation.js';
 import {setupCredentials,renderCredentials,openCredential,credentialLabel,resultLabel} from './credential-view.js';
 const api=window.doctorGlean,message=document.getElementById('message');let refreshing=false,repeat=false;
 const updateCheck=document.getElementById('update-check'),updatePage=document.getElementById('update-page'),updateText=document.getElementById('update-result');
@@ -8,7 +9,7 @@ updateCheck.onclick=async()=>{updateCheck.disabled=true;updatePage.hidden=true;t
 updatePage.onclick=()=>api.openUpdatePage().catch(()=>{updateText.textContent='공식 배포 페이지를 열지 못했어요.';});
 function say(text){message.textContent=text;}
 function node(tag,text,className){const el=document.createElement(tag);if(text!==undefined)el.textContent=text;if(className)el.className=className;return el;}
-async function perform(action,success){try{const r=await action();say(r?.ok?success:r?.reason==='busy'?'진행 중인 작업이나 직접 사용하는 사이트 창을 마친 뒤 다시 확인해 주세요.':r?.reason==='paused'?'자동 실행을 허용한 뒤 실행해 주세요. 상태만 확인은 중지 중에도 사용할 수 있어요.':r?.reason==='invalid_selection'?'조회할 사이트를 하나 이상 선택해 주세요.':r?.reason==='window_unavailable'?'사이트 창을 만들지 못했어요. 오류보고를 저장해 주세요.':r?.reason==='session_storage_error'?'세션 저장 요청을 마치지 못했어요. 사이트 창을 유지하고 다시 시도해 주세요.':'작업을 완료하지 못했어요.');await refresh();return r;}catch{say('프로그램 상태를 확인하지 못했어요.');}}
+async function perform(action,success){try{const r=await action();say(typeof success==='function'?success(r):r?.ok?success:r?.reason==='busy'?'진행 중인 작업이나 직접 사용하는 사이트 창을 마친 뒤 다시 확인해 주세요.':r?.reason==='paused'?'자동 실행을 허용한 뒤 실행해 주세요. 상태만 확인은 중지 중에도 사용할 수 있어요.':r?.reason==='invalid_selection'?'조회할 사이트를 하나 이상 선택해 주세요.':r?.reason==='window_unavailable'?'사이트 창을 만들지 못했어요. 오류보고를 저장해 주세요.':r?.reason==='session_storage_error'?'세션 저장 요청을 마치지 못했어요. 사이트 창을 유지하고 다시 시도해 주세요.':'작업을 완료하지 못했어요.');await refresh();return r;}catch{say('프로그램 상태를 확인하지 못했어요.');}}
 function sessionLabel(site){
  const s=site.session;if(!s||s.load==='not_opened'&&!s.authSource)return '';
  const errors={window_unavailable:'사이트 창을 만들지 못했어요. 오류보고를 저장해 주세요.',dns_error:'사이트 주소에 연결하지 못했어요.',offline:'인터넷 연결을 확인해 주세요.',time_limit:'사이트 연결 시간이 지났어요.',certificate_error:'인증서를 확인하지 못했어요.',load_failed:'사이트 화면을 불러오지 못했어요.',renderer_stopped:'사이트 창이 중단됐어요.',popup_blocked:'새 창 열기가 차단됐어요. 「로그인 화면」을 이용해 주세요.',navigation_blocked:'허용하지 않은 화면 이동을 막았어요.'};
@@ -64,6 +65,7 @@ async function refresh(){
    const row=node('article',undefined,'lecture'),time=node('span',event.time,'lecture-time'),detail=node('div');
    detail.append(node('p',event.siteName+(event.stale?' · 저장된 목록':''),'lecture-site'),node('p',event.title,'lecture-title'));
    if(event.site==='hmp'){const status=event.lectureEnded?'강의 종료':({registered:'신청완료',not_registered:'미신청',closed:'신청마감',unknown:'신청 상태 미확인'})[event.registrationStatus];detail.append(node('p',status,'site-status'));}
+   if(event.site==='hmp'&&event.registrationStatus==='not_registered'&&!event.lectureEnded&&api.requestRegistration){const apply=node('button',registrationButtonLabel(state.registration?.lectures[event.id]));apply.type='button';apply.disabled=event.stale||!!state.registration?.active||!!state.automation?.active||state.collection.running||!!state.credentials?.active||state.registration?.storageUnavailable===true;apply.onclick=()=>perform(()=>api.requestRegistration('catalog',state.registration?.lectureKeys[event.id]),registrationReplyLabel);detail.append(apply);}
    row.append(time,detail);return row;
   });
   if(!lectures.length)lectures.push(node('p',state.collection.running?'선택한 날짜의 강의를 확인하고 있어요.':'확인된 강의가 없어요. 사이트별 조회 상태를 확인해 주세요.','muted'));

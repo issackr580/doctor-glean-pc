@@ -35,7 +35,7 @@ npm run verify:pc
 
 Linux 컨테이너에만 필요한 경우 `DOCTOR_GLEAN_XVFB_PATH`를 지정하고 `npm run verify:pc -- --container-no-sandbox`를 사용한다. 제품 설정은 변경하지 않는다. Node24/npm11·고정 Electron45를 유지한다.
 
-공통 명령은 전체 Node, 구문, 실제 Electron의 catalog/automation/credentials/entry/replay를 순서대로 실행한다. TAP의 실패/취소/skip/todo와 실제 통과 개수, Electron의 완료 marker를 확인한다. 현재 소스 전체 inventory와 환경의 시작/종료 SHA가 같아야 complete다. 검증 시작 즉시 이전의 현재 요약을 미완료로 바꾸며 이전 JSON만으로 통과시키지 않는다. 실패 로그·입력/출력 SHA·회차별 결과는 ignore된 verification/runs 아래에 남긴다. 이 첫 구현은 오래된 보고를 자동 재사용하지 않는다.
+공통 명령은 전체 Node, 구문, 실제 Electron의 catalog/automation/credentials/entry/replay/registration을 순서대로 실행한다. TAP의 실패/취소/skip/todo와 실제 통과 개수, Electron의 완료 marker를 확인한다. 현재 소스 전체 inventory와 환경의 시작/종료 SHA가 같아야 complete다. 검증 시작 즉시 이전의 현재 요약을 미완료로 바꾸며 이전 JSON만으로 통과시키지 않는다. 실패 로그·입력/출력 SHA·회차별 결과는 ignore된 verification/runs 아래에 남긴다. 이 첫 구현은 오래된 보고를 자동 재사용하지 않는다.
 
 `complete`는 **PC 소스와 합성 환경 검사**의 완료다. Windows 묶음 실행·DPAPI·인증 사이트·다운로드 자산 검증을 대신하지 않아 releaseReady는 false다. 패키지/업데이트/게시 기준은 기존 RELEASE_PROCESS를 따른다. 검사 후 소스가 바뀌면 이전 입력 SHA의 결과이며 변경된 입력의 전체 완료로 사용하지 않는다.
 
