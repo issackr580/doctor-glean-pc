@@ -42,6 +42,12 @@ export function pcEntryPage(job,mode='preflight'){
  const doctorEnded=value=>/^(?:종료된세미나(?:입니다)?[.!。]?|세미나종료|강의종료|방송종료)$/.test(norm(value));
  const doctorDetailSchedule=root=>{
   const titles=all(titleSelector,root).filter(e=>sameTitle(text(e))),forbidden='nav,footer,aside,[role="dialog"],[aria-modal="true"],button,a,[role="button"],input,textarea,select,script,style,template,noscript';
+  const leaves=titles.filter(e=>!titles.some(other=>other!==e&&e.contains(other)));if(leaves.length!==1)return false;
+  const heading=leaves[0],afterTitle=node=>!heading.contains(node)&&!!(heading.compareDocumentPosition(node)&Node.DOCUMENT_POSITION_FOLLOWING);
+  const actions=all('a,button,[role="button"],input[type="button"],input[type="submit"]',root).filter(e=>afterTitle(e)&&(controls(root).includes(e)||/^(?:신청하기|사전신청(?:하기)?|수강신청(?:하기)?|강의신청(?:하기)?|세미나신청(?:하기)?|등록하기|신청취소)$/.test(label(e)||norm(e.value))));
+  const markers=actions.length?actions:all('span,p,div,em,small,strong',root).filter(e=>afterTitle(e)&&(doctorEnded(text(e))||/^(?:신청완료|등록완료)$/.test(norm(text(e)))));
+  const boundary=markers[0];if(!boundary)return false;
+  const between=node=>afterTitle(node)&&!node.contains(boundary)&&!!(node.compareDocumentPosition(boundary)&Node.DOCUMENT_POSITION_FOLLOWING);
   const clock=value=>{
    const m=value.match(/^(?:(오전|오후)\s*)?([01]?\d|2[0-3]):([0-5]\d)(?:\s*[~～∼–—-]\s*(?:(오전|오후)\s*)?([01]?\d|2[0-3]):([0-5]\d))?$/);if(!m)return null;
    const hour=(h,period)=>period?(+h>=1&&+h<=12?+h%12+(period==='오후'?12:0):-1):+h;
@@ -59,8 +65,8 @@ export function pcEntryPage(job,mode='preflight'){
   for(const element of [root,...all('time,p,span,div,li,dd,dt,em,strong,small,b',root)]){
    if(element.closest(forbidden)||titles.some(title=>title===element||title.contains(element)))continue;
    const add=value=>{if(value.length>140)return;const parsed=parse(value);if(parsed)records.push({element,...parsed});};
-   if(!titles.some(title=>element.contains(title)))add(text(element));
-   const direct=Array.from(element.childNodes).filter(node=>node.nodeType===3).map(node=>node.nodeValue).join(' ').replace(/\s+/g,' ').trim();if(direct)add(direct);
+   if(between(element))add(text(element));
+   const direct=Array.from(element.childNodes).filter(node=>node.nodeType===3&&between(node)).map(node=>node.nodeValue).join(' ').replace(/\s+/g,' ').trim();if(direct)add(direct);
   }
   // A full range owns its nested end clock; it is never another start field.
   const fields=records.filter(row=>!records.some(other=>other!==row&&other.time&&other.element!==row.element&&other.element.contains(row.element)));
