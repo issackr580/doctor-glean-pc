@@ -1,33 +1,20 @@
-# v139 PC 이식 작업본 추가 인계
+# PC판 현재 인계 — preview.29
 
-preview.29 개발 후보는 기존 main7bdaf1b 기준 별도 feat/mobile-v139-port에서 작업했다. [기능별 조사](PORTING_V139.json), [구현/정책 차이](PORTING_V139.md), [수용 항목](PORTING_V139_ACCEPTANCE.json)을 먼저 읽는다. 마지막 게시판 preview.28의 기준과 기존 인증·서명/업데이트 정책은 아래 기록을 유지한다. 모바일 제품·APK·키·개인 인계 원문을 PC 저장소에 넣지 않는다. 최종 PC 검사·묶음·게시 결과는 v29 기록으로 구분하며 현재 Windows/회원 실서버 성공은 추정하지 않는다.
-
-# PC판 인계 — 2026-10-29
-
-## 기준점
-
-| 항목 | 값 |
+| 항목 | 기준 |
 |---|---|
-| 제품 | Windows PC 전용, Electron45.0.0 |
-| 실행판 | 0.1.0-preview.28 |
-| 실행 소스 | 36bd10d100bdbdc4ac4273b4125e16138d9c189f / pc-source-v0.1.0-preview.28 |
-| 배포용 | https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.28 |
-| 개발자용 | Releases의 preview.28 협업자 전용 Draft, ID428011427 |
-| 서명 피드 | updates/preview.json, 저장소 밖의 관리자 Ed25519 개인키로 서명 |
+| 제품 | Windows PC 전용, Electron45.0.0 / Node24/npm11 개발 |
+| 실행판 | 0.1.0-preview.29 |
+| 실행 소스 | 331f7632c8537d20a8ccc680fc2dedf5d1097250 / pc-source-v0.1.0-preview.29 |
+| 배포용 | https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.29 |
+| 개발자용 | Releases의 preview.29 협업자 전용 Draft, ID434327358 |
+| 서명 피드 | updates/preview.json, 실제 서버 패치 메타데이터로 외부 관리자 키 서명 |
 
-## 변경과 검증
+먼저 [기능별 조사](PORTING_V139.json)·[구현과 PC 정책 차이](PORTING_V139.md)·[수용 항목](PORTING_V139_ACCEPTANCE.json)을 읽는다. v28을 기준으로 별도 작업본에서 구현했고 모바일 참고 코드/과거 문서를 Windows 성공 증거로 사용하지 않았다.
 
-PC-017/D27은 사용자가 누른 확인→다운로드·업데이트로 작은 패치를 설치·재시작한다. 개발자용도 앱 안의 전용 GitHub 로그인·사용자2단계 인증 뒤 비공개 Draft를 다운로드한다. 임상 사이트·개인 Chrome/Edge와 프로필을 공유하지 않고 비밀번호/로그인 폼·PAT를 읽거나 입력하지 않는다. distribution에는 GitHub 로그인 구현을 넣지 않는다. 서명 개인키는 Git·소스 ZIP·앱·workflow 밖이다. 서명은 Windows 실행파일 코드서명과 별개다.
+닥플 C01/LIVE 조회·공개 ID별 신청 완료 강의 입장, 기존 출석 계정 공유와 독립 opt-in, 후다닥/디톡스3회형·한미5회형, 일반 일정 두 checkpoint와 닥터빌 D26 최신 상세 복구를 구분한다. 퀴즈별 pending fuse·종근당 daily lease·6/7 라운지·설문 읽기/알림/제외·일일 선택·메모·보고 미리보기·정확 외부 host 설정을 연결했다. 기존 PC 로그인 quota·DPAPI·프로필·계정/동의·예약/취소/시도·에디션 분리와 Ed25519 updater/helper는 유지한다. 새 닥플 조회/입장은 기존 설정에 자동 추가하지 않는다.
 
-고정 공개키·피드·채널/상향 버전·에디션·패치 SHA/크기·ZIP 경로/CRC/중복/링크/Windows 별칭·전체 app/runtime 해시를 검증한다. 매개변수 없는 관리 IPC만 추가하고 정확한 로컬 최상위 창에 묶는다. 공개 다운로드는 쿠키 없이 허용 CDN 리디렉션만 따른다. 강의/계정/조회·수동 창·임박 입장에는 설치를 미룬다. 고정 helper ACK·부모 종료 후 app 전체를 백업/교체하고 실제 관리 UI 렌더링 ACK와 commit 전 새 자동 작업을 막는다. 실패 시 이전 app을 복구한다. 로그인·설정·예약·필수 시도 데이터는 교체하지 않는다.
+Node321·구문·Linux Electron45/Xvfb 합성 HTTPS 관리115·자동30·계정121·입장272·replay136·신청193·업데이트23, Electron 전체890개와 최종 Windows resources/app의 Linux 관리 창 개발자115/배포101·에디션 데이터 분리·깨끗한 소스210파일·의존성/Node321/구문 재현, 같은 에디션20~28의 실제 ZIP runtime·전체 app 패치 교체18경우를 확인했다. 시작/종료 입력 SHA는 0c8c9ebfb5d35005c77d5ad16d03d969b1e6fa35c118fbf67b068f95b501b1c5다. [수동 업로드](https://github.com/issackr580/doctor-glean-pc/actions/runs/41893646993) 뒤12개 자산 재다운로드·서버 SHA/체크섬·ZIP 내부 전체·독립 웹 공개/404 경계를 확인했다. 배포용만 공개하고 개발자용은 Draft다. 완료한 임시 workflow는 제거한다.
 
-Node300·구문·Linux Electron45/Xvfb 합성 HTTPS 관리109·자동30·계정121·입장218·replay136·신청193·업데이트23, Electron 전체830개와 최종 Windows resources/app의 Linux Electron 개발자109/배포95·에디션 데이터 분리·깨끗한 소스195파일·의존성·Node300·구문 재현·같은 에디션20/21/22/23/24/25/26/27의 실제 ZIP runtime·전체 app 패치 교체가 목표 전체 ZIP과 같은16경우를 확인했다. 기존 실제 v27 Python ZIP의 두 에디션 판독도 통과했다. [수동 업로드](https://github.com/issackr580/doctor-glean-pc/actions/runs/40897446074) 뒤12개 자산 재다운로드·서버 SHA·체크섬·ZIP 내부를 대조하고 배포용만 공개했다. 개발자 Draft·독립 웹 공개/404 경계를 확인했다. 실제 서버 메타데이터로 만든 서명 피드를 공개키로 검증하고 완료한 임시 workflow를 제거했다. 인계는 문서/피드만 갱신하며 실행 소스·태그·자산은 교체하지 않는다.
+실제 Windows DPAPI·회원 로그인/원래 DOM·입장/재생/출석/보상·알림·절전/복귀/재부팅·실제 GitHub 로그인/버튼 설치는 별도 미확인이다. 클릭/허용 이동/watch 문서 로드를 재생·적립으로 표시하지 않는다. 진단/조회/업데이트로 필수 소비·quiz pending·daily lease를 초기화하지 않는다. 서명 개인키·개인 ZIP/로그·계정/쿠키/토큰·Android APK/키를 소스/배포에 넣지 않는다. 모바일 제품/릴리스와 과거 PC 자산은 변경하지 않았다.
 
-## 다음 확인과 유지보수
-
-- 실제 Windows 폴더 교체·재시작·실패 복구·권한 거절·잠긴 파일과 실제 GitHub 로그인/2FA를 확인한다. 합성 통과로 실사용 성공을 주장하지 않는다.
-- 최초 preview.28까지는 같은 에디션20~27의 작은 패치를 한 번 수동 적용한다. 이후 같은 runtime은 버튼, runtime 변경은 전체 묶음이다. [사용/서명 피드 절차](UPDATES.md)와 [배포 절차](RELEASE_PROCESS.md)를 따른다.
-- 미래 릴리스도 자산 대조 뒤 관리자 개인키로 실제 서버 패치 메타데이터를 서명해 updates/preview.json 또는 stable.json을 PR로 갱신해야 한다. 개인키를 저장소/배포/공개 Actions에 넣지 않는다. 키가 없는 환경에서 서명 피드 발행 완료를 주장하지 않는다.
-- D26의 기본 목표는 신청 강의 누락 최소화다. 당일 닥터빌 미시도/미소비 예약은 최신 상세로 시각/실행 창/타이머를 바로잡고 옛 기한 뒤에도 현재 기회를 확인해 복구한다. 취소·시도/소비·불확실은 재제출하지 않는다. 다른 사이트/한미 반복 정책 확장은 별도 근거를 남긴다.
-- 실제 사이트 입장·정확한 플레이어·영상·출석/적립은 각각 확인한다. 계정/세션/시도 파일을 지우지 않는다. DPAPI·에디션 분리·직접 로그인 개발자3초/배포10초·자동60초/15분3회·하루10회는 유지한다.
-- vendor v113·모바일 소스/APK/서명/릴리스는 변경하지 않았다. 자동 게시·상주 업데이트·새 서버·자동 진단 전송은 없다.
+다음 제품 변경은 새 버전으로 만든다. 사용자 설정과 필수 시도는 보존하고 [배포](RELEASE_PROCESS.md)·[업데이트](UPDATES.md) 절차를 따른다. Windows 코드서명과 피드 서명을 혼동하지 않는다.

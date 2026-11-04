@@ -1,10 +1,10 @@
 # PC판 현재 상태와 다음 작업
 
-기준 공개 빌드: **0.1.0-preview.28**, 2026-10-29. 실행 소스 `36bd10d100bdbdc4ac4273b4125e16138d9c189f` / `pc-source-v0.1.0-preview.28`. 배포용 공개 prerelease·개발자용(ID428011427) 협업자 Draft를 유지한다. 자산12개 재다운로드·서버 SHA·체크섬·ZIP 내부 전체·독립 웹 공개/404 경계와 같은 에디션20/21/22/23/24/25/26/27의 실제 ZIP runtime·전체 app 패치 교체가 목표 전체 ZIP과 같은16경우를 확인했다. 서명 피드 [updates/preview.json](../updates/preview.json)은 실제 서버 자산으로 생성·공개키 검증했다. 개인 원본·실사용 활동·서명 개인키는 공개 기록에 포함하지 않는다.
+기준 공개 빌드: **0.1.0-preview.29**. 실행 소스 `331f7632c8537d20a8ccc680fc2dedf5d1097250` / `pc-source-v0.1.0-preview.29`. [배포용](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.29) 공개 prerelease·개발자용(ID434327358) 협업자 Draft와 서명 피드를 확인했다. Node321·구문·Linux Electron45/Xvfb 합성 HTTPS 관리115·자동30·계정121·입장272·replay136·신청193·업데이트23, Electron 전체890개·최종 Windows resources/app의 Linux 관리 창 개발자115/배포101·에디션 데이터 분리·깨끗한 소스210파일·의존성/Node321/구문 재현·같은 에디션20~28의 실제 ZIP runtime·전체 app 패치 교체18경우, 자산12개 재다운로드/서버 SHA/전체 ZIP·독립 웹 공개/404를 대조했다. 실제 Windows/회원 사이트 성공은 별도 확인이다.
 
-## PC-018 — 모바일 v139 기준 PC 연결 (preview.29 개발 후보)
+## PC-018 — 모바일 v139 기준 PC 연결 (게시 완료)
 
-현재 게시판은 preview.28이며 별도 작업본의 preview.29에 구현했다. [사전 조사/차이표](PORTING_V139.json), [PC 적용 상세](PORTING_V139.md), [수용 항목](PORTING_V139_ACCEPTANCE.json)을 기준으로 검증한다. 모바일197e53ea9c7e15db710be9caebe27869c591c061의 v139 snapshot은 출처 SHA를 고정해 기존 sync 스크립트로 갱신했다. 개인 인계 ZIP·Android 제품/키/APK·원문 보고는 PC 소스/실행물에 넣지 않는다.
+preview.28 기준 별도 작업본에서 preview.29를 구현·검증·게시했다. [사전 조사/차이표](PORTING_V139.json), [PC 적용 상세](PORTING_V139.md), [수용 항목](PORTING_V139_ACCEPTANCE.json)을 기준으로 검증한다. 모바일197e53ea9c7e15db710be9caebe27869c591c061의 v139 snapshot은 출처 SHA를 고정해 기존 sync 스크립트로 갱신했다. 개인 인계 ZIP·Android 제품/키/APK·원문 보고는 PC 소스/실행물에 넣지 않는다.
 
 닥플 C01/LIVE 조회·등록 강의 ID별 예약·원래 상세/입장 버튼, 독립 조회/출석/입장 선택과 기존 계정 공유를 연결했다. 후다닥/디톡스3회형과 한미5회형을 구분하고, 일반 사이트의 일정 두 checkpoint는 peer 예약과 독립 소비를 보존한다. 닥터빌의 D26 최신 상세 기반 미입장 복구는 유지한다. 퀴즈별 fuse·종근당 daily lease·6/7 라운지·03초 기준·30분 아침 창·일일 작업 선택·설문40회/12초 읽기/기한 알림/제외·메모·보고 미리보기·정확 외부 host 설정을 연결했다. 읽기 전용 상태 갱신은 자동 수령 batch에 섞지 않는다.
 
@@ -143,3 +143,5 @@ Node201·구문, 실제 Linux Electron45/Xvfb 합성 HTTPS 관리 창78·자동 
 - PC-005/006/009: v29 종근당 lease·설문·퀴즈 fuse의 실제 Windows·회원 사이트 결과를 별도 확인한다.
 
 모바일 소스·APK·서명·릴리스는 수정하지 않는다. 운영 서버·유료 API·기기 동기화·iPhone 조작·WOL·절전 해제·지속 영상 재생은 추가하지 않는다. 공개 실행파일은 distribution만 대상이고 developer는 협업자 전용 Draft다. [개발 방침](DEVELOPMENT_POLICY.md)·[공동작업](../CONTRIBUTING.md)·[접근](ACCESS.md)·[인계](CODEX_HANDOFF.md)·[PC 검증](ENTRY_VALIDATION.md)을 따른다.
+
+완료한 preview.29 임시 수동 업로드 workflow를 제거했다. 인계는 문서/피드만 갱신하며 실행 소스·태그·기존 자산·모바일은 교체하지 않는다.
