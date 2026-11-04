@@ -3,6 +3,8 @@ import {createHash} from 'node:crypto';
 import {dirname,resolve,relative,sep} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 
+const provenance=process.argv.find(arg=>arg.startsWith('--source-commit='))?.slice(16);
+if(provenance&&!/^[a-f0-9]{40}$/.test(provenance))throw Error('invalid_source_commit');
 const project=resolve(dirname(fileURLToPath(import.meta.url)),'..');
 const source=resolve(process.argv[2]??resolve(project,'../doctor-glean-handoff-v0.7.62/webinar-android'));
 const engine=resolve(source,'engine');
@@ -38,7 +40,7 @@ const files={
   'sites.json':JSON.stringify(SITES,null,2)+'\n',
 };
 const sha=raw=>createHash('sha256').update(raw).digest('hex');
-const manifest={schemaVersion:1,sourceVersion,sourceFiles:Object.fromEntries([...seen].sort().map(file=>[file,sha(readFileSync(resolve(engine,file)))])),
+const manifest={schemaVersion:1,...(provenance?{sourceCommit:provenance}:{}),sourceVersion,sourceFiles:Object.fromEntries([...seen].sort().map(file=>[file,sha(readFileSync(resolve(engine,file)))])),
   outputs:Object.fromEntries(Object.entries(files).map(([name,raw])=>[name,sha(raw)]))};
 mkdirSync(destination,{recursive:true});
 for(const [name,raw] of Object.entries(files))writeFileSync(resolve(destination,name),raw);

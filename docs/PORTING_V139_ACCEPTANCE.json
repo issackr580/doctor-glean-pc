@@ -1,0 +1,375 @@
+{
+  "schemaVersion": 1,
+  "purpose": "pc_v139_port_acceptance",
+  "referenceVersion": "0.7.139",
+  "pcImplementationVerified": false,
+  "cases": [
+    {
+      "id": "site_inventory",
+      "accept": "10개 사이트 조회와 5개 사이트/8개 일일 task를 구분하고 종근당 자동입장을 지원한다고 가정하지 않음",
+      "required": true,
+      "pcStatus": "verified_pc_synthetic",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    },
+    {
+      "id": "query_window",
+      "accept": "KST 오늘~7일 후, 잘못된 날짜/자정 전환, 오래된 결과/현재 확인을 구분",
+      "required": true,
+      "pcStatus": "verified_pc_synthetic",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    },
+    {
+      "id": "catalog_unknown",
+      "accept": "누락/로딩/부분 페이지/불명 날짜를 확정 강의 없음으로 바꾸지 않음",
+      "required": true,
+      "pcStatus": "verified_pc_synthetic",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    },
+    {
+      "id": "docple_filters",
+      "accept": "C01/LIVE 외 검색·북마크 등 혼합 필터로 전체 목록 확인을 주장하지 않음",
+      "required": true,
+      "pcStatus": "verified_pc_synthetic",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    },
+    {
+      "id": "docple_dates",
+      "accept": "전체 연도 날짜와 독립 시작 시각을 사용하고 제목/신청 마감으로 대체하지 않음",
+      "required": true,
+      "pcStatus": "verified_pc_synthetic",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    },
+    {
+      "id": "docple_id",
+      "accept": "같은 제목·동일 시각의 서로 다른 공개 ID를 별도 예약으로 유지",
+      "required": true,
+      "pcStatus": "verified_pc_synthetic",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    },
+    {
+      "id": "docple_pagination",
+      "accept": "원래 다음 페이지 버튼을 signature 확인 뒤 한 번 누르고 전환 전 재클릭하지 않음",
+      "required": true,
+      "pcStatus": "verified_pc_synthetic",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    },
+    {
+      "id": "docple_registered",
+      "accept": "등록 완료를 확인하고 미신청/불명/다시보기/동의 동작을 자동 진행하지 않음",
+      "required": true,
+      "pcStatus": "verified_pc_synthetic",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    },
+    {
+      "id": "docple_waiting",
+      "accept": "비활성 또는 개방시각 문구의 버튼을 강제로 활성화하지 않음",
+      "required": true,
+      "pcStatus": "verified_pc_synthetic",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    },
+    {
+      "id": "docple_detail",
+      "accept": "다른 ID/제목/날짜/시각, 복수 주 버튼·form·모달에서 입장하지 않음",
+      "required": true,
+      "pcStatus": "verified_pc_synthetic",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    },
+    {
+      "id": "docple_login_return",
+      "accept": "같은 origin 로그인 복귀 query를 읽기/저장 없이 login_page로만 복구에 넘김",
+      "required": true,
+      "pcStatus": "verified_pc_synthetic",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    },
+    {
+      "id": "atomic_attempt",
+      "accept": "필수 시도 commit 실패 시 DOM 클릭/전송 0회",
+      "required": true,
+      "pcStatus": "verified_pc_synthetic",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    },
+    {
+      "id": "restart_no_replay",
+      "accept": "소비/불확실한 제출/tombstone은 재시작·조회·진단 삭제로 재허가하지 않음",
+      "required": true,
+      "pcStatus": "verified_pc_synthetic",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    },
+    {
+      "id": "schedule_peers",
+      "accept": "한 대상 시각 갱신이 같은 시각/사이트 및 다른 예약을 삭제하지 않음",
+      "required": true,
+      "pcStatus": "verified_pc_synthetic",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    },
+    {
+      "id": "schedule_pair",
+      "accept": "원래/변경 두 checkpoint를 독립 소비하고 늦은 callback으로 횟수를 늘리지 않음",
+      "required": true,
+      "pcStatus": "verified_pc_synthetic",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ],
+      "pcDifference": "Two slots on Docple/normal sites; Doctorville retains D26 fresh-detail correction and consumed-action protection."
+    },
+    {
+      "id": "hmp_repeat",
+      "accept": "한미 시작시각/신청 상태와 5회·10분 간격·90초 창을 일반 1회형과 구분",
+      "required": true,
+      "pcStatus": "verified_pc_synthetic",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    },
+    {
+      "id": "short_repeat",
+      "accept": "후속 checkpoint는 실제 첫 입장 관찰에 고정하고 KST 당일을 넘기지 않음",
+      "required": true,
+      "pcStatus": "verified_pc_synthetic",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    },
+    {
+      "id": "manual_passive",
+      "accept": "trusted 수동 클릭을 수동 관찰하며 관찰기가 클릭/전송을 만들지 않음",
+      "required": true,
+      "pcStatus": "verified_pc_synthetic",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    },
+    {
+      "id": "login_quota",
+      "accept": "일반 15분 cooldown/일3회와 거절·불확실 제출 잠금을 유지",
+      "required": true,
+      "pcStatus": "existing_owner_approved_pc_policy_preserved",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ],
+      "pcDifference": "Manual3/10s; automatic60s, rolling3/15min, day10; rejection/uncertain lock retained."
+    },
+    {
+      "id": "ckd_document",
+      "accept": "일치하는 문서 commit/finish 전 자격 probe/vault 경계에 들어가지 않음",
+      "required": true,
+      "pcStatus": "verified_pc_synthetic",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    },
+    {
+      "id": "ckd_daily",
+      "accept": "당일 lease 초기화 없이 미제출 실패 후 일반 복구를 mandatory ledger로 판단",
+      "required": true,
+      "pcStatus": "verified_pc_synthetic",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    },
+    {
+      "id": "quiz_fuses",
+      "accept": "오늘 자동 lease와 퀴즈별 전체2회 fuse를 분리하고 미확인 pending을 해제하지 않음",
+      "required": true,
+      "pcStatus": "verified_pc_synthetic",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    },
+    {
+      "id": "daily_ack",
+      "accept": "출석 opener/확인 제출/성공 영수증 분리, brand2는 brand1 성공 요구",
+      "required": true,
+      "pcStatus": "verified_pc_synthetic",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    },
+    {
+      "id": "survey_read",
+      "accept": "설문 답변 자동 제출 없이 실제 기한·제외 설정·읽기 상한·입장 우선을 유지",
+      "required": true,
+      "pcStatus": "verified_pc_synthetic",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    },
+    {
+      "id": "lounge_batch",
+      "accept": "실표시6/7 미션과 대상 mask를 먼저 commit하고 동시 호출하며 응답 누락으로 재claim하지 않음",
+      "required": true,
+      "pcStatus": "verified_pc_synthetic",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    },
+    {
+      "id": "external_hosts",
+      "accept": "정확 host·명시 HTTP 선택·창 소유권·원래 GET/POST를 유지하고 TLS를 끄지 않음",
+      "required": true,
+      "pcStatus": "verified_pc_synthetic",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    },
+    {
+      "id": "settings",
+      "accept": "마이그레이션이 기존 선택·동의·계정·소비·설문 제외를 초기화하지 않음",
+      "required": true,
+      "pcStatus": "verified_pc_synthetic",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    },
+    {
+      "id": "shared_docple_account",
+      "accept": "닥플 출석/조회 중 하나가 남으면 공유 계정을 파괴하지 않음",
+      "required": true,
+      "pcStatus": "verified_pc_synthetic",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    },
+    {
+      "id": "cancel_epoch",
+      "accept": "중지/취소 뒤 이전 owner·문서·늦은 callback의 행동/쓰기를 거절",
+      "required": true,
+      "pcStatus": "verified_pc_synthetic",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    },
+    {
+      "id": "sleep_restart",
+      "accept": "실제 Windows 종료/재시작/절전/복귀/네트워크 변화/다중 실행을 확인",
+      "required": true,
+      "pcStatus": "pending_actual_windows_or_authenticated_site",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    },
+    {
+      "id": "clock",
+      "accept": "KST08:10/00:01:03/휴일/자정 경계를 PC 로컬 시각과 혼동하지 않음",
+      "required": true,
+      "pcStatus": "verified_pc_synthetic",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    },
+    {
+      "id": "journal_privacy",
+      "accept": "고정 필드/reason·한도·미리보기, query·쿠키·HTML·사용자 경로 제외",
+      "required": true,
+      "pcStatus": "verified_pc_synthetic",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    },
+    {
+      "id": "update_platform",
+      "accept": "PC OS/아키텍처/채널/소유자 서명을 확인하고 Android APK를 후보에서 제외",
+      "required": true,
+      "pcStatus": "verified_pc_synthetic",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    },
+    {
+      "id": "evidence_levels",
+      "accept": "클릭·문서 로드·실제 도착·재생·출석·보상 근거를 분리",
+      "required": true,
+      "pcStatus": "verified_pc_synthetic",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    },
+    {
+      "id": "real_validation",
+      "accept": "모바일/합성 검사와 현재 Windows·인증 사이트 실측을 별도 보고",
+      "required": true,
+      "pcStatus": "pending_actual_windows_or_authenticated_site",
+      "evidence": [
+        "test/porting-v139.test.js",
+        "scripts/electron-porting-cases.mjs"
+      ]
+    }
+  ],
+  "pcVersion": "0.1.0-preview.29",
+  "pcSourceBaseline": "7bdaf1b33c715eef2551b52f285395ef105f0137",
+  "windowsExecuted": false,
+  "authenticatedProvidersVerified": false,
+  "pcSyntheticChecks": {
+    "node": 321,
+    "syntax": 1,
+    "catalog": 115,
+    "automation": 30,
+    "credentials": 121,
+    "entry": 272,
+    "replay": 136,
+    "registration": 193,
+    "update": 23
+  }
+}

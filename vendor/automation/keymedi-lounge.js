@@ -30,7 +30,7 @@
   }
   const panel=panels[0],names=['개원·경영','마케팅','세무·법무','의료기기','금융','어벤져스 Pack','브랜드 스테이션'];
   const normalize=s=>s.replace(/\s+/g,'').replace(/[ㆍ・]/g,'·');
-  const rows=[...panel.querySelectorAll('dl')];if(rows.length!==7)return {status:'blocked',reason:'mission_changed'};
+  const rows=[...panel.querySelectorAll('dl')];if(![6,7].includes(rows.length))return {status:'blocked',reason:'mission_changed'};
   const buttons=Array(7).fill(null);let found=0,eligibleMask=0,successMask=0;
   for(const row of rows){
     const title=row.querySelector('dt'),index=names.findIndex(name=>normalize(text(title))===normalize(name+' 체험하기'));
@@ -43,12 +43,13 @@
     else if(label==='성공'&&button.disabled)successMask|=1<<index;
     else if(!['체험하기','처리중...','미달성','포인트 받기'].includes(label))return {status:'blocked',reason:'mission_changed'};
   }
-  const progress=[...panel.querySelectorAll('span,div')].filter(e=>visible(e)&&e.children.length===0&&/^([0-7])\s*\/\s*7$/.test(text(e)));
+  if(found!==(rows.length===7?127:95))return {status:'blocked',reason:'mission_changed'};
+  const progress=[...panel.querySelectorAll('span,div')].filter(e=>visible(e)&&e.children.length===0&&new RegExp('^([0-'+rows.length+'])\\s*\\/\\s*'+rows.length+'$').test(text(e)));
   if(progress.length!==1)return {status:'waiting',reason:'progress_unavailable'};
   const current=Number(text(progress[0]).split('/')[0].trim());
-  if(current===7)successMask=127;
+  if(current===rows.length)successMask=found;
   if(successMask.toString(2).replace(/0/g,'').length>current)return {status:'blocked',reason:'progress_conflict'};
-  const result={status:'ready',current,total:7,eligibleMask,successMask};
+  const result={status:'ready',current,total:rows.length,missionMask:found,eligibleMask,successMask};
   if(mode!=='claim')return result;
   if(!Number.isInteger(input.mask)||input.mask<=0||input.mask>127||typeof input.lease!=='string'||!/^[a-zA-Z0-9:-]{1,120}$/.test(input.lease)||!Number.isFinite(input.opensAt)||!Number.isFinite(input.closesAt)||Date.now()<input.opensAt||Date.now()>=input.closesAt)return {status:'blocked',reason:'invalid_lease',sentMask:0};
   if(input.requireFreshDocument===true&&(!Number.isFinite(performance.timeOrigin)||performance.timeOrigin<input.opensAt))return {status:'blocked',reason:'stale_document',sentMask:0};

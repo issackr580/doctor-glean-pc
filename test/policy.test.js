@@ -90,8 +90,8 @@ test('Hanmi slots follow registered start time, never a hardcoded lunch slot', (
 });
 
 test('weekday lounge preparation skips passed preparation and weekends', () => {
-  assert.equal(nextLoungePreparation(kstInstant('2026-10-23','23:00')),kstInstant('2026-10-26','00:00:02'));
-  assert.equal(nextLoungePreparation(kstInstant('2026-10-26','00:00:03')),kstInstant('2026-10-27','00:00:02'));
+  assert.equal(nextLoungePreparation(kstInstant('2026-10-23','23:00')),kstInstant('2026-10-26','00:00:03'));
+  assert.equal(nextLoungePreparation(kstInstant('2026-10-26','00:00:03')),kstInstant('2026-10-27','00:00:03'));
 });
 
 test('expired jobs and jobs from another Korean day cannot execute after resume', () => {

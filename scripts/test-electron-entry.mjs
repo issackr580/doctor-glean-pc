@@ -5,6 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import assert from 'node:assert/strict';
+import {portingCases} from './electron-porting-cases.mjs';
 import {AutomationPage} from '../src/automation-page.js';
 import {EntryRunner} from '../src/entry-runner.js';
 import {WorkflowStore} from '../src/workflow-store.js';
@@ -339,7 +340,7 @@ async function run(){
  for(const scenario of ['end_clock','title_clock']){
   const shownTitle=scenario==='title_clock'?'합성 입장 12:20':title,actualStart=scenario==='end_clock'?'11:50':'12:45',actualEnd=scenario==='end_clock'?'12:20':'13:45',wanted='12:20';
   const card=`<a class="list_detail" href="/seminar/seminarDetail?seminarId=17"><strong class="tit">${shownTitle}</strong><p class="date">${date}</p><div class="time"><span class="start">${actualStart}</span> ~ ${actualEnd}</div><button onclick="fetch('/synthetic-entry',{method:'POST'})">입장하기</button></a>`;
-  await inspect('doctorville',card,{work:async page=>{const r=await page.call('auto-entry.js',[{...job('doctorville'),title:shownTitle,time:wanted},'inspect']);check('original Doctorville '+scenario+' reproduces permissive clock acceptance',r.status==='ready');}});
+  await inspect('doctorville',card,{work:async page=>{const r=await page.call('auto-entry.js',[{...job('doctorville'),title:shownTitle,time:wanted},'inspect']);check('original Doctorville '+scenario+' identifies the independent changed start',r.status==='schedule_changed'&&r.observedTime===actualStart);}});
   const dir=join(root,'strict-original-'+scenario),partition='strict-'+randomUUID(),ledger=new LocalState(join(dir,'state.json')),store=new WorkflowStore(join(dir,'workflows.json'));ledger.setPaused(false);store.setFeature('entry',true);let posts=0,now=Date.now();
   await session.fromPartition(partition).protocol.handle('https',request=>{
    if(request.method!=='GET'){posts++;return new Response('{}');}
@@ -358,6 +359,7 @@ async function run(){
   const r=await page.call('pc-entry.js',[{...job('doctorville'),date:'2020-01-01',time:'12:45',entryClosesAt:Date.now()+600000},'click']);
   check('a recovered entry still rejects a freshly ended detail before the original click',r.status==='lecture_ended');
  }});
+ await portingCases(check);
  check('all inspection and entry windows are released',BrowserWindow.getAllWindows().length===0);
  mkdirSync(new URL('../verification/',import.meta.url),{recursive:true});writeFileSync(new URL('../verification/electron-entry.json',import.meta.url),JSON.stringify({runtime:{platform:process.platform,electron:process.versions.electron,chromium:process.versions.chrome},environment:'Linux Electron45; synthetic HTTPS; PC exact entry and read-only preflight',checks:checks.length,passed:checks,actualProviderVerified:false,windowsVerified:false},null,2)+'\n');
  console.log('ELECTRON_ENTRY_PASS:'+checks.length);app.quit();

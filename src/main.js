@@ -1,4 +1,4 @@
-import {app,BrowserWindow,Menu,Tray,nativeImage,ipcMain,session,dialog,clipboard,powerMonitor,safeStorage,net,shell} from 'electron';
+import {app,BrowserWindow,Menu,Tray,nativeImage,ipcMain,session,dialog,clipboard,powerMonitor,safeStorage,net,shell,Notification} from 'electron';
 import {fileURLToPath} from 'node:url';
 import {join} from 'node:path';
 import {writeFile} from 'node:fs/promises';
@@ -35,6 +35,8 @@ import {RegistrationController,RegistrationStore,registrationKey} from './regist
 import {pcEntryPage} from './entry-page.js';
 import {doctorvilleDetailNavigation} from './automation-policy.js';
 import {boundedWork,waitFor} from './async-work.js';
+import {ReportPreview} from './report-preview.js';
+import {PcOptions} from './pc-options.js';
 import {canRegisterEntry} from './execution-presentation.js';
 
 const metadata=JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8'));
@@ -47,7 +49,9 @@ if(app.getPath('userData')!==dataDirectory)app.setPath('userData',dataDirectory)
 if(app.getPath('sessionData')!==browserDirectory)app.setPath('sessionData',browserDirectory);
 if(process.platform==='win32')app.setAppUserModelId(EDITION.appId);
 const controlUrl=new URL('../ui/index.html',import.meta.url).href;
-let control,tray,state,catalog,collector,catalogQueue,automation,credentials,registration,developerTools,preload,updater,quitting=false,viewDate=kstDate();
+let control,tray,state,catalog,collector,catalogQueue,automation,credentials,registration,developerTools,preload,updater,pcOptions,quitting=false,viewDate=kstDate();
+const reportPreview=new ReportPreview();
+const surveyNotices=new Map();
 const registrationWindows=new Map(),registrationConfirmed=new Map();
 const siteWindows=new Map(),remoteWindows=new Set(),configuredSessions=new Set();
 const manualOwners=new Map();
@@ -73,10 +77,10 @@ function notify(){if(control&&!control.isDestroyed())control.webContents.send('p
 const buildState=()=>({
   version:VERSION,processStartedAt:PROCESS_STARTED_AT,appName:EDITION.name,applicationId:EDITION.appId,edition:EDITION.id,date:validQueryDate(viewDate)?viewDate:(viewDate=kstDate()),today:kstDate(),
   maxDate:kstDate(kstInstant(kstDate(),'00:00')+7*86_400_000),paused:state.snapshot().paused,
-  sites:SITES.map(({id,name,loginUrl})=>({id,name,open:[...manualOwners.values()].includes(id),loginEntry:!!loginUrl,session:effectiveSession(id),catalog:id!=='docple',selected:catalog.selected().includes(id)})),
+  sites:SITES.map(({id,name,loginUrl})=>({id,name,open:[...manualOwners.values()].includes(id),loginEntry:!!loginUrl,session:effectiveSession(id),catalog:true,selected:catalog.selected().includes(id)})),
   collection:collector.snapshot(),results:catalog.view(validQueryDate(viewDate)?viewDate:kstDate()).results,
   pendingQueries:catalogQueue?.snapshot()??[],
-  credentials:credentials?.snapshot(),update:updater?.snapshot(),
+  options:pcOptions?.snapshot(),credentials:credentials?.snapshot(),update:updater?.snapshot(),
   automationAvailable:true,automation:automation?.snapshot(),registration:registrationState(),dailyTasks:DAILY_TASKS.map(({key,label,site})=>({key,label,site})),
 });
 
@@ -183,11 +187,12 @@ async function finishSiteLogin(id){
  if(!saved)return {ok:false,reason:'session_storage_error'};
  for(const window of windows)if(!window.isDestroyed()){closingWindows.add(window);window.destroy();}
  showControl();
- if(id!=='docple'){
+ if(catalog.selected().includes(id)){
   if(!validQueryDate(viewDate))viewDate=kstDate();
   catalogQueue.request(viewDate,[id]);
  }
- return {ok:true,queryStarted:id!=='docple'};
+ automation?.requestDaily({readOnly:true,keys:DAILY_TASKS.filter(task=>task.site===id&&pcOptions.snapshot().dailyKeys.includes(task.key)&&automation.store.day().daily[task.key]?.status==='login').map(task=>task.key)});
+ return {ok:true,queryStarted:catalog.selected().includes(id)};
 }
 
 function updateTray(){
@@ -232,12 +237,12 @@ function hardenSiteWindow(window,id){
   if(remoteWindows.has(window))return;
   remoteWindows.add(window);manualOwners.set(window,id);notify();
   const contents=window.webContents;
-  watchManualEntry(window,id,{jobs:()=>automation?.store.entries()??[],onClick:key=>{automation?.entry.cancelJob(key,true);browserEvent(id,'manual_entry_observed');}});
+  watchManualEntry(window,id,{jobs:()=>automation?.store.entries()??[],surveyAllowed:()=>!!automation?.allowed()&&automation.store.features().survey,onSurvey:(url,raw)=>automation?.survey.observe(url,raw),onClick:key=>{automation?.entry.cancelJob(key,true);browserEvent(id,'manual_entry_observed');}});
   window.setTitle(siteById(id).name+' · 로그인 후 상단의 「로그인 마침」을 눌러 주세요');
   contents.on('page-title-updated',event=>event.preventDefault());
   window.setAutoHideMenuBar(false);
   window.setMenu(Menu.buildFromTemplate([
-    {id:'finish-login',label:id==='docple'?'로그인 마침 · 창 닫기':'로그인 마침 · 이 사이트 조회',click:()=>finishSiteLogin(id).then(result=>{if(!result.ok)dialog.showMessageBox(window,{type:'error',message:'사이트의 세션 저장 요청을 마치지 못했어요. 이 창을 유지하고 다시 시도해 주세요.'});}).catch(()=>{})},
+    {id:'finish-login',label:'로그인 마침 · 선택한 사이트 조회',click:()=>finishSiteLogin(id).then(result=>{if(!result.ok)dialog.showMessageBox(window,{type:'error',message:'사이트의 세션 저장 요청을 마치지 못했어요. 이 창을 유지하고 다시 시도해 주세요.'});}).catch(()=>{})},
     {id:'open-login',label:'로그인 화면',enabled:!!siteById(id).loginUrl,click:()=>navigateSite(window,id,siteById(id).loginUrl)},
     {label:'다시 열기',click:()=>navigateSite(window,id,siteById(id).url)},
   ]));
@@ -302,7 +307,7 @@ function registerIPC(channel,handler){
     if(!trustedControl(event,control,controlUrl))throw Error('not_allowed');
     if(updater?.guarded&&!['pc:state','pc:quit','pc:update-check','pc:update-install','pc:update-ready'].includes(channel))return {ok:false,reason:'busy'};
     try{return await handler(...args);}
-    catch(error){return {ok:false,reason:['invalid_selection','invalid_date','collection_busy','window_unavailable'].includes(error.message)?error.message:'operation_unavailable'};}
+    catch(error){if(pcOptions?.failed){try{state.setPaused(true);automation?.cancel();notify();}catch{}}return {ok:false,reason:['invalid_selection','invalid_date','collection_busy','window_unavailable'].includes(error.message)?error.message:'operation_unavailable'};}
   });
 }
 function ipc(){
@@ -331,17 +336,22 @@ function ipc(){
     return {ok:true};
   });
   registerIPC('pc:collect-site',id=>{
-    if(!SITES.some(site=>site.id===id&&id!=='docple'))return {ok:false,reason:'invalid_site'};
+    if(!SITES.some(site=>site.id===id))return {ok:false,reason:'invalid_site'};
     if(!validQueryDate(viewDate))return {ok:false,reason:'invalid_date'};
     catalogQueue.request(viewDate,[id]);return {ok:true};
   });
   registerIPC('pc:cancel-collection',()=>{catalogQueue.clear();collector.cancel();return {ok:true};});
-  registerIPC('pc:copy-schedule',async()=>{await clipboard.writeText(formatPcSchedule(viewDate,catalog.selected(),catalog.view(viewDate).results));return {ok:true};});
+  registerIPC('pc:daily-selection',keys=>{automation.daily.cancel();pcOptions.selectDaily(keys);notify();return {ok:true};});
+  registerIPC('pc:memo',(date,text)=>{if(!validQueryDate(date))return {ok:false};pcOptions.memo(date,text);notify();return {ok:true};});
+  registerIPC('pc:entry-hosts',rows=>{if(automation.busy||remoteWindows.size||credentials.busy||collector.snapshot().running)return {ok:false,reason:'busy'};pcOptions.hosts(rows);notify();return {ok:true};});
+  registerIPC('pc:survey-exclude',(key,value)=>{pcOptions.excludeSurvey(key,value);if(value){surveyNotices.get(key)?.close();surveyNotices.delete(key);}automation.survey.cancel();notify();return {ok:true};});
+  registerIPC('pc:survey-open',key=>{const url=automation.survey.target(key);if(!url)return {ok:false};openSite('doctorville');navigateSite(siteWindows.get('doctorville'),'doctorville',url);return {ok:true};});
+  registerIPC('pc:copy-schedule',async()=>{await clipboard.writeText(formatPcSchedule(viewDate,catalog.selected(),catalog.view(viewDate).results)+(pcOptions.snapshot().memos[viewDate]?'\n\n메모: '+pcOptions.snapshot().memos[viewDate]:''));return {ok:true};});
   registerIPC('pc:pause',value=>{
     if(typeof value!=='boolean')return {ok:false,reason:'invalid_setting'};
     if(value){catalogQueue.clear();collector.cancel();automation?.cancel();credentials?.cancel();registration?.cancel();}state.setPaused(value);if(!value)automation?.resumed();updateTray();notify();return {ok:true,state:buildState()};
   });
-  registerIPC('pc:set-feature',(key,value)=>{automation.setFeature(key,value);return {ok:true,state:buildState()};});
+  registerIPC('pc:set-feature',(key,value)=>{automation.setFeature(key,value);if(key==='survey'&&!value){for(const notice of surveyNotices.values())notice.close();surveyNotices.clear();}return {ok:true,state:buildState()};});
   registerIPC('pc:set-entry-sites',ids=>{automation.setEntrySites(ids);return {ok:true,state:buildState()};});
   registerIPC('pc:daily',readOnly=>{if(typeof readOnly!=='boolean')return {ok:false,reason:'invalid_setting'};return automation.requestDaily({readOnly});});
   registerIPC('pc:quick-run',()=>automation.quick());
@@ -350,7 +360,8 @@ function ipc(){
    if(result.status!=='authenticated')return;
    sessionChange(site,{login:'authenticated',authSource:'verified_profile',checkedAt:Date.now(),lastError:''});
    await flushProfile(site);
-   if(site!=='docple'){if(!validQueryDate(viewDate))viewDate=kstDate();catalogQueue.request(viewDate,[site]);}
+   automation?.requestDaily({readOnly:true,keys:DAILY_TASKS.filter(task=>task.site===site&&pcOptions.snapshot().dailyKeys.includes(task.key)&&automation.store.day().daily[task.key]?.status==='login').map(task=>task.key)});
+   if(catalog.selected().includes(site)){if(!validQueryDate(viewDate))viewDate=kstDate();catalogQueue.request(viewDate,[site]);}
   };
   const prepareCredential=id=>{if(!credentialSite(id))throw Error('invalid_site');if(collector.snapshot().running&&collector.snapshot().site===id)collector.cancel();automation.manualOpened(id);registration?.cancel(id);};
   registerIPC('pc:credential-save',async(site,id,password,automatic)=>{
@@ -381,11 +392,14 @@ function ipc(){
     openSite(id,true);return {ok:true};
   });
   registerIPC('pc:finish-login',id=>finishSiteLogin(id));
-  registerIPC('pc:export-report',async()=>{
+  registerIPC('pc:report-preview',()=>reportPreview.freeze(JSON.stringify({...diagnosticSnapshot(),...developerTools?.reportDetails?.()},null,2)+'\n'));
+  registerIPC('pc:report-copy',token=>{const text=reportPreview.text(token);if(text===null)return {ok:false};clipboard.writeText(text);return {ok:true};});
+  registerIPC('pc:export-report',async token=>{
+    const frozen=token===undefined?null:reportPreview.text(token);if(token!==undefined&&frozen===null)return {ok:false};
     const result=await dialog.showSaveDialog(control,{title:'오류보고 저장',defaultPath:`doctor-glean-pc-${kstDate()}.txt`,filters:[{name:'텍스트 파일',extensions:['txt']}]});
     if(result.canceled||!result.filePath)return {ok:true,cancelled:true};
     const report={...diagnosticSnapshot(),...developerTools?.reportDetails?.()};
-    await writeFile(result.filePath,JSON.stringify(report,null,2)+'\n',{encoding:'utf8',mode:0o600});
+    await writeFile(result.filePath,frozen??JSON.stringify(report,null,2)+'\n',{encoding:'utf8',mode:0o600});
     return {ok:true};
   });
 }
@@ -404,6 +418,7 @@ else{
        isBusy:()=>!!automation?.busy||!!credentials?.busy||!!registration?.active||!!collector?.snapshot().running||manualOwners.size>0||remoteWindows.size>0||!state.snapshot().paused&&automation?.store.features().entry&&!!automation?.store.entries().some(job=>job.status==='reserved'&&job.deadline>=Date.now()&&(job.nextAt??job.due)<=Date.now()+120000),
        onChange:()=>{notify();if(!updater?.guarded){catalogQueue?.pump();automation?.tick();}},quit:()=>app.quit()});
       if(updater.waitForHelper){app.quit();return;}
+      pcOptions=new PcOptions(join(dataDirectory,'pc-options-v1.json'));
       catalog=new CatalogStore(join(app.getPath('userData'),'catalog-v1.json'));
       developerTools=createDeveloperTools({directory:dataDirectory,register:registerIPC,notify,edition:EDITION,version:VERSION,build:{sourceCommit:BUILD_INFO.sourceCommit,electronVersion:process.versions.electron,chromiumVersion:process.versions.chrome},copy:text=>clipboard.writeText(text),
         policy:{allowedNavigation,remotePreferences},snapshot:diagnosticSnapshot,save:async(defaultPath,content,valid=()=>true)=>{
@@ -426,12 +441,13 @@ else{
         return page;
        },onChange:()=>{notify();if(!credentials?.busy)queueMicrotask(()=>{catalogQueue?.pump();automation?.tick();});}});
       collector=new CatalogRunner({store:catalog,createPage:(profile,signal)=>electronCatalogPage(profile,signal,prepareSession(profile.id)),
+        prepareCollection:(id,signal)=>credentials.prepareCollection(id,signal),
         recoverLogin:async(id,signal)=>(await credentials.recover(id,{automatic:true,signal})).status==='authenticated',
         isManualOpen:id=>[...manualOwners.values()].includes(id)||credentials.active?.site===id,onChange:snapshot=>{developerTools.observe(snapshot);notify();if(!snapshot.running)queueMicrotask(()=>catalogQueue?.pump());}});
       catalogQueue=new CatalogQueue({start:async(date,ids)=>{await collector.start(date,ids);automation?.catalogFinished(date,ids,collector.snapshot());},busy:()=>updater.guarded||collector.snapshot().running||!!automation?.busy||credentials.busy,validDate:validQueryDate,onChange:notify});
-      automation=new AutomationController({file:join(dataDirectory,'workflows-v1.json'),ledger:state,executionAllowed:()=>!updater.guarded,
-       createPage:(site,signal,options)=>credentials.wrapPage(site,new AutomationPage(site,signal,prepareSession(site),options)),
-       createInspectionPage:(site,signal,options)=>new AutomationPage(site,signal,prepareSession(site),options),onEvent:event=>developerTools.event(event),traceEntry:(job,kind)=>developerTools.traceEntry(job,kind),observeEntry:(...args)=>developerTools.observeEntry(...args),
+      automation=new AutomationController({file:join(dataDirectory,'workflows-v1.json'),options:pcOptions,notifySurvey:key=>{if(Notification.isSupported()){const notice=new Notification({title:'닥터빌 설문 참여 안내',body:'설문 기한을 확인했어요. 앱에서 상세 화면을 열어 직접 참여해 주세요.'});notice.on('click',()=>showControl());notice.on('close',()=>surveyNotices.delete(key));surveyNotices.set(key,notice);notice.show();}},ledger:state,executionAllowed:()=>!updater.guarded,
+       createPage:(site,signal,options)=>credentials.wrapPage(site,new AutomationPage(site,signal,prepareSession(site),{...options,externalEntryAllowed:(id,url)=>pcOptions.allowsEntry(id,url)})),
+       createInspectionPage:(site,signal,options)=>new AutomationPage(site,signal,prepareSession(site),{...options,externalEntryAllowed:(id,url)=>pcOptions.allowsEntry(id,url)}),onEvent:event=>developerTools.event(event),traceEntry:(job,kind)=>developerTools.traceEntry(job,kind),observeEntry:(...args)=>developerTools.observeEntry(...args),
        isManualOpen:id=>[...manualOwners.values()].includes(id)||credentials.active?.site===id,catalog:date=>catalog.view(date).results,catalogBusy:()=>collector.snapshot().running||credentials.busy,
        queueCatalog:date=>{viewDate=date;catalogQueue.request(date,catalog.selected());},
        yieldCatalog:()=>{const current=collector.snapshot();if(current.running){catalogQueue.request(current.date,catalog.selected());collector.cancel('entry_priority');}},

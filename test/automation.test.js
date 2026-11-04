@@ -155,7 +155,7 @@ test('desktop quiz duplicate-link recovery still reserves the daily submit befor
   if(name==='daily.js')return {status:'pending',reason:'today_quiz_visual'};
   if(name==='doctorville-quiz-journey.js')return {status:'stopped',reason:'product_link_ambiguous'};
   if(name==='doctorville-quiz-page.js')return {status:'navigate',reason:'today_product_link',productName:'합성 제품',url:'https://www.doctorville.co.kr/product/productView?pId=123'};
-  if(input.mode==='prepare')return {status:'ready',attemptCount:0};
+  if(input.mode==='prepare')return {status:'ready',quizId:721,attemptCount:0};
   if(input.mode==='submit'){assert.equal(Object.values(ledger.snapshot().jobs)[0].state,'attempting');sent++;return {status:'success',reason:'success_receipt'};}
   return {status:'stopped',reason:'cancelled'};
  });

@@ -7,7 +7,8 @@ export const SITES = [
   {id:'medigate',name:'메디게이트',short:'메겟',host:'medigate.net',url:'https://new.medigate.net/symposium',menu:'웹심포지움',filter:'all',crawler:'catalog-v2',support:'trial'},
   {id:'ckd',name:'종근당',short:'종근당',host:'ckdmediview.com',url:'https://www.ckdmediview.com/hcpapp/webinar/webinar.do',menu:'웨비나 · Bell 지급',filter:'bell',crawler:'ckd-calendar-v1',support:'trial'},
   {id:'bluepharm',name:'블루팜',short:'블루팜',host:'bluepharmkorea.co.kr',url:'https://bluepharmkorea.co.kr/',menu:'웹심포지움 · 오프라인 전용 제외',filter:'all',crawler:'additional-catalog-v1',support:'trial',discoverMenu:true,menuLabels:['웹심포지움','웹심포지엄','웨비나','웹 세미나']},
-  {id:'dtalks',name:'디톡스',short:'디톡스',host:'dtalks.kr',url:'https://www.dtalks.kr/websim/vodList.do',menu:'웹 심포지엄 · 편성표',filter:'all',crawler:'additional-catalog-v1',support:'trial'}
+  {id:'dtalks',name:'디톡스',short:'디톡스',host:'dtalks.kr',url:'https://www.dtalks.kr/websim/vodList.do',menu:'웹 심포지엄 · 편성표',filter:'all',crawler:'additional-catalog-v1',support:'trial'},
+  {id:'docple',name:'닥플 플러스',short:'닥플',host:'docple-plus.com',url:'https://docple-plus.com/webinar?category=C01&mode=LIVE&sort=START_ASC',menu:'의학세미나 · LIVE',filter:'all',crawler:'docple-live-v1',support:'trial',enabled:false}
 ];
 export const DAY=86400000, KST=9*3600000;
 export function kstDate(ms=Date.now()){return new Date(ms+KST).toISOString().slice(0,10);}
@@ -18,7 +19,7 @@ export function allowedUrl(url,site){try{const u=new URL(url);return u.protocol=
 export function publicSource(url){try{const u=new URL(url);for(const k of [...u.searchParams.keys()])if(/token|auth|session|password|email|code|ticket/i.test(k))u.searchParams.delete(k);u.hash='';return u.href;}catch{return '';}}
 export function normalizeTitle(t=''){return String(t).replace(/\s+/g,' ').trim();}
 export function dedupe(events){const seen=new Set();return events.filter(e=>{const key=[e.site,e.date,e.time,e.site==='hmp'?'':e.id||'',normalizeTitle(e.title)].join('|');if(seen.has(key))return false;seen.add(key);return true;});}
-export function registrationStatus(event){return event?.site==='hmp'?(['registered','not_registered','closed'].includes(event.registrationStatus)?event.registrationStatus:'unknown'):'';}
+export function registrationStatus(event){return ['hmp','docple'].includes(event?.site)?(['registered','not_registered','closed'].includes(event.registrationStatus)?event.registrationStatus:'unknown'):'';}
 export function lectureEnded(event){return event?.site==='hmp'&&event.lectureEnded===true;}
 export function endedSlot(rows){return rows.length>0&&rows.every(lectureEnded);}
 export function registrationLabel(event){if(lectureEnded(event))return '';return ({registered:'신청완료',not_registered:'미신청',closed:'신청마감',unknown:'신청 상태 미확인'})[registrationStatus(event)]||'';}

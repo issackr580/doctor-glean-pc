@@ -1,4 +1,4 @@
-/node_modules/
+/node_modules
 /dist/
 /coverage/
 *.log
@@ -29,3 +29,8 @@
 **/developer-diagnostics-v1.json
 doctor-glean-pc-*.txt
 doctor-glean-pc-developer-diagnostics*.json
+
+**/pc-options-v1.json
+**/quiz-action-fuses-v1.json
+**/credential-action-fuses-v1.json
+**/surveys-v1.json

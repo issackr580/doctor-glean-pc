@@ -1,3 +1,4 @@
+import {validDocpleEvent} from './docple-policy.js';
 import {readFileSync} from 'node:fs';
 import {allowedNavigation,siteById} from './security.js';
 import {kstDate,kstInstant} from './schedule.js';
@@ -22,7 +23,7 @@ export const DAILY_TASKS=Object.freeze([
  {key:'keymedi:brand2',site:'keymedi',kind:'brand2',label:'키메디 브랜드관 2회차',url:'https://www.keymedi.com/brandhall'},
 ]);
 export const taskByKey=key=>DAILY_TASKS.find(task=>task.key===key)??null;
-export const ENTRY_SITES=Object.freeze(['doctorville','medigate','intermd','bluepharm','keymedi','hmp']);
+export const ENTRY_SITES=Object.freeze(['doctorville','medigate','intermd','bluepharm','keymedi','hmp','docple','whodadoc','dtalks']);
 export const DEFAULT_FEATURES=Object.freeze({dailyClaim:false,quizAuto:false,brand:false,entry:false,morning:false,lounge:false,survey:false});
 export function actionAllowed(task,url,action){
  if(!task||!allowedNavigation(task.site,url)||!action||!['claim','claim_confirm','navigate'].includes(action.type)||typeof action.selector!=='string'||!action.selector||action.selector.length>2048||typeof action.label!=='string'||action.label.length>100)return false;
@@ -58,10 +59,11 @@ export function dailyDialog(task,message,attempted){
 export function entrySchedule(event,now=Date.now()){
  if(!event||!ENTRY_SITES.includes(event.site)||event.date!==kstDate(now)||typeof event.title!=='string'||!event.title.trim()||event.title.length>800||event.lectureEnded)return null;
  try{
+  if(event.site==='docple'&&(!validDocpleEvent(event)||event.registrationStatus!=='registered'))return null;
   const start=kstInstant(event.date,event.time),deadline=start+600000;
   if(now>(event.site==='hmp'?start+4*600000+90000:deadline))return null;
   if(event.site==='hmp'&&!(['registered'].includes(event.registrationStatus)||event.registrationStatus==='unknown'&&event.hmpWatchAvailable===true))return null;
-  return {start,due:event.site==='doctorville'?start-3000000:event.site==='hmp'?start:start+30000,deadline:event.site==='hmp'?start+90000:deadline};
+  return {start,due:event.site==='doctorville'?start-3000000:event.site==='docple'?start-1800000:['hmp','whodadoc','dtalks'].includes(event.site)?start:start+30000,deadline:event.site==='hmp'?start+90000:deadline};
  }catch{return null;}
 }
 export function knownSite(id){return !!siteById(id);}

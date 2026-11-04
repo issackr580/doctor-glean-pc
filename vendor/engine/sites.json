@@ -121,5 +121,17 @@
     "filter": "all",
     "crawler": "additional-catalog-v1",
     "support": "trial"
+  },
+  {
+    "id": "docple",
+    "name": "닥플 플러스",
+    "short": "닥플",
+    "host": "docple-plus.com",
+    "url": "https://docple-plus.com/webinar?category=C01&mode=LIVE&sort=START_ASC",
+    "menu": "의학세미나 · LIVE",
+    "filter": "all",
+    "crawler": "docple-live-v1",
+    "support": "trial",
+    "enabled": false
   }
 ]

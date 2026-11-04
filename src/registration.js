@@ -1,21 +1,22 @@
 import {createHash} from 'node:crypto';
 import {atomicJson,readJson} from './atomic-json.js';
-import {ENTRY_SITES,doctorvilleDetailNavigation} from './automation-policy.js';
+import {doctorvilleDetailNavigation} from './automation-policy.js';
 import {kstDate,kstInstant} from './schedule.js';
 import {siteById} from './security.js';
 import {waitFor} from './async-work.js';
+const REGISTRATION_SITES=['doctorville','medigate','intermd','bluepharm','keymedi','hmp'];
 const number=n=>Number.isSafeInteger(n)&&n>=0&&n<=1e15;
 export const registrationKey=job=>createHash('sha256').update(JSON.stringify([job.site,job.date,job.time,job.title.replace(/\s+/g,' ').trim()])).digest('hex');
 export function registrationTarget(job,now=Date.now()){
  try{
-  if(!job||!ENTRY_SITES.includes(job.site)||typeof job.title!=='string'||!job.title.trim()||job.title.length>800||typeof job.date!=='string'||typeof job.time!=='string'||!/^([01]\d|2[0-3]):[0-5]\d$/.test(job.time)||job.lectureEnded||job.registrationStatus==='closed')return null;
+  if(!job||!REGISTRATION_SITES.includes(job.site)||typeof job.title!=='string'||!job.title.trim()||job.title.length>800||typeof job.date!=='string'||typeof job.time!=='string'||!/^([01]\d|2[0-3]):[0-5]\d$/.test(job.time)||job.lectureEnded||job.registrationStatus==='closed')return null;
   const start=kstInstant(job.date,job.time);if(job.date<kstDate(now)||job.date>kstDate(now+7*86400000)||now>start+600000)return null;
   return {site:job.site,date:job.date,time:job.time,title:job.title,key:registrationKey(job),slot:0,due:now,deadline:Math.min(now+45000,start+600000)};
  }catch{return null;}
 }
 function valid(data){
  if(!data||data.schemaVersion!==1||Object.keys(data).sort().join('|')!=='rows|schemaVersion'||!data.rows||Array.isArray(data.rows)||typeof data.rows!=='object'||Object.keys(data.rows).length>400)return false;
- return Object.entries(data.rows).every(([key,row])=>/^[a-f0-9]{64}$/.test(key)&&row&&Object.keys(row).sort().join('|')==='attempted|date|site|state|time|updatedAt'&&ENTRY_SITES.includes(row.site)&&typeof row.date==='string'&&/^20\d{2}-\d{2}-\d{2}$/.test(row.date)&&typeof row.time==='string'&&/^([01]\d|2[0-3]):[0-5]\d$/.test(row.time)&&['unknown','attempting','confirmed'].includes(row.state)&&typeof row.attempted==='boolean'&&number(row.updatedAt));
+ return Object.entries(data.rows).every(([key,row])=>/^[a-f0-9]{64}$/.test(key)&&row&&Object.keys(row).sort().join('|')==='attempted|date|site|state|time|updatedAt'&&REGISTRATION_SITES.includes(row.site)&&typeof row.date==='string'&&/^20\d{2}-\d{2}-\d{2}$/.test(row.date)&&typeof row.time==='string'&&/^([01]\d|2[0-3]):[0-5]\d$/.test(row.time)&&['unknown','attempting','confirmed'].includes(row.state)&&typeof row.attempted==='boolean'&&number(row.updatedAt));
 }
 export class RegistrationStore{
  constructor(file,{commit=atomicJson}={}){this.file=file;this.commit=commit;this.failed=false;this.data={schemaVersion:1,rows:{}};try{this.data=readJson(file,this.data,valid,524288);}catch{this.failed=true;}}

@@ -1,3 +1,7 @@
+# preview.29 이식 계층
+
+모바일 v139의 판독 snapshot과 PC host/필수 저장/Windows UI를 구분한다. [기능별 증거](PORTING_V139.json)와 [구현 계약](PORTING_V139.md)에 baseline과 차이를 기록했다. docple-policy의 공개 ID, entry-checkpoints의 두 슬롯, ActionFuses의 날짜와 별개인 퀴즈 pending/종근당 daily lease, PcOptions의 사용자 선택, SurveyRunner의 읽기/실제 countdown과 보고 미리보기를 기존 조정기에 연결한다. 계정/시도 저장소와 updater/helper의 신뢰 경계를 유지한다.
+
 # PC 구조
 
 preview.28/D27은 update-trust.js의 고정 Ed25519 공개키로 고정 저장소 updates/preview.json 또는 stable.json을 검증한다. PcUpdater는 서명된 같은 채널/에디션의 상향 버전과 검증된 호환 목록만 보관하고 로컬 최상위 관리 창의 매개변수 없는 확인/설치 IPC만 받는다. 피드에는 임의 규칙/명령·인증 토큰이 없다. 공개 다운로드는 Electron net.request의 각 리디렉션을 검증하고 세션 쿠키를 사용하지 않는다. ZIP reader는 크기/CRC/경로·Windows 별칭·중복/링크를 제한하고 전체 app 파일·package 버전/에디션/source commit·모든 기존 runtime 해시를 검증한다.

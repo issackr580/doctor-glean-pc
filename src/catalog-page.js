@@ -4,7 +4,7 @@ import {pageRole} from './page-role.js';
 
 const ASSETS=new Map();
 function asset(name){if(!ASSETS.has(name))ASSETS.set(name,readFileSync(new URL('../vendor/engine/'+name,import.meta.url),'utf8'));return ASSETS.get(name);}
-const readerName=profile=>profile.id==='dtalks'?'reader-additional.js':profile.id==='ckd'?'reader-ckd.js':profile.id==='keymedi'?'reader-keymedi.js':profile.crawler==='additional-catalog-v1'?'reader-additional.js':'reader-catalog.js';
+const readerName=profile=>profile.id==='dtalks'?'reader-additional.js':profile.id==='ckd'?'reader-ckd.js':profile.id==='keymedi'?'reader-keymedi.js':['additional-catalog-v1','docple-live-v1'].includes(profile.crawler)?'reader-additional.js':'reader-catalog.js';
 const fail=code=>Object.assign(Error(code),{code});
 export function safeCatalogNavigation(profile,action,state){
  if(action?.kind!=='navigate'||!allowedNavigation(profile.id,action.url))return false;
@@ -68,7 +68,7 @@ export class CatalogPage{
    await this.transport.load(action.url,this.signal);this.#current();return true;
   }
   if(!action||!['click','scroll','date','select'].includes(action.kind)||JSON.stringify(action).length>16_000)return false;
-  const name=this.profile.crawler==='additional-catalog-v1'?'additional-action.js':'catalog-action.js',before=this.#current();
+  const name=['additional-catalog-v1','docple-live-v1'].includes(this.profile.crawler)?'additional-action.js':'catalog-action.js',before=this.#current();
   try{return await this.#evaluate(`(${asset(name)})(${JSON.stringify(action)})`)===true;}
   catch(error){
    const after=this.#current();

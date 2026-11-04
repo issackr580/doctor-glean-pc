@@ -3,6 +3,8 @@ import {resolve,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 import vm from 'node:vm';
+const provenance=process.argv.find(arg=>arg.startsWith('--source-commit='))?.slice(16);
+if(provenance&&!/^[a-f0-9]{40}$/.test(provenance))throw Error('invalid_source_commit');
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..'),source=resolve(process.argv[2]??resolve(root,'../doctor-glean-handoff-v0.7.62/webinar-android'));
 const names=['daily.js','auto-entry.js','keymedi-lounge.js','doctorville-quiz-pilot.js','doctorville-quiz-journey.js','doctorville-survey.js'];
 const destination=resolve(root,'vendor/automation'),hash=bytes=>createHash('sha256').update(bytes).digest('hex');
@@ -16,5 +18,5 @@ for(const name of names){
  for(const match of text.matchAll(/['"]([a-z][a-z0-9]*(?:_[a-z0-9]+)+)['"]/g))if(match[1].length<=80)reasons.add(match[1]);
  writeFileSync(resolve(destination,name),bytes);
 }
-writeFileSync(resolve(destination,'manifest.json'),JSON.stringify({schemaVersion:1,sourceVersion:version,sourceFiles:inputs,outputs,reasons:[...reasons].sort()},null,2)+'\n');
+writeFileSync(resolve(destination,'manifest.json'),JSON.stringify({schemaVersion:1,...(provenance?{sourceCommit:provenance}:{}),sourceVersion:version,sourceFiles:inputs,outputs,reasons:[...reasons].sort()},null,2)+'\n');
 console.log(`Automation snapshot: Android ${version}, ${names.length} standalone assets.`);

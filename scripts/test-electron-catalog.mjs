@@ -71,8 +71,13 @@ try{
  check('control preload and real IPC ready',initial.sites.length===10);
  check('application version comes from its package',initial.version===appMetadata.version);
  check('automatic features are available but initially disabled',initial.automationAvailable&&initial.paused&&Object.values(initial.automation.features).every(value=>!value));
- await until(()=>evaluate('document.querySelectorAll("#features input").length===6'));
- check('control offers feature settings and a visible full quit button',await evaluate('!!document.querySelector("#quit")&&document.querySelectorAll("#entry-sites input").length===6'));
+ await until(()=>evaluate('document.querySelectorAll("#features input").length===7'));
+ check('control offers feature settings and a visible full quit button',await evaluate('!!document.querySelector("#quit")&&document.querySelectorAll("#entry-sites input").length===9'));
+ check('Docple catalog and entry start opt-in while existing attendance choice remains',!initial.sites.find(s=>s.id==='docple').selected&&!initial.automation.entrySites.includes('docple')&&initial.options.dailyKeys.includes('docple:attendance'));
+ check('date memo is saved only for its chosen date',(await evaluate(`window.doctorGlean.saveMemo(${JSON.stringify(today)},'SYNTHETIC_LOCAL_MEMO')`)).ok&&(await state()).options.memos[today]==='SYNTHETIC_LOCAL_MEMO');
+ check('exact external entry host settings reject credential hosts',(await evaluate('window.doctorGlean.setEntryHosts([{host:"entry.example.com",http:false}])')).ok&&!(await evaluate('window.doctorGlean.setEntryHosts([{host:"www.keymedi.com",http:true}])')).ok&&(await state()).options.entryHosts[0].host==='entry.example.com');
+ check('daily task selection is independent from catalog and entry',(await evaluate('window.doctorGlean.selectDaily(["doctorville:attendance"])')).ok&&(await state()).options.dailyKeys.length===1&&(await state()).automation.entrySites.length===6);
+ await evaluate(`window.doctorGlean.selectDaily(${JSON.stringify(initial.options.dailyKeys)})`);
  check('edition metadata and application ID match',initial.edition===edition.id&&initial.applicationId===edition.appId&&initial.appName===edition.name);
  check('manual login retry gap matches the built edition while automatic and daily caps remain',initial.credentials.attempts.policy.manualGapMs===(edition.developer?3000:10000)&&initial.credentials.attempts.policy.automaticWindowLimit===3&&initial.credentials.attempts.policy.dailyLimit===10);
  check('another edition did not supply cached results',Object.keys(initial.results).length===0);
@@ -162,7 +167,7 @@ try{
   }else{window.close();await until(async()=>!(await state()).sites.find(site=>site.id===id).open);}
  }
  await evaluate('window.doctorGlean.collect()');
- const done=await until(async()=>{const s=await state();return !s.collection.running&&s.collection.reason==='finished'?s:null;},40_000);
+ const done=await until(async()=>{const s=await state();return !s.collection.running&&s.collection.reason==='finished'&&!s.pendingQueries.length&&s.results.doctorville&&s.results.keymedi?s:null;},40_000);
  for(const id of ['doctorville','keymedi']){
   check(id+' login session shared with hidden reader',done.results[id].events.length===1);
   check(id+' only selected day collected',done.results[id].events.every(row=>row.date===today));
@@ -198,8 +203,11 @@ try{
  const batchResult=await evaluate('window.doctorGlean.preflightUpcoming()');
  check('batch inspection IPC and visible action remain read-only',batchResult.ok&&(await state()).automation.preflight.running===false&&requests.every(r=>r.method==='GET')&&await evaluate('document.getElementById("entry-results").textContent.includes("예정 예약 일괄 사전 검사")'));
  check('batch UI distinguishes processed counts from eligibility outcomes',await evaluate('document.getElementById("entry-results").textContent.includes("버튼 확인")&&document.getElementById("entry-results").textContent.includes("로그인 필요")'));
- await evaluate('window.doctorGlean.exportReport()');
+ const frozenReport=await evaluate('window.doctorGlean.previewReport()');
+ check('report preview exposes the sanitized bytes before export',typeof frozenReport.text==='string'&&!frozenReport.text.includes('SYNTHETIC_LOCAL_MEMO'));
+ await evaluate(`window.doctorGlean.exportReport(${JSON.stringify(frozenReport.token)})`);
  const diagnostic=readFileSync(report,'utf8');
+ check('report save matches the preview byte for byte',diagnostic===frozenReport.text);
  check('ordinary error reports add opt-in entry evidence only in developer builds',edition.developer?Array.isArray(JSON.parse(diagnostic).entryJournal?.records):!Object.hasOwn(JSON.parse(diagnostic),'entryJournal'));
  check('report omits raw session, URLs and lecture titles',!/synthetic-login|https:|합성 .*강의/.test(diagnostic));
  check('report includes bounded collection counts',JSON.parse(diagnostic).sites.length===2);
@@ -226,7 +234,7 @@ try{
   await evaluate('[...document.querySelectorAll("button")].find(b=>b.textContent==="선택 회차 미리보기").click()');await until(()=>evaluate('document.querySelector("#entry-report-preview").value.length>0'));
   check('developer UI presents sanitized text before enabling focus export',await evaluate('document.querySelector("#entry-report-preview").readOnly&&[...document.querySelectorAll("button")].find(b=>b.textContent==="미리본 보고서 저장").disabled===false'));
  }else check('distribution report has no developer recorder state',!Object.hasOwn(JSON.parse(diagnostic),'developerDiagnostics'));
- check('single-site catalog action rejects non-catalog or arbitrary destinations',!(await evaluate('window.doctorGlean.collectSite("docple")')).ok&&!(await evaluate('window.doctorGlean.collectSite("https://outside.example.invalid")')).ok);
+ check('single-site catalog action rejects arbitrary destinations',!(await evaluate('window.doctorGlean.collectSite("https://outside.example.invalid")')).ok);
  const beforeDtalks=await state();modes.dtalks='calendar';
  await evaluate('window.doctorGlean.collectSite("dtalks")');
  const dtalksDone=await until(async()=>{const s=await state();return !s.collection.running&&s.results.dtalks?.checkedAt?s:null;});

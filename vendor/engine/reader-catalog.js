@@ -431,6 +431,31 @@
     const fiveRecords=all('tr').slice(0,2500).flatMap(row=>{const cells=cellsOf(row,5);return cells?[{row,cells}]:[];});
     const fiveOwners=new Map();
     for(const record of fiveRecords){const parent=record.row.parentElement;if(!fiveOwners.has(parent))fiveOwners.set(parent,[]);fiveOwners.get(parent).push(record);}
+    // Public HMP moveCalendar carries the displayed year/month even when the
+    // heading shows only a month. Read a matching original PREV/NEXT pair;
+    // never execute its code, borrow the requested year or change view settings.
+    const navigationMonth=(owner,table)=>{
+     const safe=e=>shown(e)&&!outside(e)&&!e.closest('[aria-hidden="true"],[inert]');
+     const tables=Array.from(owner.querySelectorAll('table')).filter(safe);
+     if(tables.length!==1||tables[0]!==table)return '';
+     const headings=Array.from(owner.querySelectorAll('h1,h2,h3,h4,h5,strong,span,em,p,div')).filter(e=>safe(e)&&!e.closest('table,.subject,.top')&&!e.querySelector('.subject,.top .time'));
+     const months=unique(headings.map(e=>text(e).match(/^(0?[1-9]|1[0-2])월\s*강의\s*일정$/)?.[1]).filter(Boolean).map(Number));
+     if(months.length!==1)return '';
+     const controls=Array.from(owner.querySelectorAll('a,button,[role="button"]')).filter(e=>safe(e)&&!e.closest('table')&&!e.querySelector('.subject')&&!e.disabled&&!e.hasAttribute('disabled')&&e.getAttribute('aria-disabled')!=='true');
+     const is=(e,direction)=>new RegExp('^'+direction+'(?:ious)?$','i').test(label(e))||new RegExp('(?:^|[\\s_-])'+direction+'(?:$|[\\s_-])','i').test(e.getAttribute('class')||'');
+     const previous=controls.filter(e=>is(e,'prev')),next=controls.filter(e=>is(e,'next'));
+     if(previous.length!==1||next.length!==1)return '';
+     const args=e=>{
+      const href=e.getAttribute('href')||'',onclick=e.getAttribute('onclick')||'';
+      if(href&&!/^\s*(?:#|javascript:)/i.test(href))return null;
+      const codes=[onclick,...(/^\s*javascript:/i.test(href)?[href.replace(/^\s*javascript:/i,'')]:[])].filter(value=>value.trim());
+      if(!codes.length)return null;
+      const parsed=codes.map(code=>code.match(/^\s*(?:return\s+)?moveCalendar\(\s*(['"]?)(20\d{2})\1\s*,\s*(['"]?)(0?[1-9]|1[0-2])\3\s*,\s*(['"])([pn])\5\s*\)\s*;?\s*(?:return\s+false\s*;?\s*)?$/)).map(m=>m?{month:m[2]+'-'+m[4].padStart(2,'0'),direction:m[6]}:null);
+      return parsed.every(value=>value&&value.month===parsed[0]?.month&&value.direction===parsed[0]?.direction)?parsed[0]:null;
+     };
+     const p=args(previous[0]),n=args(next[0]);
+     return p&&n&&p.direction==='p'&&n.direction==='n'&&p.month===n.month&&+p.month.slice(5)===months[0]?p.month:'';
+    };
     for(const [parent,group]of fiveOwners){
      if(group.length<4||group.length>7||!group.some(record=>record.cells.some(cell=>cell.querySelector('.subject'))))continue;
      const table=parent.closest('table');if(!table)continue;
@@ -441,6 +466,7 @@
       if(!shown(owner)||outside(owner)||owner.querySelectorAll('*').length>10000)break;
       const months=[...new Set(monthNodes.filter(node=>owner.contains(node)).map(monthOf))];
       if(months.length===1){month=months[0];break;}if(months.length>1)break;
+     const navigation=navigationMonth(owner,table);if(navigation){month=navigation;break;}
      }
      if(!month||!owner||owner===document.body)continue;
      const firstMonth=new Date(month+'-01T00:00:00Z'),year=firstMonth.getUTCFullYear(),monthIndex=firstMonth.getUTCMonth(),days=new Date(Date.UTC(year,monthIndex+1,0)).getUTCDate(),offset=(firstMonth.getUTCDay()+6)%7;
@@ -466,8 +492,10 @@
        if(value!==day){valid=false;break;}
        bindings.push({cell,date:month+'-'+String(day).padStart(2,'0')});
       }else{
-       const expected=new Date(Date.UTC(year,monthIndex,day)).getUTCDate();
-       if(value!==0&&value!==expected||Array.from(cell.querySelectorAll('.subject')).some(shown)){valid=false;break;}
+       const date=new Date(Date.UTC(year,monthIndex,day)),expected=date.getUTCDate();
+       const label=text(cell).match(/^(0?[1-9]|1[0-2])\s*[.\/]\s*(\d{1,2})\s*\.?$/);
+       const emptyNeighbor=label&&+label[1]===date.getUTCMonth()+1&&+label[2]===expected&&!cell.querySelector('.subject,.top .time');
+       if(value!==0&&value!==expected&&!emptyNeighbor||Array.from(cell.querySelectorAll('.subject')).some(shown)){valid=false;break;}
       }
      }
      if(valid)recognized.push({owner,bindings,days:bindings.length});
@@ -522,6 +550,8 @@
    // bounded shape; never carry a date across parents or an unrecognized row.
    const listBindings=new Map();
    if(seeds.length&&seeds.length<=400&&!Array.from(document.querySelectorAll('.top .time')).some(e=>shown(e)&&!e.closest('.subject'))){
+    Object.assign(detail,{listParents:0,listRows:0,listRejectedShape:0,listRejectedDate:0,listMissingDate:0,listRejectedClock:0,listExcludedArchive:0,listConflictingDate:0,listBoundRows:0});
+    const observed=key=>{detail[key]=Math.min(400,detail[key]+1);};
     const fields='time,span,em,p,div,strong,small,b,i,h1,h2,h3,h4,h5,h6,a';
     const titleNodes=e=>Array.from(e.querySelectorAll('.subject')).filter(node=>shown(node)&&!outside(node)&&!node.querySelector('.subject'));
     const clockLabel=/^(?:(?:오전|오후)\s*(?:0?[1-9]|1[0-2])|(?:[01]?\d|2[0-3])):[0-5]\d(?:\s*[~～∼–—-]\s*(?:[01]?\d|2[0-3]):[0-5]\d)?$/;
@@ -531,7 +561,11 @@
     };
     const listDate=e=>{
      if(!shown(e)||outside(e)||e.querySelector('.subject,input,textarea,select')||text(e).length>90)return '';
-     const raw=text(e);if(!calendarLabel.test(raw)||raw.includes(':'))return '';
+     const englishWeekdays={sun:'일',mon:'월',tue:'화',wed:'수',thu:'목',fri:'금',sat:'토'};
+     // The current HMP list shows e.g. 11/02 (Mon). Normalize only the
+     // exact trailing weekday label, then keep the existing calendar check.
+     const raw=text(e).replace(/\(\s*(Sun(?:day)?|Mon(?:day)?|Tue(?:sday)?|Wed(?:nesday)?|Thu(?:rsday)?|Fri(?:day)?|Sat(?:urday)?)\s*\)\s*\.?$/i,(_,day)=>'('+englishWeekdays[day.toLowerCase().slice(0,3)]+')');
+     if(!calendarLabel.test(raw)||raw.includes(':'))return '';
      const date=normalizeCalendarLabel(raw),day=raw.match(/\(([월화수목금토일])(?:요일)?\)\s*\.?$/);
      // Month/day headings are already resolved relative to the requested date
      // by the legacy explicit-date parser. Here also require their shown weekday
@@ -551,27 +585,31 @@
       if(!parents.has(parent))parents.set(parent,new Map());parents.get(parent).set(row,seed);break;
      }
     }
+    detail.listParents=Math.min(400,parents.size);
     for(const [parent,known]of parents){
      let date='';
      for(const row of Array.from(parent.children)){
+      observed('listRows');
       const seed=known.get(row),children=Array.from(row.children).filter(shown);
-      if(!shown(row)||!seed||outside(row)||children.length!==row.children.length||children.length<1||children.length>2||text(row).length>1600||text(seed).length<3||text(seed).length>250||row.querySelectorAll('*').length>200){date='';continue;}
+      if(!shown(row)||!seed||outside(row)||children.length!==row.children.length||children.length<1||children.length>2||text(row).length>1600||text(seed).length<3||text(seed).length>250||row.querySelectorAll('*').length>200){observed('listRejectedShape');date='';continue;}
       const content=children.at(-1);
-      if(!content.contains(seed)||titleNodes(content).length!==1){date='';continue;}
+      if(!content.contains(seed)||titleNodes(content).length!==1){observed('listRejectedShape');date='';continue;}
       if(children.length===2){
        const column=children[0];
-       if(text(column)||column.querySelector('.subject,input,textarea,select'))date=listDate(column);
-       if(!date)continue;
+       if(text(column)||column.querySelector('.subject,input,textarea,select')){date=listDate(column);if(!date)observed('listRejectedDate');}
+       if(!date){observed('listMissingDate');continue;}
       }
-      if(!date)continue;
+      if(!date){observed('listMissingDate');continue;}
       const times=clocks(content,seed);
       // A dated live-schedule row can offer 다시보기 after its broadcast.
       // That action neither changes its original start nor ends the sibling
       // date group. Archive regions and explicit VOD-only rows stay excluded.
-      if(times.length!==1||Array.from(row.querySelectorAll('a,span,em,p,strong,small,button')).some(e=>shown(e)&&!e.closest('.subject')&&!e.children.length&&/^(?:녹화(?:방송)?|VOD|replay|on\s*demand)$/i.test(text(e)))){date='';continue;}
+      if(times.length!==1){observed('listRejectedClock');date='';continue;}
+      if(Array.from(row.querySelectorAll('a,span,em,p,strong,small,button')).some(e=>shown(e)&&!e.closest('.subject')&&!e.children.length&&/^(?:녹화(?:방송)?|VOD|replay|on\s*demand)$/i.test(text(e)))){observed('listExcludedArchive');date='';continue;}
       const dates=dateLabels(content,seed),explicit=dates.map(e=>normalizeCalendarLabel(text(e)));
-      if(explicit.some(value=>!value||value!==date)){date='';continue;}
+      if(explicit.some(value=>!value||value!==date)){observed('listConflictingDate');date='';continue;}
       listBindings.set(seed,{row,dates:[],time:times[0],resolvedDate:date,groupedList:true});
+      observed('listBoundRows');
      }
     }
    }

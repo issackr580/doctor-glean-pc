@@ -3,9 +3,12 @@ import {reasonLabels,siteLabel,collectionSummary} from '../src/catalog-presentat
 import {renderAutomation} from './automation-view.js';
 import {registrationButtonLabel,registrationReplyLabel} from '../src/execution-presentation.js';
 import {setupCredentials,renderCredentials,openCredential,credentialLabel,resultLabel} from './credential-view.js';
+import {setupReports} from './report-view.js';
+import {setupPortOptions} from './port-options.js';
 import {setupUpdates} from './update-view.js';
 const api=window.doctorGlean,message=document.getElementById('message');let refreshing=false,repeat=false,updateReadySent=false;
 const renderUpdate=setupUpdates(api);
+const renderPortOptions=setupPortOptions(api,perform);
 function say(text){message.textContent=text;}
 function node(tag,text,className){const el=document.createElement(tag);if(text!==undefined)el.textContent=text;if(className)el.className=className;return el;}
 async function perform(action,success){try{const r=await action();say(typeof success==='function'?success(r):r?.ok?success:r?.reason==='busy'?'진행 중인 작업이나 직접 사용하는 사이트 창을 마친 뒤 다시 확인해 주세요.':r?.reason==='paused'?'자동 실행을 허용한 뒤 실행해 주세요. 상태만 확인은 중지 중에도 사용할 수 있어요.':r?.reason==='invalid_selection'?'조회할 사이트를 하나 이상 선택해 주세요.':r?.reason==='window_unavailable'?'사이트 창을 만들지 못했어요. 오류보고를 저장해 주세요.':r?.reason==='session_storage_error'?'세션 저장 요청을 마치지 못했어요. 사이트 창을 유지하고 다시 시도해 주세요.':'작업을 완료하지 못했어요.');await refresh();return r;}catch{say('프로그램 상태를 확인하지 못했어요.');}}
@@ -73,7 +76,7 @@ async function refresh(){
   const progress=document.getElementById('progress');
   progress.textContent=state.collection.running?`조회 ${state.collection.completed}/${state.collection.total} · ${state.sites.find(site=>site.id===state.collection.site)?.name??''}`:state.collection.reason==='finished'?'조회 종료 · '+collectionSummary(state.results,selected.map(site=>site.id)):reasonLabels[state.collection.reason]??'';
   if(state.pendingQueries?.length)progress.textContent+=' · 로그인 후 조회 대기 '+state.pendingQueries.length+'곳';
-  renderAutomation(state,api,perform);
+  renderAutomation(state,api,perform);renderPortOptions(state);
   renderCredentials(state);
   if(!updateReadySent){updateReadySent=true;api.updateReady().catch(()=>{updateReadySent=false;});}
   if(!state.collection.running&&state.collection.reason==='finished'&&message.textContent==='강의를 조회하고 있어요.')say('강의 조회를 마쳤어요.');
@@ -87,9 +90,7 @@ document.getElementById('stop').addEventListener('click',()=>perform(()=>api.set
 document.getElementById('quick').addEventListener('click',()=>perform(()=>api.quickRun(),'오늘 확인을 시작했어요. 켜 둔 자동 기능만 실행해요.'));
 document.getElementById('daily-check').addEventListener('click',()=>perform(()=>api.checkDaily(true),'출석·퀴즈 상태를 확인해요. 버튼 제출은 하지 않아요.'));
 document.getElementById('quit').addEventListener('click',()=>api.quit());
-document.getElementById('report').addEventListener('click',async()=>{
- if(!api)return;try{const result=await api.exportReport();say(result?.ok?result.cancelled?'저장을 취소했어요.':'오류보고를 저장했어요.':'오류보고를 저장하지 못했어요.');}catch{say('오류보고를 저장하지 못했어요.');}
-});
+setupReports(api,say);
 setupCredentials(api,refresh);
 api?.onChanged(()=>refresh().catch(()=>say('프로그램 상태를 확인하지 못했어요.')));
 window.addEventListener('focus',()=>refresh().catch(()=>say('프로그램 상태를 확인하지 못했어요.')));

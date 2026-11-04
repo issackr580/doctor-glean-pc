@@ -1,0 +1,669 @@
+{
+  "schemaVersion": 1,
+  "referenceVersion": "0.7.139",
+  "referenceSourceCommit": "197e53ea9c7e15db710be9caebe27869c591c061",
+  "referenceArchiveSha256": "d06a4e088362d09586d48329f1e9b1e5de95dc42cbb2c78f648cae34707d8365",
+  "baseline": {
+    "head": "7bdaf1b33c715eef2551b52f285395ef105f0137",
+    "version": "0.1.0-preview.28",
+    "runtime": "Electron45.0.0 / Windows x64; Node24/npm11 for development",
+    "secretStorage": "Windows DPAPI, edition and site profiles v1",
+    "updates": "PC Ed25519 feed + whole app ZIP hashes, helper backup/rollback; no Authenticode claim"
+  },
+  "features": [
+    {
+      "id": "catalog",
+      "name": "10개 사이트 강의 조회·일정 표시",
+      "baselineStatus": "difference",
+      "baselineEvidence": [
+        "src/catalog-runner.js",
+        "src/catalog-store.js"
+      ],
+      "difference": "9 sites; Docple attendance only; HMP/Medigate parser older v113.",
+      "portStatus": "connected_pc",
+      "windowsVerified": false,
+      "pcEvidence": [
+        "src/catalog-runner.js",
+        "src/catalog-store.js",
+        "vendor/engine/manifest.json"
+      ],
+      "verificationScope": "PC Node / Electron synthetic HTTPS; Windows and authenticated live sites pending",
+      "verificationFiles": [
+        "test/porting-v139.test.js",
+        "scripts/test-electron-entry.mjs"
+      ]
+    },
+    {
+      "id": "selections",
+      "name": "사이트·출석·자동 입장 선택과 설정 보존",
+      "baselineStatus": "difference",
+      "baselineEvidence": [
+        "src/workflow-store.js",
+        "src/catalog-store.js"
+      ],
+      "difference": "Catalog and entry choices separate; no per daily task switches.",
+      "portStatus": "connected_pc",
+      "windowsVerified": false,
+      "pcEvidence": [
+        "src/pc-options.js",
+        "src/workflow-store.js"
+      ],
+      "verificationScope": "PC Node / Electron synthetic HTTPS; Windows and authenticated live sites pending",
+      "verificationFiles": [
+        "test/porting-v139.test.js",
+        "scripts/test-electron-entry.mjs"
+      ]
+    },
+    {
+      "id": "compact",
+      "name": "간략 목록·메모·복사·공유",
+      "baselineStatus": "difference",
+      "baselineEvidence": [
+        "src/catalog-format.js"
+      ],
+      "difference": "Copy schedule present; date memo missing.",
+      "portStatus": "connected_pc",
+      "windowsVerified": false,
+      "pcEvidence": [
+        "src/pc-options.js",
+        "src/catalog-format.js",
+        "ui/port-options.js"
+      ],
+      "verificationScope": "PC Node / Electron synthetic HTTPS; Windows and authenticated live sites pending",
+      "verificationFiles": [
+        "test/porting-v139.test.js",
+        "scripts/test-electron-entry.mjs"
+      ]
+    },
+    {
+      "id": "quick",
+      "name": "오늘 한 번에 실행·아침 예약",
+      "baselineStatus": "difference",
+      "baselineEvidence": [
+        "src/automation-controller.js"
+      ],
+      "difference": "08:10 exists; PC grace 10m versus reference 30m.",
+      "portStatus": "connected_pc",
+      "windowsVerified": false,
+      "pcEvidence": [
+        "src/automation-controller.js"
+      ],
+      "verificationScope": "PC Node / Electron synthetic HTTPS; Windows and authenticated live sites pending",
+      "verificationFiles": [
+        "test/porting-v139.test.js",
+        "scripts/test-electron-entry.mjs"
+      ]
+    },
+    {
+      "id": "daily",
+      "name": "출석·캡슐·브랜드관 확인/실행",
+      "baselineStatus": "implemented",
+      "baselineEvidence": [
+        "src/daily-runner.js"
+      ],
+      "difference": "Existing PC implementation retained and regression checked.",
+      "portStatus": "connected_pc",
+      "windowsVerified": false,
+      "pcEvidence": [
+        "src/daily-runner.js"
+      ],
+      "verificationScope": "PC Node / Electron synthetic HTTPS; Windows and authenticated live sites pending",
+      "verificationFiles": [
+        "test/porting-v139.test.js",
+        "scripts/test-electron-automation.mjs"
+      ]
+    },
+    {
+      "id": "doctorville_quiz",
+      "name": "닥터빌 자동 퀴즈",
+      "baselineStatus": "difference",
+      "baselineEvidence": [
+        "src/doctorville-quiz-runner.js"
+      ],
+      "difference": "Daily one-shot ledger exists; no separate cross-day quiz-id fuse.",
+      "portStatus": "connected_pc",
+      "windowsVerified": false,
+      "pcEvidence": [
+        "src/doctorville-quiz-runner.js",
+        "src/action-fuses.js"
+      ],
+      "verificationScope": "PC Node / Electron synthetic HTTPS; Windows and authenticated live sites pending",
+      "verificationFiles": [
+        "test/porting-v139.test.js",
+        "scripts/test-electron-automation.mjs"
+      ]
+    },
+    {
+      "id": "intermd_quiz",
+      "name": "인터엠디 퀴즈 상태 안내",
+      "baselineStatus": "implemented",
+      "baselineEvidence": [
+        "src/daily-runner.js"
+      ],
+      "difference": "Existing PC implementation retained and regression checked.",
+      "portStatus": "connected_pc",
+      "windowsVerified": false,
+      "pcEvidence": [
+        "src/automation-controller.js",
+        "src/daily-runner.js"
+      ],
+      "verificationScope": "PC Node / Electron synthetic HTTPS; Windows and authenticated live sites pending",
+      "verificationFiles": [
+        "test/porting-v139.test.js",
+        "scripts/test-electron-entry.mjs"
+      ]
+    },
+    {
+      "id": "survey",
+      "name": "닥터빌 설문 읽기·기한 알림·제외 선택",
+      "baselineStatus": "missing",
+      "baselineEvidence": [],
+      "difference": "Feature flag exists, runner and notification not connected.",
+      "portStatus": "connected_pc",
+      "windowsVerified": false,
+      "pcEvidence": [
+        "src/survey-runner.js",
+        "ui/port-options.js"
+      ],
+      "verificationScope": "PC Node / Electron synthetic HTTPS; Windows and authenticated live sites pending",
+      "verificationFiles": [
+        "test/porting-v139.test.js",
+        "scripts/test-electron-entry.mjs"
+      ]
+    },
+    {
+      "id": "normal_entry",
+      "name": "일반 자동 입장 예약",
+      "baselineStatus": "difference",
+      "baselineEvidence": [
+        "src/entry-runner.js"
+      ],
+      "difference": "6 sites; missing Docple, Whodadoc and Dtalks.",
+      "portStatus": "connected_pc",
+      "windowsVerified": false,
+      "pcEvidence": [
+        "src/entry-runner.js",
+        "src/local-state.js"
+      ],
+      "verificationScope": "PC Node / Electron synthetic HTTPS; Windows and authenticated live sites pending",
+      "verificationFiles": [
+        "test/porting-v139.test.js",
+        "scripts/test-electron-entry.mjs"
+      ]
+    },
+    {
+      "id": "schedule_change",
+      "name": "시각 변경 시 두 checkpoint·다른 예약 보존",
+      "baselineStatus": "difference",
+      "baselineEvidence": [
+        "src/entry-revision.js"
+      ],
+      "difference": "PC D26 latest verified Doctorville timing correction; mobile independent two-checkpoint policy differs.",
+      "portStatus": "connected_pc",
+      "windowsVerified": false,
+      "pcEvidence": [
+        "src/entry-checkpoints.js",
+        "src/entry-revision.js"
+      ],
+      "verificationScope": "PC Node / Electron synthetic HTTPS; Windows and authenticated live sites pending",
+      "pcDifference": "Docple and other normal sites: at most two independent checkpoints. Doctorville retains D26 exact fresh-detail latest-time repair and no consumed/uncertain replay.",
+      "verificationFiles": [
+        "test/porting-v139.test.js",
+        "scripts/test-electron-entry.mjs"
+      ]
+    },
+    {
+      "id": "hmp_entry",
+      "name": "한미 목록·신청 상태·5회 checkpoint",
+      "baselineStatus": "implemented",
+      "baselineEvidence": [
+        "src/entry-runner.js"
+      ],
+      "difference": "Existing PC implementation retained and regression checked.",
+      "portStatus": "connected_pc",
+      "windowsVerified": false,
+      "pcEvidence": [
+        "vendor/engine/reader-catalog.js",
+        "vendor/automation/auto-entry.js",
+        "src/entry-runner.js"
+      ],
+      "verificationScope": "PC Node / Electron synthetic HTTPS; Windows and authenticated live sites pending",
+      "verificationFiles": [
+        "test/porting-v139.test.js",
+        "scripts/test-electron-entry.mjs"
+      ]
+    },
+    {
+      "id": "repeat_entry",
+      "name": "후다닥·디톡스 3회 checkpoint",
+      "baselineStatus": "missing",
+      "baselineEvidence": [],
+      "difference": "No short three-checkpoint runner.",
+      "portStatus": "connected_pc",
+      "windowsVerified": false,
+      "pcEvidence": [
+        "src/entry-runner.js",
+        "vendor/automation/auto-entry.js"
+      ],
+      "verificationScope": "PC Node / Electron synthetic HTTPS; Windows and authenticated live sites pending",
+      "verificationFiles": [
+        "test/porting-v139.test.js",
+        "scripts/test-electron-entry.mjs"
+      ]
+    },
+    {
+      "id": "docple",
+      "name": "닥플 플러스 LIVE 목록·등록 강의 자동 입장",
+      "baselineStatus": "missing",
+      "baselineEvidence": [],
+      "difference": "No catalog, ID-keyed reservation, detail entry or opt-in migration.",
+      "portStatus": "connected_pc",
+      "windowsVerified": false,
+      "pcEvidence": [
+        "src/docple-policy.js",
+        "src/catalog-page.js",
+        "src/entry-runner.js"
+      ],
+      "verificationScope": "PC Node / Electron synthetic HTTPS; Windows and authenticated live sites pending",
+      "verificationFiles": [
+        "test/porting-v139.test.js",
+        "scripts/test-electron-entry.mjs"
+      ]
+    },
+    {
+      "id": "credentials",
+      "name": "저장 계정 검증·자동 복구·세션 근거",
+      "baselineStatus": "difference",
+      "baselineEvidence": [
+        "src/credential-manager.js"
+      ],
+      "difference": "PC user-selected quotas (manual 3/10s, auto60s/rolling3, day10) deliberately retained; do not impose mobile15m/day3.",
+      "portStatus": "connected_pc",
+      "windowsVerified": false,
+      "pcEvidence": [
+        "src/credential-manager.js",
+        "src/credential-runner.js"
+      ],
+      "verificationScope": "PC Node / Electron synthetic HTTPS; Windows and authenticated live sites pending",
+      "pcDifference": "Owner-approved PC login quotas and DPAPI retained instead of Android15min/day3 and Keystore/biometric.",
+      "verificationFiles": [
+        "test/porting-v139.test.js",
+        "scripts/test-electron-credentials.mjs"
+      ]
+    },
+    {
+      "id": "ckd_login",
+      "name": "종근당 당일 새 로그인·문서 전환 대기",
+      "baselineStatus": "missing",
+      "baselineEvidence": [],
+      "difference": "Generic credential recovery present, no distinct daily fresh-login lease.",
+      "portStatus": "connected_pc",
+      "windowsVerified": false,
+      "pcEvidence": [
+        "src/action-fuses.js",
+        "src/credential-manager.js",
+        "src/credential-runner.js"
+      ],
+      "verificationScope": "PC Node / Electron synthetic HTTPS; Windows and authenticated live sites pending",
+      "verificationFiles": [
+        "test/porting-v139.test.js",
+        "scripts/test-electron-credentials.mjs"
+      ]
+    },
+    {
+      "id": "lounge",
+      "name": "키메디 닥터라운지 예약 실행",
+      "baselineStatus": "difference",
+      "baselineEvidence": [
+        "src/lounge-runner.js"
+      ],
+      "difference": "Seven missions fixed, 00:01:02; mobile supports 6/7 and :03.",
+      "portStatus": "connected_pc",
+      "windowsVerified": false,
+      "pcEvidence": [
+        "src/lounge-runner.js",
+        "vendor/automation/keymedi-lounge.js"
+      ],
+      "verificationScope": "PC Node / Electron synthetic HTTPS; Windows and authenticated live sites pending",
+      "verificationFiles": [
+        "test/porting-v139.test.js",
+        "scripts/test-electron-automation.mjs"
+      ]
+    },
+    {
+      "id": "external_entry",
+      "name": "메디게이트 외부 강의 도메인 설정",
+      "baselineStatus": "missing",
+      "baselineEvidence": [],
+      "difference": "Fixed site hosts only; configured exact external entry hosts missing.",
+      "portStatus": "connected_pc",
+      "windowsVerified": false,
+      "pcEvidence": [
+        "src/pc-options.js",
+        "src/automation-page.js"
+      ],
+      "verificationScope": "PC Node / Electron synthetic HTTPS; Windows and authenticated live sites pending",
+      "pcDifference": "Exact configured hosts preserve owned original GET/POST in sandbox PC windows; Android external-browser/HTTP redirect reconstruction is not copied.",
+      "verificationFiles": [
+        "test/porting-v139.test.js",
+        "scripts/test-electron-entry.mjs"
+      ]
+    },
+    {
+      "id": "manual",
+      "name": "수동 입장 관찰·중복 방지",
+      "baselineStatus": "difference",
+      "baselineEvidence": [
+        "src/manual-entry-watch.js"
+      ],
+      "difference": "Passive trusted event observer exists; Docple native resolver missing.",
+      "portStatus": "connected_pc",
+      "windowsVerified": false,
+      "pcEvidence": [
+        "src/manual-entry-watch.js"
+      ],
+      "verificationScope": "PC Node / Electron synthetic HTTPS; Windows and authenticated live sites pending",
+      "verificationFiles": [
+        "test/porting-v139.test.js",
+        "scripts/test-electron-entry.mjs"
+      ]
+    },
+    {
+      "id": "evidence",
+      "name": "로그인 건강 상태·조회 실패·실행 경과 보고",
+      "baselineStatus": "implemented",
+      "baselineEvidence": [
+        "editions/developer/entry-report.js"
+      ],
+      "difference": "Existing PC implementation retained and regression checked.",
+      "portStatus": "connected_pc",
+      "windowsVerified": false,
+      "pcEvidence": [
+        "src/report-preview.js",
+        "editions/developer/entry-report.js"
+      ],
+      "verificationScope": "PC Node / Electron synthetic HTTPS; Windows and authenticated live sites pending",
+      "verificationFiles": [
+        "test/porting-v139.test.js",
+        "scripts/test-electron-entry.mjs"
+      ]
+    },
+    {
+      "id": "pause",
+      "name": "전체 자동화 중지·취소·재개",
+      "baselineStatus": "implemented",
+      "baselineEvidence": [
+        "src/local-state.js"
+      ],
+      "difference": "Existing PC implementation retained and regression checked.",
+      "portStatus": "connected_pc",
+      "windowsVerified": false,
+      "pcEvidence": [
+        "src/local-state.js",
+        "src/automation-controller.js"
+      ],
+      "verificationScope": "PC Node / Electron synthetic HTTPS; Windows and authenticated live sites pending",
+      "verificationFiles": [
+        "test/porting-v139.test.js",
+        "scripts/test-electron-entry.mjs"
+      ]
+    },
+    {
+      "id": "priority",
+      "name": "작업 우선권·오프라인·재시도",
+      "baselineStatus": "implemented",
+      "baselineEvidence": [
+        "src/automation-controller.js"
+      ],
+      "difference": "Existing PC implementation retained and regression checked.",
+      "portStatus": "connected_pc",
+      "windowsVerified": false,
+      "pcEvidence": [
+        "src/automation-controller.js"
+      ],
+      "verificationScope": "PC Node / Electron synthetic HTTPS; Windows and authenticated live sites pending",
+      "verificationFiles": [
+        "test/porting-v139.test.js",
+        "scripts/test-electron-entry.mjs"
+      ]
+    },
+    {
+      "id": "privacy",
+      "name": "동의·철회·삭제·베타 점검",
+      "baselineStatus": "difference",
+      "baselineEvidence": [
+        "src/credential-vault.js"
+      ],
+      "difference": "DPAPI consent/remove preserved; Android biometric/reset UI not copied.",
+      "portStatus": "connected_pc",
+      "windowsVerified": false,
+      "pcEvidence": [
+        "src/credential-vault.js",
+        "src/report-preview.js"
+      ],
+      "verificationScope": "PC Node / Electron synthetic HTTPS; Windows and authenticated live sites pending",
+      "pcDifference": "Explicit account removal, automation permission and diagnostic clearing retained; no reset of mandatory attempts, no Android OS permission or biometric UI.",
+      "verificationFiles": [
+        "test/porting-v139.test.js",
+        "scripts/test-electron-entry.mjs"
+      ]
+    },
+    {
+      "id": "updates",
+      "name": "업데이트·에디션·서명 확인",
+      "baselineStatus": "implemented",
+      "baselineEvidence": [
+        "src/update-manager.js",
+        "src/update-trust.js"
+      ],
+      "difference": "Existing PC implementation retained and regression checked.",
+      "portStatus": "connected_pc",
+      "windowsVerified": false,
+      "pcEvidence": [
+        "src/update-manager.js",
+        "src/update-trust.js"
+      ],
+      "verificationScope": "PC Node / Electron synthetic HTTPS; Windows and authenticated live sites pending",
+      "verificationFiles": [
+        "test/porting-v139.test.js",
+        "scripts/test-electron-entry.mjs"
+      ]
+    }
+  ],
+  "sites": [
+    {
+      "site": "doctorville",
+      "name": "닥터빌",
+      "catalogUrl": "https://www.doctorville.co.kr/seminar/main",
+      "crawler": "catalog-v1",
+      "collectionSupported": true,
+      "dailyTasks": [
+        "attendance",
+        "quiz"
+      ],
+      "credentialSaveAndRecoverySupported": true,
+      "automaticEntryMode": "one_shot",
+      "verifiedOnCurrentWindows": false,
+      "entryDueOffsetSeconds": -3000,
+      "entryDeadlineOffsetSeconds": 600,
+      "pcCatalogConnected": true,
+      "pcEntryConnected": true,
+      "pcSharedProfileWithDaily": true,
+      "pcWindowsVerified": false
+    },
+    {
+      "site": "keymedi",
+      "name": "키메디",
+      "catalogUrl": "https://www.keymedi.com/meditv/live",
+      "crawler": "keymedi-live-v1",
+      "collectionSupported": true,
+      "dailyTasks": [
+        "attendance",
+        "brand1",
+        "brand2"
+      ],
+      "credentialSaveAndRecoverySupported": true,
+      "automaticEntryMode": "one_shot",
+      "verifiedOnCurrentWindows": false,
+      "entryDueOffsetSeconds": 30,
+      "entryDeadlineOffsetSeconds": 600,
+      "pcCatalogConnected": true,
+      "pcEntryConnected": true,
+      "pcSharedProfileWithDaily": true,
+      "pcWindowsVerified": false
+    },
+    {
+      "site": "hmp",
+      "name": "한미 HMP",
+      "catalogUrl": "https://www.hmp.co.kr/symposium/schedulerequest/scheduleList.hm",
+      "crawler": "catalog-v2",
+      "collectionSupported": true,
+      "dailyTasks": [
+        "capsule"
+      ],
+      "credentialSaveAndRecoverySupported": true,
+      "automaticEntryMode": "hmp_5_checkpoints",
+      "verifiedOnCurrentWindows": false,
+      "pcCatalogConnected": true,
+      "pcEntryConnected": true,
+      "pcSharedProfileWithDaily": true,
+      "pcWindowsVerified": false
+    },
+    {
+      "site": "intermd",
+      "name": "인터엠디",
+      "catalogUrl": "https://www.intermd.co.kr/webinar/list.do",
+      "crawler": "additional-catalog-v1",
+      "collectionSupported": true,
+      "dailyTasks": [
+        "quiz"
+      ],
+      "credentialSaveAndRecoverySupported": true,
+      "automaticEntryMode": "one_shot",
+      "verifiedOnCurrentWindows": false,
+      "entryDueOffsetSeconds": 30,
+      "entryDeadlineOffsetSeconds": 600,
+      "pcCatalogConnected": true,
+      "pcEntryConnected": true,
+      "pcSharedProfileWithDaily": true,
+      "pcWindowsVerified": false
+    },
+    {
+      "site": "whodadoc",
+      "name": "후다닥의사",
+      "catalogUrl": "https://hcp.whodadoc.com/hcp/main",
+      "crawler": "additional-catalog-v1",
+      "collectionSupported": true,
+      "dailyTasks": [],
+      "credentialSaveAndRecoverySupported": true,
+      "automaticEntryMode": "short_3_checkpoints",
+      "verifiedOnCurrentWindows": false,
+      "pcCatalogConnected": true,
+      "pcEntryConnected": true,
+      "pcSharedProfileWithDaily": true,
+      "pcWindowsVerified": false
+    },
+    {
+      "site": "medigate",
+      "name": "메디게이트",
+      "catalogUrl": "https://new.medigate.net/symposium",
+      "crawler": "catalog-v2",
+      "collectionSupported": true,
+      "dailyTasks": [],
+      "credentialSaveAndRecoverySupported": true,
+      "automaticEntryMode": "one_shot",
+      "verifiedOnCurrentWindows": false,
+      "entryDueOffsetSeconds": 30,
+      "entryDeadlineOffsetSeconds": 600,
+      "pcCatalogConnected": true,
+      "pcEntryConnected": true,
+      "pcSharedProfileWithDaily": true,
+      "pcWindowsVerified": false
+    },
+    {
+      "site": "ckd",
+      "name": "종근당",
+      "catalogUrl": "https://www.ckdmediview.com/hcpapp/webinar/webinar.do",
+      "crawler": "ckd-calendar-v1",
+      "collectionSupported": true,
+      "dailyTasks": [],
+      "credentialSaveAndRecoverySupported": true,
+      "automaticEntryMode": "not_supported",
+      "verifiedOnCurrentWindows": false,
+      "pcCatalogConnected": true,
+      "pcEntryConnected": false,
+      "pcSharedProfileWithDaily": true,
+      "pcWindowsVerified": false
+    },
+    {
+      "site": "bluepharm",
+      "name": "블루팜",
+      "catalogUrl": "https://bluepharmkorea.co.kr/",
+      "crawler": "additional-catalog-v1",
+      "collectionSupported": true,
+      "dailyTasks": [],
+      "credentialSaveAndRecoverySupported": true,
+      "automaticEntryMode": "one_shot",
+      "verifiedOnCurrentWindows": false,
+      "entryDueOffsetSeconds": 30,
+      "entryDeadlineOffsetSeconds": 600,
+      "pcCatalogConnected": true,
+      "pcEntryConnected": true,
+      "pcSharedProfileWithDaily": true,
+      "pcWindowsVerified": false
+    },
+    {
+      "site": "dtalks",
+      "name": "디톡스",
+      "catalogUrl": "https://www.dtalks.kr/websim/vodList.do",
+      "crawler": "additional-catalog-v1",
+      "collectionSupported": true,
+      "dailyTasks": [],
+      "credentialSaveAndRecoverySupported": true,
+      "automaticEntryMode": "short_3_checkpoints",
+      "verifiedOnCurrentWindows": false,
+      "pcCatalogConnected": true,
+      "pcEntryConnected": true,
+      "pcSharedProfileWithDaily": true,
+      "pcWindowsVerified": false
+    },
+    {
+      "site": "docple",
+      "name": "닥플 플러스",
+      "catalogUrl": "https://docple-plus.com/webinar?category=C01&mode=LIVE&sort=START_ASC",
+      "crawler": "docple-live-v1",
+      "collectionSupported": true,
+      "dailyTasks": [
+        "attendance"
+      ],
+      "credentialSaveAndRecoverySupported": true,
+      "automaticEntryMode": "one_shot",
+      "verifiedOnCurrentWindows": false,
+      "entryDueOffsetSeconds": -1800,
+      "entryDeadlineOffsetSeconds": 600,
+      "lectureSelectionInitial": false,
+      "entrySelectionInitial": false,
+      "onlyRegisteredLive": true,
+      "identity": "site + KST date + observed positive webinar ID",
+      "detailPath": "/webinar/<positive ID>",
+      "sharedAccountWithAttendance": true,
+      "pcCatalogConnected": true,
+      "pcEntryConnected": true,
+      "pcSharedProfileWithDaily": true,
+      "pcWindowsVerified": false
+    }
+  ],
+  "pcVersion": "0.1.0-preview.29",
+  "pcSyntheticChecks": {
+    "node": 321,
+    "syntax": 1,
+    "catalog": 115,
+    "automation": 30,
+    "credentials": 121,
+    "entry": 272,
+    "replay": 136,
+    "registration": 193,
+    "update": 23
+  },
+  "sourceFiles": 210
+}

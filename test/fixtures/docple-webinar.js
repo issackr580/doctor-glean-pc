@@ -1,0 +1,11 @@
+export const docpleProfile={id:'docple',host:'docple-plus.com',url:'https://docple-plus.com/webinar?category=C01&mode=LIVE&sort=START_ASC',crawler:'docple-live-v1'};
+export const docpleTitle='검증용 닥플 웨비나';
+export function docpleCard({id='701',title=docpleTitle,date='2026.11.05',time='13:00',registered=true,replay=false,extra='',url=`/webinar/${id}?category=C01&mode=LIVE&sort=START_ASC`}={}){
+ return `<li class="cardStyles__CardShell-sc-unit-0"><a href="${url}" class="gtm-webinar-item-${id}" aria-label="${title} 상세 보기"><div class="cardStyles__CardStatuses"><span class="cardStyles__CardApplicationBadge">${registered?'신청 완료':'신청 가능'}</span></div><div role="group" aria-label="${replay?'다시보기 시작일':'방송일'} ${date} 목요일"><span>11월</span><strong>5</strong></div><h3 class="cardStyles__CardHeading-sc-unit-18" title="${title}">${title}</h3><p aria-label="${replay?'다시보기 제공 기간':'방송 일정'}: ${time} ~ 14:00">${time} – 14:00</p>${extra}</a><button class="gtm-webinar-item-bookmark-${id}">북마크</button></li>`;
+}
+export function docpleList({cards=docpleCard(),next=false,empty=false,extra=''}={}){return `<main><h1 class="listStyles__PageTitle">웨비나</h1><span class="listStyles__ResultsCountValue">${empty?'0':'3'}</span><ul>${cards}</ul><button aria-label="다음 페이지" ${next?'':'disabled'} type="button"></button>${extra}</main>`;}
+export function docpleDetail({id='701',title=docpleTitle,date='2026.11.05',time='13:00',registered=true,disabled=false,label='입장하기',extra='',button='<button type="button" class="gtm-webinar-detail-primary">입장하기</button>'}={}){
+ if(disabled)button='<button type="button" class="gtm-webinar-detail-primary" disabled aria-label="2026.11.05(목) 12:30부터 입장할 수 있어요">11.05(목) 12:30부터 입장할 수 있어요</button>';
+ else if(label!=='입장하기')button=`<button type="button" class="gtm-webinar-detail-primary">${label}</button>`;
+ return `<main><section><div data-detail-anchor="summary"><div role="group" aria-label="방송일 ${date} 목요일">11월 5</div><div data-detail-anchor="status-row"><span>${registered?'신청 완료':'신청 가능'}</span></div><h1>${title}</h1></div><dl data-detail-anchor="information"><div><dt>일정</dt><dd>${date}(목) ${time} – 14:00 · 1시간</dd></div><div><dt>다시보기</dt><dd>2026.11.20 13:00</dd></div></dl><div data-detail-anchor="action-panel"><div data-detail-anchor="participation-actions">${button}</div></div></section>${extra}</main>`;
+}
