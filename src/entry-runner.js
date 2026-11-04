@@ -1,3 +1,4 @@
+import {attachCheckpoints,nextCheckpoint} from './entry-checkpoints.js';
 import {siteById,allowedNavigation} from './security.js';
 import {entrySchedule,safeReason,doctorvilleDetailNavigation} from './automation-policy.js';
 import {cleanReceipt,cleanEntryInspection} from './workflow-store.js';
@@ -10,7 +11,7 @@ import {canPreflightEntry} from './execution-presentation.js';
 import {catalogScheduleRevision,confirmedRevisionTiming,detailIdentity} from './entry-revision.js';
 const navigable=(site,raw)=>{try{const u=new URL(raw);return allowedNavigation(site,raw)&&!/(?:login|logout|regist|apply|enroll|payment|order|cart|token|auth|session|password|email|ticket|delete|withdraw)/i.test(decodeURIComponent(u.pathname+u.search));}catch{return false;}};
 export class EntryRunner{
- constructor({ledger,store,createPage,createInspectionPage,catalog=()=>({}),isManualOpen=()=>false,onChange=()=>{},onEvent=()=>{},now=Date.now,sleep=waitFor,traceEntry=()=>({}),observeEntry=()=>{}}){Object.assign(this,{ledger,store,createPage,createInspectionPage,catalog,isManualOpen,onChange,onEvent,now,sleep,traceEntry,observeEntry});this.active=null;this.revisions=new Map();}
+ constructor({ledger,store,createPage,createInspectionPage,catalog=()=>({}),isManualOpen=()=>false,onChange=()=>{},onEvent=()=>{},now=Date.now,sleep=waitFor,traceEntry=()=>({}),observeEntry=()=>{},onSurvey=()=>{}}){Object.assign(this,{ledger,store,createPage,createInspectionPage,catalog,isManualOpen,onChange,onEvent,now,sleep,traceEntry,observeEntry,onSurvey});this.active=null;this.revisions=new Map();}
  #trace(job,kind){let trace;try{trace=this.traceEntry(job,kind);}catch{}return {event:(...args)=>{try{trace?.event?.(...args);}catch{}},finish:(...args)=>{try{trace?.finish?.(...args);}catch{}}};}
  #observe(job,phase,detail){try{this.observeEntry(job,phase,detail);}catch{}}
  async #catalogDetail(job,page,trace,signal,reference){
@@ -110,6 +111,9 @@ export class EntryRunner{
    for(const event of result.events){
     const key=this.store.entryKey(event);
     if(existing.has(key)){
+     const prior=this.store.entries(date).find(job=>job.key===key),timing=entrySchedule(event,this.now());
+     const peers=result.events.filter(e=>this.store.entryKey(e)===key);
+     if(site!=='doctorville'&&new Set(peers.map(e=>e.time)).size===1&&timing){const pair=attachCheckpoints(prior,{...event,...timing},this.now());if(pair)this.store.updateEntry(key,pair);}
      const proposal=this.#revision(this.store.entries(date).find(job=>job.key===key),results);
      if(proposal&&(this.revisions.has(key)||this.revisions.size<40))this.revisions.set(key,proposal);else this.revisions.delete(key);
      continue;
@@ -119,7 +123,7 @@ export class EntryRunner{
     if(slot===5)continue;
     const due=site==='hmp'?timing.start+slot*600000:Math.max(timing.due,kstInstant(date,'00:00')),deadline=site==='hmp'?due+90000:timing.deadline;
     const reference=catalogEntryReference(event,results);
-    this.store.putEntry({key,site,date,time:event.time,title:event.title,start:timing.start,due,deadline,nextAt:due,status:'reserved',slot,retries:0,attempts:[],entryAttempted:false,prepAt:site==='hmp'?timing.start-600000:0,...(reference?.status==='navigate'?{scheduleIdentity:detailIdentity(reference.url)}:{})});existing.add(key);
+    this.store.putEntry({key,site,date,time:event.time,title:event.title,start:timing.start,due,deadline,nextAt:due,status:'reserved',slot,retries:0,attempts:[],entryAttempted:false,prepAt:site==='hmp'?timing.start-600000:0,...(['whodadoc','dtalks'].includes(site)?{repeatSchema:1,url:event.url}:{}),...(site==='docple'?{id:event.id,url:event.url,registrationStatus:event.registrationStatus}:{}),...(reference?.status==='navigate'?{scheduleIdentity:detailIdentity(reference.url)}:{})});existing.add(key);
     this.emit('scheduled',{key,site,slot,due},{status:'reserved'});
     this.#observe(this.store.entries(date).find(row=>row.key===key),'reservation_observed',{status:'reserved'});
     const proposal=this.#revision(this.store.entries(date).find(row=>row.key===key),results);if(proposal&&this.revisions.size<40)this.revisions.set(key,proposal);
@@ -152,6 +156,12 @@ export class EntryRunner{
  #finish(job,raw){
   const current=this.store.entries(job.date).find(row=>row.key===job.key);if(current&&['cancelled','manual_clicked'].includes(current.status))return;
   const now=this.now(),receipt=cleanReceipt({...raw,slot:job.slot,due:job.due},now),attempts=[...(job.attempts??[]),receipt].slice(-5);
+  const next=nextCheckpoint(job,receipt,now);if(next){this.store.updateEntry(job.key,{...next,attempts,receipt,executionFinishedAt:now});this.onChange();return;}
+  if(job.repeatSchema===1&&!['lecture_ended','manual_clicked','cancelled','blocked','login','ambiguous','not_registered'].includes(receipt.status)){
+   const first=job.repeatFirstEntryAt??(receipt.playerObserved===true?receipt.observedAt:0);let next=job.slot+1;
+   while(first&&next<3&&first+next*600000+90000<now)next++;
+   if(first&&next<3&&kstDate(first+next*600000)===job.date){const due=first+next*600000;this.store.updateEntry(job.key,{status:'reserved',slot:next,due,deadline:due+90000,nextAt:Math.max(due,now),repeatFirstEntryAt:first,attempts,receipt,executionFinishedAt:now,retries:0,entryAttempted:false});this.onChange();return;}
+  }
   if(job.site==='hmp'&&!['lecture_ended','manual_clicked','cancelled','blocked','login','ambiguous'].includes(receipt.status)){
    let next=job.slot+1;while(next<5&&job.start+next*600000<now)next++;
    if(next<5){const due=job.start+next*600000;this.store.updateEntry(job.key,{status:'reserved',slot:next,due,deadline:due+90000,nextAt:due,attempts,receipt,executionFinishedAt:receipt.checkedAt,retries:0,entryAttempted:false});this.onChange();return;}
@@ -187,7 +197,9 @@ export class EntryRunner{
     if(controller.signal.aborted||job.date!==kstDate(this.now()))throw Error('cancelled');
     await run.page.ready?.();
     if(['login','provider'].includes(run.page.route)){reply={status:'login',reason:'login_required'};break;}
-    try{reply=await run.page.call('pc-entry.js',[job,'preflight']);reads++;}
+    try{reply=await run.page.call(job.site==='docple'?'auto-entry.js':'pc-entry.js',[job.site==='docple'?{...job,due:this.now()-1,deadline:this.now()+10000}:job,job.site==='docple'?'inspect':'preflight']);reads++;
+     if(job.site==='docple'&&reply.status==='navigate'&&reply.url===job.url&&navigable(job.site,reply.url)&&!detailRead){detailRead=true;await run.page.load(reply.url);fingerprint='';stable=0;continue;}
+    }
     catch(error){if(controller.signal.aborted)throw error;if(!['page_changed','navigation_changed'].includes(error.code??error.message))throw error;reply={status:'not_open',reason:'page_changed'};reads++;}
     const next=JSON.stringify([reply.status,reply.reason,reply.targetMatched,reply.candidateCards,reply.titleMatches,reply.scheduleMatches,reply.entryControls]);
     trace.event('inspect',{...reply,readOnly:true,pageGeneration:run.page.version});
@@ -214,10 +226,10 @@ export class EntryRunner{
  }
  async run(job,{prepare=false}={}){
   if(this.active)return false;
-  const controller=new AbortController(),run={job,controller,page:null};this.active=run;const began=this.now(),runId=randomUUID().replace(/-/g,'');let ticket=null,dispatched=false,started=false,receipt={status:'unknown',reason:'unknown_result'},adapter='auto-entry.js',trace;
+  const controller=new AbortController(),run={job,controller,page:null};this.active=run;const began=this.now(),runId=randomUUID().replace(/-/g,'');let ticket=null,dispatched=false,started=false,rescheduled=false,receipt={status:'unknown',reason:'unknown_result'},adapter='auto-entry.js',trace;
   const emit=(phase,detail={})=>this.emit(phase,job,{runId,...detail});
-  const allowed=()=>!controller.signal.aborted&&!this.ledger.snapshot().paused&&this.store.features().entry&&job.date===kstDate(this.now())&&!this.store.failed;
-  const nativeJob=()=>({...job,due:prepare?job.prepAt:job.due,deadline:prepare?job.start-1:job.deadline,...(job.site==='hmp'?{hmpRepeatSchema:1,hmpSlot:job.slot}:{})});
+  const allowed=()=>!controller.signal.aborted&&!this.ledger.snapshot().paused&&this.store.features().entry&&this.store.entrySites().includes(job.site)&&this.store.entries(job.date).some(current=>current.key===job.key&&current.status!=='cancelled'&&current.status!=='manual_clicked')&&job.date===kstDate(this.now())&&!this.store.failed;
+  const nativeJob=()=>({...job,due:prepare?job.prepAt:job.due,deadline:prepare?job.start-1:job.deadline,...(job.site==='hmp'?{hmpRepeatSchema:1,hmpSlot:job.slot}:job.repeatSchema===1?{repeatSlot:job.slot}:{})});
   try{
    if(!allowed())return false;
    started=true;
@@ -226,7 +238,7 @@ export class EntryRunner{
    emit('start',{startedAt:began,delayMs:Math.max(0,began-job.due),readOnly:prepare});
    if(this.isManualOpen(job.site)){receipt={status:'busy',reason:'manual_view_open'};return false;}
    if(!prepare)this.store.updateEntry(job.key,{status:'running'});
-   run.page=await this.createPage(job.site,controller.signal,{onDiagnostic:(phase,detail)=>{if(this.active===run&&!controller.signal.aborted)trace.event(phase,detail);}});const page=run.page;await page.load(siteById(job.site).url);let navigations=0,detailOpened=false,pcDetailRead=false;
+   run.page=await this.createPage(job.site,controller.signal,{onDiagnostic:(phase,detail)=>{if(this.active===run&&!controller.signal.aborted)trace.event(phase,detail);}});const page=run.page;await page.load(siteById(job.site).url);let navigations=0,detailOpened=false,pcDetailRead=false,changeSignature='';
    // Keep the verified detail authoritative when the list still has an old
    // clock or omits the end time needed by a live recovery.
    if(job.site==='doctorville'&&!prepare&&job.scheduleIdentity){
@@ -256,6 +268,13 @@ export class EntryRunner{
      else if(['target_missing','button_missing'].includes(reply.status)&&supplement.status==='navigate'&&supplement.reason==='read_only'){reply=supplement;adapter='pc-entry.js';}
      else if(['target_missing','button_missing'].includes(reply.status)&&supplement.status==='target_missing'&&supplement.titleMatches>0){reply=supplement;adapter='pc-entry.js';}
     }
+    if(job.site!=='doctorville'&&reply.status==='schedule_changed'&&reply.targetMatched===true&&reply.matchedTargets===1&&reply.observedDate===job.date){
+     const signature=JSON.stringify([page.version,page.url,reply.observedTime]);
+     if(signature!==changeSignature){changeSignature=signature;await this.sleep(400,controller.signal);continue;}
+     const timing=entrySchedule({...job,time:reply.observedTime},kstInstant(job.date,'00:00'));
+     const pair=timing&&attachCheckpoints({...job,status:'reserved',entryAttempted:false},{time:reply.observedTime,...timing},this.now());
+     if(pair&&allowed()){this.store.updateEntry(job.key,pair);Object.assign(job,pair);if(job.nextAt>this.now()){rescheduled=true;receipt={status:'not_open',reason:'opens_later',attempted:false};break;}continue;}
+    }else changeSignature='';
     receipt={...reply,reason:safeReason(reply.reason)};emit('inspect',{...cleanReceipt(receipt,this.now()),reader:adapter==='pc-entry.js'?'pc':'original'});
     trace.event('inspect',{...reply,reader:adapter==='pc-entry.js'?'pc':'original',pageGeneration:page.version});
     if(prepare)break;
@@ -264,6 +283,10 @@ export class EntryRunner{
      if(++navigations>3||!navigable(job.site,reply.url)||detail&&(job.site!=='doctorville'||pcDetailRead||!doctorvilleDetailNavigation(page.url,reply.url))){receipt={status:'blocked',reason:'policy_rejected'};break;}
      if(detail){pcDetailRead=true;detailOpened=true;emit('open_detail',cleanReceipt(receipt,this.now()));}
      trace.event('target_open_requested',{status:'navigate'});await page.load(reply.url);trace.event('target_open_response',{status:'detail_opened'});continue;
+    }
+    if(reply.status==='open_catalog'){
+     if(detailOpened){receipt={status:'button_missing',reason:'no_target'};break;}
+     await page.call('auto-entry.js',[nativeJob(),'open_catalog'],{navigation:true});await this.sleep(500,controller.signal);continue;
     }
     if(reply.status==='open_target'){
      emit('open_detail',cleanReceipt(receipt,this.now()));
@@ -275,18 +298,28 @@ export class EntryRunner{
      if(job.entryClosesAt&&(!Number.isSafeInteger(reply.endsAt)||reply.endsAt<=this.now())){receipt={status:'lecture_ended',reason:'lecture_ended'};break;}
      const input={site:job.site,kind:'entry',date:job.date,target:job.key,slot:job.slot,dueAt:job.due,deadline:job.deadline};
      ticket=this.ledger.reserve(input,this.now());if(!ticket||!allowed()||!this.ledger.beginDispatch(ticket,this.now())){receipt={status:'unknown',reason:'duplicate_prevented'};break;}
-     this.store.updateEntry(job.key,{status:'attempting',entryAttempted:true});page.allowPopups(true);const before=page.version;dispatched=true;
+     this.store.updateEntry(job.key,{status:'attempting',entryAttempted:true});page.allowPopups(true);const before=page.version,beforeUrl=page.url;dispatched=true;
+     page.armEntryDispatch?.();
      emit('dispatch',{attempted:true,targetMatched:true});
      trace.event('click_requested',{attempted:true,targetMatched:true});
      const executed=await page.call(adapter,[nativeJob(),'click'],{navigation:true});
      trace.event('click_response',executed);
      receipt={...reply,status:executed.status==='clicked'?'clicked':'unknown',reason:executed.status==='clicked'?'clicked':'navigation_unconfirmed',attempted:true};
-     await this.sleep(800,controller.signal);receipt.navigationObserved=page.version!==before&&allowedNavigation(job.site,page.url);
+     await this.sleep(800,controller.signal);receipt.navigationObserved=(page.version!==before||page.url!==beforeUrl)&&(allowedNavigation(job.site,page.url)||page.allowsEntryNavigation?.(page.url)===true);
+     if(job.site==='docple'&&receipt.navigationObserved&&allowed())try{receipt.watchObserved=await page.observeDocpleArrival?.(job)===true;}catch{receipt.watchObserved=false;}
      trace.event('navigation_observed',{navigationObserved:receipt.navigationObserved,pageGeneration:page.version});
+     if(job.repeatSchema===1&&receipt.navigationObserved&&allowed()){
+      for(let probe=0;probe<5&&allowed()&&this.now()<=job.deadline;probe++){
+       const observed=await page.call('auto-entry.js',[nativeJob(),'entry_probe']);
+       if(observed.status==='player_observed'){receipt.playerObserved=true;receipt.observedAt=this.now();break;}
+       await this.sleep(400,controller.signal);
+      }
+     }
      if(job.site==='hmp'){
       receipt.playback='navigation_unconfirmed';
       if(receipt.navigationObserved){const playback=await page.call('auto-entry.js',[nativeJob(),'playback_start']);receipt.playback=playback.status;await this.sleep(1200,controller.signal);receipt.playback=(await page.call('auto-entry.js',[nativeJob(),'playback_probe'])).status;trace.event('playback_observed',{playback:receipt.playback});}
      }
+     if(job.site==='doctorville'&&allowed()){try{this.onSurvey(page.url,await page.call('doctorville-survey.js',['']));}catch{}}
      break;
     }
     if(['login','blocked','ambiguous','invalid','lecture_ended','not_registered'].includes(reply.status))break;
@@ -298,7 +331,7 @@ export class EntryRunner{
    let diagnostics={};try{diagnostics=run.page?.diagnostics?.()??{};}catch{}
    emit('result',{...cleanReceipt({...receipt,attempted:dispatched,elapsedMs:Math.max(0,this.now()-began)},this.now()),readOnly:prepare,navigationBlocked:diagnostics.navigationBlocked,popupDenied:diagnostics.popupDenied,mainFrameFailures:diagnostics.mainFrameFailures});
    try{if(ticket&&dispatched)this.ledger.finish(ticket,'unknown',this.now());
-   if(started){if(prepare){this.store.updateEntry(job.key,{prepNextAt:Math.min(job.start,this.now()+60000),receipt:cleanReceipt(receipt)});if(receipt.status==='lecture_ended')this.#finish(job,receipt);}
+   if(started&&!rescheduled){if(prepare){this.store.updateEntry(job.key,{prepNextAt:Math.min(job.start,this.now()+60000),receipt:cleanReceipt(receipt)});if(receipt.status==='lecture_ended')this.#finish(job,receipt);}
    else if(dispatched)this.#finish(job,{...receipt,attempted:true,elapsedMs:Math.max(0,this.now()-began)});
    else this.#unexecuted(job,{...receipt,elapsedMs:Math.max(0,this.now()-began)});}}
    finally{run.page?.close();this.active=null;this.onChange();}

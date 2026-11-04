@@ -9,5 +9,5 @@ export const SITES = Object.freeze([
   {id:'ckd',name:'종근당',url:'https://www.ckdmediview.com/hcpapp/webinar/webinar.do',loginUrl:'https://www.ckdmediview.com/hcpapp/common/login.do',hosts:['www.ckdmediview.com','ckdmediview.com']},
   {id:'bluepharm',name:'블루팜',url:'https://bluepharmkorea.co.kr/',loginUrl:'https://bluepharmkorea.co.kr/?pn=member.login.form',hosts:['bluepharmkorea.co.kr','www.bluepharmkorea.co.kr']},
   {id:'dtalks',name:'디톡스',url:'https://www.dtalks.kr/websim/vodList.do',loginUrl:'https://www.dtalks.kr/login.do',hosts:['www.dtalks.kr','dtalks.kr']},
-  {id:'docple',name:'닥플 플러스',url:'https://docple-plus.com/offerwall/attendance',loginUrl:'https://docple-plus.com/auth/login',hosts:['docple-plus.com','www.docple-plus.com']},
+  {id:'docple',name:'닥플 플러스',url:'https://docple-plus.com/webinar?category=C01&mode=LIVE&sort=START_ASC',loginUrl:'https://docple-plus.com/auth/login',hosts:['docple-plus.com','www.docple-plus.com']},
 ].map(site=>Object.freeze({...site,hosts:Object.freeze(site.hosts)})));

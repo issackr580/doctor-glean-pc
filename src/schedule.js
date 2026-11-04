@@ -19,7 +19,7 @@ export function nextLoungePreparation(now){
   for(let i=0;i<370;i++){
     const day=new Date(Date.parse(first+'T00:00:00Z')+i*DAY);
     if(day.getUTCDay()===0||day.getUTCDay()===6)continue;
-    const at=kstInstant(day.toISOString().slice(0,10),'00:00:02');
+    const at=kstInstant(day.toISOString().slice(0,10),'00:00:03');
     if(at>now)return at;
   }
   throw Error('invalid_schedule');

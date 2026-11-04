@@ -1,4 +1,74 @@
-(function(){const inspectBluepharmCalendar=(function inspectBluepharmCalendar(targetDate,previous,readRows){
+(function(){const inspectDocpleDom=(function inspectDocpleDom(){
+ const norm=s=>String(s||'').normalize('NFC').replace(/\s+/g,' ').trim();
+ const visible=e=>{if(!e||!e.isConnected||!e.getClientRects().length||e.closest('[hidden],[aria-hidden="true"],[inert]'))return false;for(let p=e;p;p=p.parentElement){const s=getComputedStyle(p);if(s.display==='none'||['hidden','collapse'].includes(s.visibility))return false;}return true;};
+ const all=(s,r=document)=>[...r.querySelectorAll(s)].filter(visible),text=e=>norm(e?.innerText||e?.textContent),compact=s=>norm(s).replace(/\s/g,'');
+ const date=s=>{const m=String(s||'').match(/(20\d{2})\s*[.\-/년]\s*(\d{1,2})\s*[.\-/월]\s*(\d{1,2})(?!\d)/);if(!m)return '';const v=`${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;try{return new Date(v+'T00:00:00Z').toISOString().slice(0,10)===v?v:'';}catch{return '';}};
+ const time=s=>{const m=String(s||'').match(/(?:^|\D)([01]?\d|2[0-3]):([0-5]\d)(?!\d)/);return m?m[1].padStart(2,'0')+':'+m[2]:'';};
+ const one=xs=>{const v=[...new Set(xs.filter(Boolean))];return v.length===1?v[0]:'';};
+ const detailUrl=raw=>{try{const u=new URL(raw,location.href);if(u.origin!=='https://docple-plus.com'||u.username||u.password||u.hash||!/^\/webinar\/[1-9]\d{0,15}\/?$/.test(u.pathname))return '';for(const [k,v] of u.searchParams)if(!['category','categoryAll','mode','liveFilter','period','sort','searchType','keyword','page','view','layout','week','date'].includes(k)||!/^[A-Za-z0-9_\-]{0,40}$/.test(v))return '';return u.href;}catch{return '';}};
+ const state=r=>{const values=all('span,p,strong,b',r).filter(e=>!all('span,p,strong,b',e).length).map(e=>compact(text(e)));const yes=values.includes('신청완료')||values.includes('신청이완료되었어요'),no=values.some(s=>['신청가능','신청하기','미신청','신청준비중'].includes(s)),closed=values.includes('신청마감');return yes&&(no||closed)?'unknown':yes?'registered':closed?'closed':no?'not_registered':'unknown';};
+ const queryAllowed=u=>{const seen=new Set();for(const [k,v] of u.searchParams){if(seen.has(k)||!['category','categoryAll','mode','liveFilter','period','sort','searchType','keyword','page','view','layout','week','date'].includes(k)||!/^[A-Za-z0-9_\-]{0,40}$/.test(v))return false;seen.add(k);}return true;};
+ const here=new URL(location.href),out={phase:'other',cards:[],detail:null,loading:document.readyState!=='complete'||all('[aria-busy="true"],[data-testid="webinar-card-skeleton"]').length>0,login:false,challenge:false,unknown:0};
+ if(window.top!==window.self||here.origin!=='https://docple-plus.com'||here.username||here.password){out.phase='blocked';return out;}
+ out.login=/^\/auth\/login\/?$/.test(here.pathname)||all('input[type="password"]').length>0;
+ // A same-origin login redirect is a read-only signal; its opaque return query
+ // is neither followed nor returned. Native still owns every recovery grant.
+ if(out.login)return out;
+ if(here.hash||!queryAllowed(here)){out.phase='blocked';return out;}
+ const dialogs=all('[role="dialog"][aria-modal="true"]');out.login||=dialogs.some(e=>/로그인이필요|로그인후/.test(compact(text(e))));out.challenge=dialogs.some(e=>!out.login);
+ if(/^\/webinar\/?$/.test(here.pathname)){
+  out.phase='catalog';
+  for(const e of all('a[class*="gtm-webinar-item-"][href]')){
+   const token=[...e.classList].find(c=>/^gtm-webinar-item-[1-9]\d{0,15}$/.test(c)),url=detailUrl(e.getAttribute('href'));if(!token||!url){out.unknown++;continue;}
+   const id=token.slice('gtm-webinar-item-'.length);if(new URL(url).pathname.replace(/\/$/,'').split('/').pop()!==id){out.unknown++;continue;}
+   // Full year is supplied by the official accessible broadcast-date label.
+   const dates=all('[role="group"][aria-label^="방송일 "]',e).map(n=>date(n.getAttribute('aria-label'))),times=all('[aria-label^="방송 일정:"]',e).map(n=>time(n.getAttribute('aria-label')));
+   if(all('[aria-label^="다시보기"]',e).length)continue;
+   const heading=all('[class*="cardStyles__CardHeading"]',e),title=one(heading.map(n=>n.getAttribute('title')||text(n))),ariaTitle=norm(e.getAttribute('aria-label')).replace(/\s*상세 보기$/,'');
+   const d=one(dates),t=one(times);if(!title||title.length>500||ariaTitle!==title||!d||!t){out.unknown++;continue;}
+   const ended=all('[class*="CardBroadcastBadge"]',e).some(n=>compact(text(n))==='종료');
+   out.cards.push({element:e,id,url,title,date:d,time:t,registrationStatus:state(e),ended});
+  }
+  out.heading=all('h1,h2,[class*="listStyles__PageTitle"]').some(e=>text(e)==='웨비나');
+  out.empty=all('[class*="listStyles__ResultsCountValue"]').some(e=>/^0(?:개)?$/.test(compact(text(e))));
+  out.next=all('button[aria-label="다음 페이지"]').filter(e=>!e.disabled&&e.getAttribute('aria-disabled')!=='true');
+  return out;
+ }
+ const match=here.pathname.match(/^\/webinar\/([1-9]\d{0,15})\/?$/);
+ if(match){
+  out.phase='detail';const summaries=all('[data-detail-anchor="summary"]'),information=all('[data-detail-anchor="information"]'),panels=all('[data-detail-anchor="action-panel"]');
+  if(summaries.length!==1||information.length!==1||panels.length!==1){out.unknown++;return out;}
+  const summary=summaries[0],rows=all('dt',information[0]).filter(e=>['일정','방송일정'].includes(compact(text(e))));
+  const values=rows.filter(e=>e.nextElementSibling?.tagName==='DD').map(e=>text(e.nextElementSibling));
+  const titles=all('h1,h2,h3,[class*="memberDetailStyles__Title"]',summary).filter(e=>!all('h1,h2,h3,[class*="memberDetailStyles__Title"]',e).length).map(text),title=one(titles);
+  const d=one(values.map(date)),t=one(values.map(time)),summaryDates=all('[role="group"][aria-label]',summary).map(e=>date(e.getAttribute('aria-label'))).filter(Boolean);
+  if(!title||!d||!t||summaryDates.some(v=>v!==d)){out.unknown++;return out;}
+  const controls=all('[data-detail-anchor="participation-actions"] button.gtm-webinar-detail-primary',panels[0]);
+  const ended=all('[data-detail-anchor="status-row"] span',summary).some(e=>compact(text(e))==='종료');
+  out.detail={id:match[1],title,date:d,time:t,registrationStatus:state(summary),ended,controls,panel:panels[0]};
+ }
+ return out;
+});const docpleStep=(function docpleStep(profile,targetDate,previous,read=inspectDocpleDom){
+ const now=Date.now(),state=previous?.version===1&&previous.site==='docple'&&previous.date===targetDate?previous:{version:1,site:'docple',date:targetDate,started:now,events:[],seen:[],pages:0,totalRows:0,unknown:0,signature:'',pendingAt:0};
+ const result=(status,message,done=false,extra={})=>({site:'docple',crawler:profile.crawler,status,message,done,events:state.events,checkedAt:now,state,...extra});
+ try{
+  if(profile.id!=='docple'||!/^\d{4}-\d{2}-\d{2}$/.test(targetDate)||new Date(targetDate+'T00:00:00Z').toISOString().slice(0,10)!==targetDate)return result('review','날짜 또는 조회 설정 확인 필요',true);
+  const page=read();if(page.phase==='blocked')return result('review','닥플 조회 주소 확인 필요',true);if(page.login)return result('login','닥플 로그인이 필요해요',true);if(page.challenge)return result('review','닥플 추가 확인을 직접 진행해 주세요',true);
+  if(page.phase!=='catalog')return result('review','닥플 웨비나 목록에 도착하지 못했어요',true);
+  const u=new URL(location.href),expected=new URL(profile.url);if(u.searchParams.get('category')!=='C01'||u.searchParams.get('mode')!=='LIVE'||u.searchParams.get('view')==='bookmark'||u.searchParams.get('keyword')||u.searchParams.get('layout')==='week'||u.searchParams.get('period')&&u.searchParams.get('period')!=='ALL'||u.searchParams.get('liveFilter')&&u.searchParams.get('liveFilter')!=='ALL')return result('review','닥플 LIVE 목록 조건 확인 필요',true);
+  if(expected.origin!=='https://docple-plus.com'||expected.pathname!=='/webinar')return result('review','닥플 조회 설정 확인 필요',true);
+  if(page.loading||!page.heading||!page.cards.length&&!page.empty){if(now-state.started>35000)return result('review','닥플 목록 응답 확인 필요',true);return result('loading','닥플 LIVE 목록을 기다리는 중');}
+  const signature=page.cards.map(r=>r.id+':'+r.date+':'+r.time+':'+r.registrationStatus).join('|')+'|'+(u.searchParams.get('page')||'1');
+  if(state.pendingAt&&state.signature===signature){if(now-state.pendingAt>10000)return result('review','닥플 다음 목록 전환 확인 필요',true);return result('loading','닥플 다음 목록을 기다리는 중');}
+  if(state.seen.includes(signature))return result('review','닥플 목록 순환 확인 필요',true);
+  state.pendingAt=0;state.signature=signature;state.seen.push(signature);state.pages++;state.totalRows+=page.cards.length+page.unknown;state.unknown+=page.unknown;
+  const events=new Map(state.events.map(e=>[e.id+'|'+e.date+'|'+e.time,e]));for(const row of page.cards)if(row.date===targetDate&&!row.ended){const {id,url,title,date,time,registrationStatus}=row;events.set(id+'|'+date+'|'+time,{site:'docple',id,url,title,date,time,registrationStatus,advanced:false});}state.events=[...events.values()].sort((a,b)=>a.time.localeCompare(b.time)||a.title.localeCompare(b.title));
+  const diagnostics={site:'docple',path:u.pathname,rows:page.cards.length,totalRows:state.totalRows,events:state.events.length,unknown:state.unknown,pages:state.pages,currentListRead:true,cardLayout:'docple_live_cards'};
+  if(page.next.length){if(page.next.length!==1||state.pages>=30||state.events.length>500)return result('review','닥플 전체 목록 확인 필요',true,{diagnostics});const button=page.next[0],text=(button.innerText||button.textContent||'').replace(/\s+/g,' ').trim(),signature=[text,button.getAttribute('aria-label'),button.getAttribute('title'),...[...button.querySelectorAll('img[alt]')].map(i=>i.getAttribute('alt'))].filter(Boolean).join(' ').trim();state.pendingAt=now;return result('loading','닥플 다음 목록 조회',false,{action:{kind:'click',selector:'button[aria-label="다음 페이지"]',signature},diagnostics});}
+  diagnostics.stopReason='docple_list_exhausted';diagnostics.listDetails={status:state.unknown?'review':'checked',reason:state.unknown?'unknown_rows':'list_exhausted',rows:page.cards.length,unknown:state.unknown,pages:state.pages,targetDate,filtersConfirmed:true,source:'docple_live_list'};
+  return result(state.unknown?'review':'ok',state.unknown?'닥플 목록 일부 정보 확인 필요':`닥플 LIVE 목록 조회 완료 · 선택일 강의 ${state.events.length}개`,true,{coverage:!state.unknown,diagnostics});
+ }catch{return result('review','닥플 웨비나 목록 형식 확인 필요',true);}
+});const inspectBluepharmCalendar=(function inspectBluepharmCalendar(targetDate,previous,readRows){
  const now=Date.now(),month=targetDate.slice(0,7),day=+targetDate.slice(8);
  const state=previous?.date===targetDate?previous:{date:targetDate,started:now,moves:0};
  const text=e=>(e?.innerText??e?.textContent??'').normalize('NFKC').replace(/[\u200b-\u200d\ufeff]/g,'').replace(/\s+/g,' ').trim();
@@ -1262,4 +1332,4 @@
   }
   return {...r,state};
  }catch{return result('review','디톡스 편성표 구조를 읽지 못했어요 · 전체 수집 미확인',true);}
-});return function(profile,date,state){return profile.id==="dtalks"?dtalksStep(profile,date,state,additionalCatalogStep,collectAdditionalPage,inspectListControls):additionalCatalogStep(profile,date,state,collectAdditionalPage,inspectListControls);};})()
+});return function(profile,date,state){return profile.id==="docple"?docpleStep(profile,date,state,inspectDocpleDom):profile.id==="dtalks"?dtalksStep(profile,date,state,additionalCatalogStep,collectAdditionalPage,inspectListControls):additionalCatalogStep(profile,date,state,collectAdditionalPage,inspectListControls);};})()

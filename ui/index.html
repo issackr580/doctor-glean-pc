@@ -32,10 +32,14 @@
       <div class="query-controls"><button id="resume" class="primary" type="button">자동 실행 허용</button><button id="stop" type="button">전체 중지</button></div>
       <h3>자동 입장 사이트</h3><div id="entry-sites" class="features"></div><p class="muted">조회 후 오늘 예약을 갱신해요. 클릭·강의창 이동·재생 확인은 각각 기록해요. 한미는 신청된 강의 시작 기준 10분 간격으로 최대 5회 확인해요.</p>
     </section>
-    <section class="control section-space"><div class="section-heading"><h2>오늘 출석·퀴즈·브랜드관</h2><button id="daily-check" type="button">상태만 확인</button></div><p id="daily-progress" role="status"></p><div id="daily-results"></div></section>
+    <section class="control section-space"><div class="section-heading"><h2>오늘 출석·퀴즈·브랜드관</h2><button id="daily-check" type="button">상태만 확인</button></div><p id="daily-progress" role="status"></p><div id="daily-selection" class="features"></div><div id="daily-results"></div></section>
     <section class="schedule"><h2>오늘 자동 입장 예약·실행</h2><div id="entry-results"></div><p id="lounge-result" class="muted"></p></section>
+    <section class="control"><h2>날짜 메모</h2><textarea id="date-memo" maxlength="2000" rows="3" aria-label="선택 날짜 메모"></textarea><button id="save-memo" type="button">메모 저장</button></section>
+    <section class="control"><h2>설문 알림</h2><div id="survey-results"></div></section>
+    <details class="control"><summary>메디게이트 외부 입장 서버</summary><p>사이트에서 안내받은 정확한 서버 이름만 한 줄씩 입력해 주세요. HTTP가 필요한 서버에만 http://를 붙여 주세요. 인증서 검증은 유지하며, 로그인 정보를 여기에 넣지 마세요.</p><textarea id="entry-host-list" rows="4" aria-label="허용할 외부 입장 서버"></textarea><button id="save-entry-hosts" type="button">입장 서버 저장</button></details>
     <footer><span id="version"></span><button id="report" class="text-button" type="button">오류보고 저장</button><button id="update-check" type="button">PC 업데이트 확인</button><button id="update-install" type="button" hidden>다운로드·업데이트</button><button id="update-page" type="button" hidden>공식 배포 페이지 열기</button><p id="update-result" role="status"></p><button id="quit" type="button">프로그램 종료</button><p>X는 트레이에 숨기기예요. 업데이트는 버튼을 누를 때만 진행해요.</p></footer>
   </main>
+  <dialog id="report-dialog"><h2>오류보고 미리보기</h2><p>버전·작업 상태와 시도 결과를 확인해 주세요. 복사·저장은 현재 미리 본 내용을 사용해요.</p><textarea id="report-preview" rows="18" readonly aria-label="오류보고 미리보기"></textarea><div class="query-controls"><button id="report-copy" type="button">복사</button><button id="report-save" type="button">TXT 저장</button><button id="report-close" type="button">닫기</button></div></dialog>
   <dialog id="credential-dialog" aria-labelledby="credential-title">
     <h2 id="credential-title">계정 저장·복구</h2><p id="credential-storage"></p><p id="credential-saved"></p>
     <form id="credential-form">

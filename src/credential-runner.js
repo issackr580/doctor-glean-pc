@@ -1,3 +1,4 @@
+import {kstDate} from './schedule.js';
 import {randomUUID} from 'node:crypto';
 import {credentialSite,allowedCredentialPage,safeCredentialStatus,bareDoctorvilleProvider,settlingDoctorvilleProvider} from './credential-policy.js';
 import {waitFor} from './async-work.js';
@@ -7,14 +8,15 @@ import {siteById} from './security.js';
 const terminal=new Set(['challenge','rejected','blocked','stale']);
 export class CredentialRunner{
  constructor({attempts,now=Date.now,sleep=waitFor}){Object.assign(this,{attempts,now,sleep});}
- async run(site,page,{candidate,readCredentials,validation=false,automatic=false,signal,allowed=()=>true,onChange=()=>{}}){
+ async run(site,page,{candidate,readCredentials,validation=false,automatic=false,freshCollection=false,signal,allowed=()=>true,onChange=()=>{}}){
   const policy=credentialSite(site),nonce=randomUUID().replace(/-/g,''),began=this.now();let attempted=false,submitted=false,at=0,usedProbe=false,reads=0,ready=0,lastVersion=-1,status='unknown',manualSince=0,submittedVersion=-1,refreshed=false,settledReads=0;
+  let freshLogout=false;
   let failureCode,providerRead=false,providerWaits=0,lastUrl='';
   const trace=[],observe=(phase,reply)=>recordCredentialObservation(trace,credentialObservation(site,page,phase,reply,this.now()-began));
-  const live=()=>!signal.aborted&&allowed()&&!page.closed&&this.now()-began<90000&&(!attempted||this.now()-at<(validation?45000:20000));
+  const live=()=>!signal.aborted&&(!freshCollection||kstDate(this.now())===kstDate(began))&&allowed()&&!page.closed&&this.now()-began<90000&&(!attempted||this.now()-at<(validation?45000:20000));
   // The original background proof rejects candidate-validation fields, even
   // validation:false. Keep candidate validation and saved recovery distinct.
-  const request=mode=>({site,mode,nonce,pageTag:'1:'+Math.max(1,page.version),expectedUrl:page.url,diagnostics:true,...(validation?{validation:true,validationSubmitted:submitted}:{backgroundRecovery:true,backgroundSubmitted:submitted})});
+  const request=mode=>({site,mode,nonce,pageTag:'1:'+Math.max(1,page.version),expectedUrl:page.url,diagnostics:true,...(validation?{validation:true,validationSubmitted:submitted}:{backgroundRecovery:true,backgroundSubmitted:submitted,...(freshCollection?{ckdFreshCollection:true}:{})})});
   const verify=async()=>{
    await page.ready?.();
    const input={...request('verify'),revealCkdMenu:submitted};let reply=await page.call('credential-login.js',[input]),phase='verify';reads++;
@@ -85,6 +87,11 @@ export class CredentialRunner{
      refreshed=true;observe('refresh',{status:'loading'});await page.load(policy.entry);
      reply=await verify();status=safeCredentialStatus(reply.status);
      if(status!=='authenticated'){if(terminal.has(status)||['manual','network_error','login_required'].includes(status))break;await this.sleep(350,signal);continue;}
+    }
+    if(status==='authenticated'&&site==='ckd'&&freshCollection&&!submitted&&!freshLogout){
+     freshLogout=true;const logout=await page.call('credential-login.js',[request('ckd_logout')],{navigation:true});
+     if(!live()||logout.status!=='pending'){status='probe_unready';break;}
+     ready=0;lastVersion=-1;await this.sleep(400,signal);continue;
     }
     if(status==='authenticated'){
      if(validation&&(!attempted||!submitted)){status='manual';break;}

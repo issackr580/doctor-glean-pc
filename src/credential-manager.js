@@ -1,3 +1,4 @@
+import {ActionFuses} from './action-fuses.js';
 import {randomUUID} from 'node:crypto';
 import {CredentialVault} from './credential-vault.js';
 import {CredentialAttempts} from './credential-attempts.js';
@@ -7,10 +8,10 @@ import {join} from 'node:path';
 import {inspectDocpleSession} from './credential-session.js';
 export class CredentialManager{
  constructor({directory,applicationId,protect,createPage,automaticAllowed,isManualOpen,onChange=()=>{},now=Date.now,developer=false}){
-  Object.assign(this,{createPage,automaticAllowed,isManualOpen,onChange,now});this.vault=new CredentialVault(join(directory,'credentials-v1.json'),applicationId,protect);this.attempts=new CredentialAttempts(join(directory,'credential-attempts-v1.json'),{developer});this.runner=new CredentialRunner({attempts:this.attempts,now});this.active=null;this.last=new Map();
+  Object.assign(this,{createPage,automaticAllowed,isManualOpen,onChange,now});this.vault=new CredentialVault(join(directory,'credentials-v1.json'),applicationId,protect);this.attempts=new CredentialAttempts(join(directory,'credential-attempts-v1.json'),{developer});this.dailyFuses=new ActionFuses(join(directory,'credential-action-fuses-v1.json'));this.runner=new CredentialRunner({attempts:this.attempts,now});this.active=null;this.last=new Map();
  }
  get busy(){return !!this.active;}
- snapshot(){return {vault:this.vault.snapshot(),attempts:this.attempts.snapshot(),active:this.active?{site:this.active.site,kind:this.active.kind}:null,results:[...this.last].map(([site,result])=>({site,...result}))};}
+ snapshot(){return {dailyLogin:this.dailyFuses.summary().ckd,vault:this.vault.snapshot(),attempts:this.attempts.snapshot(),active:this.active?{site:this.active.site,kind:this.active.kind}:null,results:[...this.last].map(([site,result])=>({site,...result}))};}
  cancel(site){if(this.active&&(!site||this.active.site===site)){this.active.controller.abort();this.active.page?.close();}}
  remove(site){this.cancel(site);this.vault.remove(site);this.last.set(site,{status:'removed',at:this.now()});this.onChange();}
  setAutomatic(site,value){if(!value)this.cancel(site);this.vault.setAutomatic(site,value);this.onChange();}
@@ -48,9 +49,14 @@ export class CredentialManager{
    });
   }finally{candidate.id='';candidate.password='';candidate=null;}
  }
+ async prepareCollection(site,signal){
+  if(site!=='ckd'||!this.automaticAllowed()||!this.vault.enabled(site)||this.busy||this.isManualOpen(site))return;
+  const at=this.now();if(this.attempts.decision(site,at,false,true)!=='ready'||signal?.aborted||!this.dailyFuses.claimCkd(at))return;let result={status:'unknown',submitted:false};
+  try{result=await this.recover(site,{signal,automatic:true,freshCollection:true});}finally{this.dailyFuses.finishCkd(at,result,this.now());}
+ }
  async recover(site,options={}){
   if(!this.vault.has(site))return {status:'not_saved'};
-  return this.#operation(site,'recover',async(page,signal,allowed)=>this.runner.run(site,page,{readCredentials:()=>this.vault.read(site,{automatic:options.automatic===true}),automatic:options.automatic===true,signal,allowed}),options);
+  return this.#operation(site,'recover',async(page,signal,allowed)=>this.runner.run(site,page,{readCredentials:()=>this.vault.read(site,{automatic:options.automatic===true}),automatic:options.automatic===true,freshCollection:site==='ckd'&&options.freshCollection===true,signal,allowed}),options);
  }
  async verifyPage(site,page){
   await page.ready?.();const input={site,mode:'verify',nonce:'readonly_session_123456789',pageTag:'1:'+Math.max(1,page.version),expectedUrl:page.url,diagnostics:false};

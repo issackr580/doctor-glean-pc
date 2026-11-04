@@ -1,12 +1,14 @@
+import {ActionFuses} from './action-fuses.js';
+import {join,dirname} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {kstDate} from './schedule.js';
 import {quizNavigationAllowed,safeReason} from './automation-policy.js';
 import {dailyTicket} from './task-ticket.js';
 import {waitFor} from './async-work.js';
 export class DoctorvilleQuizRunner{
- constructor({ledger,store,now=Date.now,sleep=waitFor}){Object.assign(this,{ledger,store,now,sleep});}
+ constructor({ledger,store,now=Date.now,sleep=waitFor}){Object.assign(this,{ledger,store,now,sleep});this.fuses=new ActionFuses(join(dirname(store.file),'quiz-action-fuses-v1.json'));}
  async run(page,date,{signal,allowed,onProgress=()=>{},onSubmit=()=>{}}){
-  const began=this.now(),nonce=randomUUID().replace(/-/g,''),visited=new Set();let productName='',phase='today',ticket=null,submitted=false,receipt={status:'unknown',reason:'unknown_result'};
+  const began=this.now(),nonce=randomUUID().replace(/-/g,''),visited=new Set();let productName='',phase='today',ticket=null,quizId=0,submitted=false,receipt={status:'unknown',reason:'unknown_result'};
   const valid=()=>!signal.aborted&&date===kstDate(this.now())&&this.now()-began<95000&&allowed();
   const call=(mode,extra={})=>page.call('doctorville-quiz-pilot.js',[{mode,nonce,expectedUrl:page.url,date,openQuiz:true,...extra}]);
   try{
@@ -50,6 +52,8 @@ export class DoctorvilleQuizRunner{
    ticket=this.ledger.reserve(input,this.now());
    if(!ticket){receipt={status:'unknown',reason:'duplicate_prevented'};return receipt;}
    if(!valid()||!this.ledger.beginDispatch(ticket,this.now()))throw Error('scope_changed');
+   quizId=reply.quizId;if(!this.fuses.reserveQuiz(quizId,reply.attemptCount,nonce)){receipt={status:'unknown',reason:'duplicate_prevented'};return receipt;}
+   if(!valid())throw Error('scope_changed');
    submitted=true;onSubmit();this.store.record(date,'quizAuto',{status:'attempting',reason:'submission_reserved',submitted:true});
    onProgress('닥터빌 퀴즈 1회 제출 · 결과 확인 중');
    reply=await call('submit',{authorized:true,attemptCount:reply.attemptCount});
@@ -58,6 +62,7 @@ export class DoctorvilleQuizRunner{
    return receipt;
   }catch(error){receipt={status:'unknown',reason:safeReason(signal.aborted?'cancelled':error.code??error.message),submitted};return receipt;}
   finally{
+   if(submitted)this.fuses.settleQuiz(quizId,nonce,receipt.status);
    if(ticket&&submitted)this.ledger.finish(ticket,receipt.status==='complete'?'confirmed':'unknown',this.now());
    if(!page.closed&&quizNavigationAllowed(page.url))try{await call('cancel');}catch{}
    const result={...receipt,submitted,elapsedMs:Math.max(0,this.now()-began)};this.store.record(date,'quizAuto',result);this.store.record(date,'doctorville:quiz',result);

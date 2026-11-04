@@ -6,7 +6,7 @@ import {randomUUID} from 'node:crypto';
 import {executionEvent} from './build-info.js';
 import {cleanReceipt} from './workflow-store.js';
 export class DailyRunner{
- constructor({ledger,store,createPage,createInspectionPage,isManualOpen=()=>false,quiz,onChange=()=>{},onEvent=()=>{},shouldYield=()=>false,now=Date.now,sleep=waitFor}){Object.assign(this,{ledger,store,createPage,createInspectionPage,isManualOpen,quiz,onChange,onEvent,shouldYield,now,sleep});this.active=null;this.last={running:false,reason:'idle',key:'',progress:''};}
+ constructor({ledger,store,createPage,createInspectionPage,isManualOpen=()=>false,quiz,onChange=()=>{},onEvent=()=>{},shouldYield=()=>false,taskSelected=()=>true,now=Date.now,sleep=waitFor}){Object.assign(this,{ledger,store,createPage,createInspectionPage,isManualOpen,quiz,onChange,onEvent,shouldYield,taskSelected,now,sleep});this.active=null;this.last={running:false,reason:'idle',key:'',progress:''};}
  snapshot(){return {...this.last};}
  get busy(){return !!this.active;}
  get claimPending(){return !!this.active?.claimSent;}
@@ -23,7 +23,7 @@ export class DailyRunner{
     if(this.now()-began>540000)throw Error('time_limit');
     if(this.shouldYield()){run.reason='entry_priority';break;}
     const key=run.remaining.shift(),task=taskByKey(key);run.key=key;run.site=task.site;run.claimSent=false;
-    const features=this.store.features();
+    const features=this.store.features();if(!readOnly&&!this.taskSelected(key))continue;
     if(task.kind.startsWith('brand')&&!features.brand)continue;
     if(this.isManualOpen(task.site)){this.store.record(date,key,{status:'busy',reason:'manual_view_open'});completed++;continue;}
     const old=this.store.day(date).daily[key];
@@ -37,13 +37,13 @@ export class DailyRunner{
     }
     let receipt={status:'unknown',reason:'unknown_result'},taskBegan=this.now(),reads=0,navigations=0,tickets=[],claimAt=0;
     const runId=randomUUID().replace(/-/g,''),emit=(phase,detail={})=>executionEvent(this.onEvent,{area:'automation',phase,site:task.site,kind:task.kind,runId,readOnly,...detail});emit('start');
-    const mayAct=()=>!readOnly&&!this.ledger.snapshot().paused&&(task.kind.startsWith('brand')?this.store.features().brand:this.store.features().dailyClaim)&&allowed();
+    const mayAct=()=>!readOnly&&this.taskSelected(key)&&!this.ledger.snapshot().paused&&(task.kind.startsWith('brand')?this.store.features().brand:this.store.features().dailyClaim)&&allowed();
     publish(task.label+' 확인 중');
     try{
      const create=readOnly&&this.createInspectionPage?this.createInspectionPage:this.createPage;
      run.page=await create(task.site,controller.signal,{onDialog:message=>dailyDialog(task,message,run.claimSent)});
      const page=run.page;
-     const quizAllowed=()=>!readOnly&&!this.ledger.snapshot().paused&&this.store.features().quizAuto&&allowed();
+     const quizAllowed=()=>!readOnly&&this.taskSelected(key)&&!this.ledger.snapshot().paused&&this.store.features().quizAuto&&allowed();
      if(task.key==='doctorville:quiz'&&quizAllowed()){
       receipt=await this.quiz.run(page,date,{signal:controller.signal,allowed:quizAllowed,onProgress:publish,onSubmit:()=>{run.claimSent=true;emit('dispatch',{attempted:true});}});
      }else{

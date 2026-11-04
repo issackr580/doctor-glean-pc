@@ -10,12 +10,13 @@ import {doctorvilleQuizPage} from './doctorville-quiz-page.js';
 import {credentialDocpleSession} from './credential-session-page.js';
 import {pcEntryPage} from './entry-page.js';
 import {doctorvilleDetailNavigation} from './automation-policy.js';
+import {docpleId} from './docple-policy.js';
 const assets=new Map();
 const NAMES=new Set(['daily.js','auto-entry.js','pc-entry.js','keymedi-lounge.js','doctorville-quiz-pilot.js','doctorville-quiz-journey.js','doctorville-quiz-page.js','doctorville-survey.js','credential-login.js','credential-keymedi-proof.js','credential-background-keymedi-proof.js','credential-page-state.js','credential-docple-session.js']);
 const failure=code=>Object.assign(Error(code),{code});
 export class AutomationPage{
- constructor(site,signal,preferences,{onDialog=()=>({accept:false,status:'unknown',reason:'manual_confirmation'}),onDiagnostic=()=>{}}={}){
-  Object.assign(this,{site,signal,preferences,onDialog,onDiagnostic});this.windows=[];this.generation=0;this.popupAllowed=false;this.focusPopup=false;this.closed=false;this.dialogResult=null;this.dialogs=0;
+ constructor(site,signal,preferences,{onDialog=()=>({accept:false,status:'unknown',reason:'manual_confirmation'}),onDiagnostic=()=>{},externalEntryAllowed=()=>false}={}){
+  Object.assign(this,{site,signal,preferences,onDialog,onDiagnostic,externalEntryAllowed});this.entryDispatchArmed=false;this.windows=[];this.generation=0;this.popupAllowed=false;this.focusPopup=false;this.closed=false;this.dialogResult=null;this.dialogs=0;
   this.runtime={navigationBlocked:0,popupDenied:0,mainFrameFailures:0,consoleErrors:0,credentialRequestObservationSupported:['doctorville','dtalks','whodadoc','hmp'].includes(site),credentialNetworkEnabled:false,credentialRequests:0,credentialResponses:0,credentialHttpStatus:0,credentialNetworkFailures:0};this.root=this.#create();this.current=this.root;this.abort=()=>this.close();signal.addEventListener('abort',this.abort,{once:true});
  }
  #diagnostic(stage,detail={}){if(!this.closed&&!this.signal.aborted)try{this.onDiagnostic(stage,{...detail,pageGeneration:this.generation});}catch{}}
@@ -25,7 +26,7 @@ export class AutomationPage{
  }
  #guard(window){
   this.windows.push(window);const contents=window.webContents;
-  const guard=(event,url)=>{if(!allowedNavigation(this.site,typeof url==='string'?url:event.url)){this.runtime.navigationBlocked=Math.min(1000,this.runtime.navigationBlocked+1);event.preventDefault();this.#diagnostic('navigation_blocked');}};
+  const guard=(event,url)=>{if(!this.allowsEntryNavigation(typeof url==='string'?url:event.url)){this.runtime.navigationBlocked=Math.min(1000,this.runtime.navigationBlocked+1);event.preventDefault();this.#diagnostic('navigation_blocked');}};
   contents.on('will-navigate',guard);contents.on('will-redirect',(event,url,_inPlace,main)=>{if((main??event.isMainFrame)!==false)guard(event,url);});
   contents.on('will-attach-webview',event=>event.preventDefault());
   contents.on('did-start-navigation',(event,_url,inPlace,main)=>{if((main??event.isMainFrame)&&!(inPlace??event.isInPlace)){this.generation++;this.#diagnostic('page_started',{mainFrame:true});}});
@@ -33,7 +34,7 @@ export class AutomationPage{
   contents.on('render-process-gone',()=>this.#diagnostic('renderer_gone'));
   contents.on('did-fail-load',(_event,code,_description,_url,main)=>{if(main!==false&&code!==-3){this.runtime.mainFrameFailures=Math.min(1000,this.runtime.mainFrameFailures+1);this.#diagnostic('network_error',{mainFrame:true});}});
   contents.on('console-message',(event,details)=>{const level=typeof details==='number'?details:details?.level??event.level;if(level==='error'||level===3)this.runtime.consoleErrors=Math.min(1000,this.runtime.consoleErrors+1);});
-  contents.setWindowOpenHandler(({url})=>{if(this.popupAllowed&&this.windows.length<3&&allowedPopup(this.site,url,contents.getURL()))return {action:'allow',overrideBrowserWindowOptions:{show:false,width:1100,height:1800,webPreferences:{...this.preferences,backgroundThrottling:false}}};this.runtime.popupDenied=Math.min(1000,this.runtime.popupDenied+1);return {action:'deny'};});
+  contents.setWindowOpenHandler(({url})=>{if(this.popupAllowed&&this.windows.length<3&&(allowedPopup(this.site,url,contents.getURL())||this.entryDispatchArmed&&this.externalEntryAllowed(this.site,url)))return {action:'allow',overrideBrowserWindowOptions:{show:false,width:1100,height:1800,webPreferences:{...this.preferences,backgroundThrottling:false}}};this.runtime.popupDenied=Math.min(1000,this.runtime.popupDenied+1);return {action:'deny'};});
   contents.on('did-create-window',child=>{try{this.#guard(child);if(this.focusPopup)this.current=child;this.#diagnostic('popup_opened',{popup:true});}catch{child.destroy();this.dialogResult={status:'unknown',reason:'worker_closed'};}});
   // Browser dialogs are read only to fixed classifications, never logged raw.
   // Unknown confirmations are dismissed; only a task-specific original claim
@@ -81,6 +82,16 @@ export class AutomationPage{
    }throw error;
   });
   await bounded(loading,this.signal,45000);this.#alive();await bounded(this.current.webContents.debugger.sendCommand('Page.enable'),this.signal,10000);
+ }
+ armEntryDispatch(){this.entryDispatchArmed=true;}
+ allowsEntryNavigation(url){return allowedNavigation(this.site,url)||this.entryDispatchArmed&&this.externalEntryAllowed(this.site,url);}
+ async observeDocpleArrival(job){
+  if(this.site!=='docple'||!this.entryDispatchArmed)return false;
+  const id=docpleId(job.url);if(!id)return false;await this.ready();
+  const url=this.url,generation=this.version,u=new URL(url);
+  if(u.origin!=='https://docple-plus.com'||u.pathname!=='/webinar/'+id+'/watch'||u.search||u.hash)return false;
+  const observed=await bounded(this.current.webContents.executeJavaScript(`location.href===${JSON.stringify(url)}&&document.readyState==='complete'&&!document.querySelector('input[type="password"],[role="dialog"][aria-modal="true"]')`,false),this.signal,10000);
+  return observed===true&&!this.closed&&!this.signal.aborted&&this.url===url&&this.version===generation;
  }
  allowPopups(focus=false){this.popupAllowed=true;this.focusPopup=focus;}
  async ready(){

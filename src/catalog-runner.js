@@ -12,8 +12,8 @@ function wait(ms,signal){return new Promise(resolve=>{
 
 /** Host-owned bounded collection. No page result may schedule a submit task. */
 export class CatalogRunner{
- constructor({store,createPage,isManualOpen=()=>false,recoverLogin=async()=>false,onChange=()=>{},now=Date.now,sleep=wait,elapsed=()=>performance.now()}){
-  Object.assign(this,{store,createPage,isManualOpen,recoverLogin,onChange,now,sleep,elapsed});this.active=null;this.last={running:false,date:kstDate(now()),site:'',reason:'idle'};
+ constructor({store,createPage,isManualOpen=()=>false,recoverLogin=async()=>false,prepareCollection=async()=>{},onChange=()=>{},now=Date.now,sleep=wait,elapsed=()=>performance.now()}){
+  Object.assign(this,{store,createPage,isManualOpen,recoverLogin,prepareCollection,onChange,now,sleep,elapsed});this.active=null;this.last={running:false,date:kstDate(now()),site:'',reason:'idle'};
  }
  snapshot(){return structuredClone(this.last);}
  #publish(run,extra={}){
@@ -36,7 +36,7 @@ export class CatalogRunner{
  async start(date,ids){
   const today=kstDate(this.now()),max=kstDate(kstInstant(today,'00:00')+7*86_400_000);
   kstInstant(date,'00:00');
-  if(date<today||date>max||!Array.isArray(ids)||!ids.length||ids.length>9||ids.some(id=>!Object.hasOwn(PROFILES,id))||new Set(ids).size!==ids.length)throw Error('invalid_catalog_request');
+  if(date<today||date>max||!Array.isArray(ids)||!ids.length||ids.length>10||ids.some(id=>!Object.hasOwn(PROFILES,id))||new Set(ids).size!==ids.length)throw Error('invalid_catalog_request');
   if(this.active)throw Error('collection_busy');
   const run={date,ids:[...ids],controller:new AbortController(),site:'',completed:0,page:null,lastRead:null,began:this.elapsed()};
   this.active=run;this.#publish(run);
@@ -49,6 +49,7 @@ export class CatalogRunner{
     if(this.isManualOpen(id)){this.store.record(id,date,{status:'busy',reason:'manual_view_open',events:[]},this.now());run.completed++;continue;}
     const profile={...PROFILES[id],networkPatienceMs:45000},began=this.elapsed();let previous=null,recoveryAttempted=false;
     try{
+     await this.prepareCollection(id,run.controller.signal);if(!this.#owns(run))return;
      run.page=await this.createPage(profile,run.controller.signal);
      if(!this.#owns(run)){run.page?.close();return;}
      await run.page.open();

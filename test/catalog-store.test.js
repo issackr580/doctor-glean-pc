@@ -45,7 +45,7 @@ test('invalid saved catalog fails without rewriting the file',t=>{
  assert.throws(()=>new CatalogStore(file));assert.equal(readFileSync(file,'utf8'),raw);
 });
 test('invalid selection is rejected and failed writes do not become saved results',t=>{
- const {file,store}=setup(t);assert.throws(()=>store.select(['__proto__']));assert.throws(()=>store.select(['docple']));
+ const {file,store}=setup(t);assert.throws(()=>store.select(['__proto__']));assert.throws(()=>store.select(['not-a-site']));
  const broken=new CatalogStore(file,{commit:()=>{throw Error('disk full');}});
  assert.throws(()=>broken.record('doctorville',date,{status:'ok',events:[event]},now));
  assert.deepEqual(broken.view(date).results,{});

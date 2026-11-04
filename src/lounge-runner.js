@@ -12,7 +12,7 @@ export class LoungeRunner{
  manualOpened(site){if(site==='keymedi')this.cancel();}
  async run(date,scheduledAt){
   if(this.active||this.store.day(date).lounge)return false;
-  const opensAt=kstInstant(date,'00:01:02'),closesAt=opensAt+20000,verifyAt=closesAt+12000,controller=new AbortController();
+  const opensAt=kstInstant(date,'00:01:03'),closesAt=opensAt+20000,verifyAt=closesAt+12000,controller=new AbortController();
   const run={controller,page:null},lease=date+':'+randomUUID();this.active=run;
   const runId=randomUUID().replace(/-/g,''),emit=(phase,detail={})=>executionEvent(this.onEvent,{area:'automation',phase,site:'keymedi',kind:'lounge',runId,due:opensAt,...detail});
   let row={status:'running',reason:'running',startedAt:this.now(),opensAt,alarmDelayMs:Math.max(0,this.now()-scheduledAt),attemptMask:0,sentMask:0,successMask:0},fresh=false,refreshes=0,lastRefresh=0,lastSent=0;
@@ -34,11 +34,13 @@ export class LoungeRunner{
     if(result.status==='waiting'&&openedVersion!==page.version){openedVersion=page.version;await page.call('keymedi-lounge.js',[{mode:'open'}]);await this.sleep(150,controller.signal);continue;}
     if(result.status==='login'){row.status='login';row.reason='login_required';break;}
     if(result.status==='ready'){
-     if(result.total!==7||!Number.isInteger(result.current)||result.current<0||result.current>7||!Number.isInteger(result.eligibleMask)||result.eligibleMask<0||result.eligibleMask>127||!Number.isInteger(result.successMask)||result.successMask<0||result.successMask>127)throw Error('invalid_response');
-     row.firstMissionReadAt??=this.now();
-     if(Number.isInteger(result.current)&&result.current>=0&&result.current<=7){row.providerComplete=result.current;row.successMask=result.current===7?127:(result.successMask??0)&127;}
-     if(row.providerComplete===7){row.status='complete';row.reason=row.sentMask?'confirmed':'already_complete';save();break;}
-     const mask=(result.eligibleMask??0)&127&~row.attemptMask;
+     const missionMask=result.missionMask??(result.total===7?127:0);
+     if(![6,7].includes(result.total)||missionMask!==(result.total===6?95:127)||!Number.isInteger(result.current)||result.current<0||result.current>result.total||!Number.isInteger(result.eligibleMask)||result.eligibleMask<0||result.eligibleMask>127||!Number.isInteger(result.successMask)||result.successMask<0||result.successMask>127)throw Error('invalid_response');
+     if((result.eligibleMask&~missionMask)||(result.successMask&~missionMask))throw Error('invalid_response');
+     row.firstMissionReadAt??=this.now();row.missionTotal=result.total;row.missionMask=missionMask;
+     if(Number.isInteger(result.current)&&result.current>=0&&result.current<=7){row.providerComplete=result.current;row.successMask=result.current===result.total?missionMask:(result.successMask??0)&127;}
+     if(row.providerComplete===result.total){row.status='complete';row.reason=row.sentMask?'confirmed':'already_complete';save();break;}
+     const mask=(result.eligibleMask??0)&missionMask&~row.attemptMask;
      if(fresh&&mask&&now>=opensAt&&now<closesAt){
       const inputs=[];let safeMask=0;
       for(let slot=0;slot<7;slot++)if(mask&(1<<slot)){

@@ -1,3 +1,4 @@
+import {docpleKey,validDocpleEvent} from './docple-policy.js';
 import {createHash} from 'node:crypto';
 import {atomicJson,readJson} from './atomic-json.js';
 import {kstDate,kstInstant} from './schedule.js';
@@ -9,8 +10,8 @@ const number=value=>Number.isSafeInteger(value)&&value>=0&&value<=1e15;
 const hash=value=>createHash('sha256').update(value).digest('hex');
 export function cleanReceipt(raw,now=Date.now()){
  const out={status:STATUSES.has(raw?.status)?raw.status:'unknown',reason:safeReason(raw?.reason),checkedAt:now};
- for(const key of ['attempted','confirmationAttempted','submitted','targetMatched','navigationObserved','dailyChecked','catalogChecked'])if(typeof raw?.[key]==='boolean')out[key]=raw[key];
- for(const key of ['slot','due','retryCount','reads','elapsedMs','navigations','candidateCards','titleMatches','scheduleMatches','matchedTargets','entryControls','attemptMask','sentMask','successMask','providerComplete','startedAt','opensAt','firstPageReadyAt','firstMissionReadAt','firstEligibleAt','firstClaimAt','lastClaimAt','finishedAt','alarmDelayMs'])if(number(raw?.[key]))out[key]=raw[key];
+ for(const key of ['attempted','confirmationAttempted','submitted','targetMatched','navigationObserved','dailyChecked','catalogChecked','playerObserved','watchObserved'])if(typeof raw?.[key]==='boolean')out[key]=raw[key];
+ for(const key of ['slot','due','retryCount','reads','elapsedMs','navigations','candidateCards','titleMatches','scheduleMatches','matchedTargets','entryControls','attemptMask','sentMask','successMask','providerComplete','startedAt','opensAt','firstPageReadyAt','firstMissionReadAt','firstEligibleAt','firstClaimAt','lastClaimAt','finishedAt','alarmDelayMs','observedAt','missionTotal','missionMask'])if(number(raw?.[key]))out[key]=raw[key];
  if(['not_checked','no_video','requested','playing_observed','gesture_required','play_failed','inaccessible','not_ready','navigation_unconfirmed'].includes(raw?.playback))out.playback=raw.playback;
  return out;
 }
@@ -23,7 +24,7 @@ export function cleanEntryInspection(raw,now=Date.now()){
  return out;
 }
 function valid(data){
- if(!data||data.schemaVersion!==1||Object.keys(data).sort().join('|')!=='days|entries|entrySites|features|schemaVersion'||!Array.isArray(data.entrySites)||data.entrySites.length>6||data.entrySites.some(id=>!ENTRY_SITES.includes(id))||new Set(data.entrySites).size!==data.entrySites.length||!data.features||Object.keys(data.features).sort().join('|')!==Object.keys(DEFAULT_FEATURES).sort().join('|')||Object.values(data.features).some(value=>typeof value!=='boolean')||!data.days||Array.isArray(data.days)||!data.entries||Array.isArray(data.entries)||Object.keys(data.days).length>9||Object.keys(data.entries).length>400)return false;
+ if(!data||data.schemaVersion!==1||Object.keys(data).sort().join('|')!=='days|entries|entrySites|features|schemaVersion'||!Array.isArray(data.entrySites)||data.entrySites.length>9||data.entrySites.some(id=>!ENTRY_SITES.includes(id))||new Set(data.entrySites).size!==data.entrySites.length||!data.features||Object.keys(data.features).sort().join('|')!==Object.keys(DEFAULT_FEATURES).sort().join('|')||Object.values(data.features).some(value=>typeof value!=='boolean')||!data.days||Array.isArray(data.days)||!data.entries||Array.isArray(data.entries)||Object.keys(data.days).length>9||Object.keys(data.entries).length>400)return false;
  const receipt=row=>row&&typeof row==='object'&&!Array.isArray(row)&&number(row.checkedAt)&&JSON.stringify(cleanReceipt(row,row.checkedAt))===JSON.stringify(row);
  for(const [day,row] of Object.entries(data.days)){
   if(!validDate(day)||!row||typeof row!=='object'||!row.daily||Array.isArray(row.daily)||Object.keys(row).some(key=>!['daily','morning','lounge','quizAuto','survey'].includes(key))||Object.keys(row.daily).some(key=>!DAILY_TASKS.some(task=>task.key===key)))return false;
@@ -32,6 +33,11 @@ function valid(data){
  for(const [key,row] of Object.entries(data.entries))if(!/^[a-f0-9]{64}$/.test(key)||row?.key!==key||!ENTRY_SITES.includes(row.site)||!validDate(row.date)||typeof row.title!=='string'||row.title.length>800||!/^([01]\d|2[0-3]):[0-5]\d$/.test(row.time)||!number(row.start)||!number(row.due)||!number(row.deadline)||!STATUSES.has(row.status)||!number(row.nextAt)||!number(row.slot)||row.slot>4||!number(row.retries)||row.retries>4||typeof row.entryAttempted!=='boolean'||!Array.isArray(row.attempts)||row.attempts.length>5||row.attempts.some(item=>!receipt(item))||row.receipt!==undefined&&!receipt(row.receipt)||row.preflight!==undefined&&!receipt(row.preflight)||row.lastStartedAt!==undefined&&!number(row.lastStartedAt)||row.executionFinishedAt!==undefined&&!number(row.executionFinishedAt)||row.executionVersion!==undefined&&!/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(row.executionVersion)||row.sourceCommit!==undefined&&!/^[a-f0-9]{40}$/.test(row.sourceCommit))return false;
  for(const row of Object.values(data.entries))if(row.inspection!==undefined&&(!row.inspection||!number(row.inspection.checkedAt)||JSON.stringify(cleanEntryInspection(row.inspection,row.inspection.checkedAt))!==JSON.stringify(row.inspection)))return false;
  for(const row of Object.values(data.entries)){
+  if(row.site!=='hmp'&&row.repeatSchema!==1&&row.schedulePairSchema!==1&&row.slot!==0)return false;
+  if(row.site==='docple'&&(!validDocpleEvent(row)||row.key!==docpleKey(row)))return false;
+  if(row.schedulePairSchema!==undefined&&(row.schedulePairSchema!==1||row.site==='hmp'||row.repeatSchema||!Array.isArray(row.schedulePlan)||row.schedulePlan.length!==2||row.scheduleSlot!==row.slot||row.slot>1||!Array.isArray(row.scheduleConsumed)||row.scheduleConsumed.some(s=>![0,1].includes(s))||new Set(row.scheduleConsumed).size!==row.scheduleConsumed.length||row.schedulePlan.some((p,i)=>p.slot!==i||!/^([01]\d|2[0-3]):[0-5]\d$/.test(p.time)||!['start','due','deadline'].every(k=>number(p[k])))))return false;
+  if(row.repeatSchema!==undefined&&(row.repeatSchema!==1||!['whodadoc','dtalks'].includes(row.site)||row.slot>2))return false;
+  if(row.repeatFirstEntryAt!==undefined&&!number(row.repeatFirstEntryAt))return false;
   if(row.scheduleIdentity!==undefined&&!/^[a-f0-9]{64}$/.test(row.scheduleIdentity))return false;
   if(row.entryClosesAt!==undefined&&!number(row.entryClosesAt))return false;
   if(row.scheduleChanges!==undefined&&(!Array.isArray(row.scheduleChanges)||!row.scheduleChanges.length||row.scheduleChanges.length>8||row.scheduleChanges.some(change=>!change||Object.keys(change).filter(key=>key!=='recovered').sort().join('|')!=='checkedAt|deadline|due|oldDeadline|oldDue|oldStart|oldTime|start|time'||change.recovered!==undefined&&change.recovered!==true||!/^([01]\d|2[0-3]):[0-5]\d$/.test(change.oldTime)||!/^([01]\d|2[0-3]):[0-5]\d$/.test(change.time)||['checkedAt','oldStart','start','oldDue','due','oldDeadline','deadline'].some(key=>!number(change[key])))))return false;
@@ -39,7 +45,7 @@ function valid(data){
  return true;
 }
 export class WorkflowStore{
- constructor(file,{commit=atomicJson}={}){this.file=file;this.commit=commit;this.failed=false;this.data=readJson(file,{schemaVersion:1,features:{...DEFAULT_FEATURES},entrySites:[...ENTRY_SITES],days:{},entries:{}},valid);}
+ constructor(file,{commit=atomicJson}={}){this.file=file;this.commit=commit;this.failed=false;this.data=readJson(file,{schemaVersion:1,features:{...DEFAULT_FEATURES},entrySites:ENTRY_SITES.filter(id=>!['docple','whodadoc','dtalks'].includes(id)),days:{},entries:{}},valid);}
  #save(next){
   const today=kstDate(),first=kstDate(Date.now()-7*86400000);
   for(const day of Object.keys(next.days))if(day<first||day>today)delete next.days[day];
@@ -69,8 +75,8 @@ export class WorkflowStore{
   this.#save(next);return row;
  }
  entries(day=kstDate()){return Object.values(this.data.entries).filter(row=>row.date===day).map(clone);}
- entryKey(event){return hash(JSON.stringify([event.site,event.date,event.site==='hmp'?event.time:'',event.title.replace(/\s+/g,' ').trim()]));}
+ entryKey(event){if(event.site==='docple')return docpleKey(event);return hash(JSON.stringify([event.site,event.date,event.site==='hmp'?event.time:'',event.title.replace(/\s+/g,' ').trim()]));}
  putEntry(row){const next=clone(this.data);next.entries[row.key]=clone(row);this.#save(next);}
  updateEntry(key,change){const row=this.data.entries[key];if(!row)return false;const next=clone(this.data);next.entries[key]={...next.entries[key],...clone(change)};this.#save(next);return true;}
- diagnostics(){return {features:this.features(),entrySites:this.entrySites(),today:this.day(),entries:this.entries().map(({key,site,date,time,status,due,deadline,nextAt,slot,retries,attempts,receipt,preflight,inspection,lastStartedAt,executionFinishedAt,executionVersion,sourceCommit,scheduleChanges,entryClosesAt})=>({key,site,date,time,status,due,deadline,nextAt,slot,retries,attempts:attempts?.map(item=>cleanReceipt(item,item.checkedAt)),receipt:receipt?cleanReceipt(receipt,receipt.checkedAt):undefined,...(preflight?{preflight:cleanReceipt(preflight,preflight.checkedAt)}:{}),...(inspection?{inspection:cleanEntryInspection(inspection,inspection.checkedAt)}:{}),...(lastStartedAt!==undefined?{lastStartedAt,executionFinishedAt,executionVersion,...(sourceCommit?{sourceCommit}:{})}:{}),...(scheduleChanges?{scheduleChanges:clone(scheduleChanges)}:{}),...(entryClosesAt?{entryClosesAt}:{})})),storageUnavailable:this.failed};}
+ diagnostics(){return {features:this.features(),entrySites:this.entrySites(),today:this.day(),entries:this.entries().map(({key,site,date,time,status,due,deadline,nextAt,slot,retries,attempts,receipt,preflight,inspection,lastStartedAt,executionFinishedAt,executionVersion,sourceCommit,scheduleChanges,entryClosesAt,repeatSchema,repeatFirstEntryAt,schedulePairSchema,schedulePlan,scheduleSlot,scheduleConsumed})=>({key,site,date,time,status,due,deadline,nextAt,slot,retries,attempts:attempts?.map(item=>cleanReceipt(item,item.checkedAt)),receipt:receipt?cleanReceipt(receipt,receipt.checkedAt):undefined,...(preflight?{preflight:cleanReceipt(preflight,preflight.checkedAt)}:{}),...(inspection?{inspection:cleanEntryInspection(inspection,inspection.checkedAt)}:{}),...(lastStartedAt!==undefined?{lastStartedAt,executionFinishedAt,executionVersion,...(sourceCommit?{sourceCommit}:{})}:{}),...(repeatSchema?{repeatSchema,repeatFirstEntryAt}:{}),...(schedulePairSchema?{schedulePairSchema,schedulePlan:clone(schedulePlan),scheduleSlot,scheduleConsumed:[...scheduleConsumed]}:{}),...(scheduleChanges?{scheduleChanges:clone(scheduleChanges)}:{}),...(entryClosesAt?{entryClosesAt}:{})})),storageUnavailable:this.failed};}
 }

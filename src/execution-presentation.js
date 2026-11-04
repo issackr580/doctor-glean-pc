@@ -4,7 +4,7 @@ export function dailyEvidenceLabel(receipt){
  if(receipt.attempted===true)return 'PC 시도 이력 있음 · 사이트 완료 상태 확인';
  return receipt.attempted===false?'기존 완료 상태 확인 · PC 새 제출 없음':'사이트 완료 상태 확인 · PC 제출 여부 미기록';
 }
-export function canRegisterEntry(job){return !!job&&!job.entryAttempted&&['reserved','not_registered','login','busy','network','target_missing','button_missing','not_open','unknown','ambiguous','blocked'].includes(job.status);}
+export function canRegisterEntry(job){return !!job&&!['docple','whodadoc','dtalks'].includes(job.site)&&!job.entryAttempted&&['reserved','not_registered','login','busy','network','target_missing','button_missing','not_open','unknown','ambiguous','blocked'].includes(job.status);}
 export function canPreflightEntry(job){return !!job&&!job.entryAttempted&&!['clicked','manual_clicked','cancelled','expired','lecture_ended','attempting','running'].includes(job.status);}
 export const registrationButtonLabel=row=>row?'신청 상태 확인':'신청하기';
 export function registrationReplyLabel(result){
