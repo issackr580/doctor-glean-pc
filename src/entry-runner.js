@@ -226,10 +226,10 @@ export class EntryRunner{
  }
  async run(job,{prepare=false}={}){
   if(this.active)return false;
-  const controller=new AbortController(),run={job,controller,page:null};this.active=run;const began=this.now(),runId=randomUUID().replace(/-/g,'');let ticket=null,dispatched=false,started=false,rescheduled=false,receipt={status:'unknown',reason:'unknown_result'},adapter='auto-entry.js',trace;
+  const controller=new AbortController(),run={job,controller,page:null};this.active=run;const began=this.now(),runId=randomUUID().replace(/-/g,'');let ticket=null,dispatched=false,started=false,rescheduled=false,liveCatalogRead=false,receipt={status:'unknown',reason:'unknown_result'},adapter='auto-entry.js',trace;
   const emit=(phase,detail={})=>this.emit(phase,job,{runId,...detail});
   const allowed=()=>!controller.signal.aborted&&!this.ledger.snapshot().paused&&this.store.features().entry&&this.store.entrySites().includes(job.site)&&this.store.entries(job.date).some(current=>current.key===job.key&&current.status!=='cancelled'&&current.status!=='manual_clicked')&&job.date===kstDate(this.now())&&!this.store.failed;
-  const nativeJob=()=>({...job,due:prepare?job.prepAt:job.due,deadline:prepare?job.start-1:job.deadline,...(job.site==='hmp'?{hmpRepeatSchema:1,hmpSlot:job.slot}:job.repeatSchema===1?{repeatSlot:job.slot}:{})});
+  const nativeJob=()=>({...job,due:prepare?job.prepAt:job.due,deadline:prepare?job.start-1:job.deadline,...(liveCatalogRead?{requireDoctorDetail:true}:{}),...(job.site==='hmp'?{hmpRepeatSchema:1,hmpSlot:job.slot}:job.repeatSchema===1?{repeatSlot:job.slot}:{})});
   try{
    if(!allowed())return false;
    started=true;
@@ -259,7 +259,7 @@ export class EntryRunner{
      emit('inspect',{...cleanReceipt(supplement,this.now()),reader:'pc',dateMatches:supplement.dateMatches,timeMatches:supplement.timeMatches,duplicateEquivalent:supplement.duplicateEquivalent});
      this.store.updateEntry(job.key,{inspection:cleanEntryInspection({...supplement,readOnly:false},this.now())});
      trace.event('inspect',{...supplement,reader:'pc',pageGeneration:page.version});
-     if(job.site==='doctorville'&&!prepare&&supplement.titleMatches>0&&supplement.dateMissingCards===supplement.titleMatches&&['target_missing','navigate'].includes(supplement.status)){
+     if(job.site==='doctorville'&&!prepare&&!liveCatalogRead&&supplement.titleMatches>0&&supplement.dateMissingCards===supplement.titleMatches&&['target_missing','navigate'].includes(supplement.status)){
       const detail=await this.#catalogDetail(job,page,trace,controller.signal);
       if(detail.reply){receipt=detail.reply;break;}
       if(detail.used){pcDetailRead=true;detailOpened=true;navigations++;continue;}
@@ -278,9 +278,20 @@ export class EntryRunner{
     receipt={...reply,reason:safeReason(reply.reason)};emit('inspect',{...cleanReceipt(receipt,this.now()),reader:adapter==='pc-entry.js'?'pc':'original'});
     trace.event('inspect',{...reply,reader:adapter==='pc-entry.js'?'pc':'original',pageGeneration:page.version});
     if(prepare)break;
+    if(job.site==='doctorville'&&pcDetailRead&&!liveCatalogRead&&reply.status==='target_missing'&&reply.reason==='title_unmatched'&&reply.titleMatches===0&&doctorvilleDetailNavigation(siteById(job.site).url,page.url)){
+     // A cached detail is a read hint, not a reason to keep reading a stale
+     // identity. Re-read the original list once and use only its current exact
+     // title/date/start and observed detail link. Never retry a submitted click.
+     liveCatalogRead=true;pcDetailRead=false;detailOpened=false;
+     if(++navigations>3){receipt={status:'blocked',reason:'policy_rejected'};break;}
+     trace.event('target_open_requested',{status:'navigate',reason:'read_only',targetSource:'live_catalog',readOnly:true});
+     await page.load(siteById(job.site).url);
+     trace.event('target_open_response',{status:'detail_opened',targetSource:'live_catalog',readOnly:true});
+     continue;
+    }
     if(reply.status==='navigate'){
      const detail=job.site==='doctorville';
-     if(++navigations>3||!navigable(job.site,reply.url)||detail&&(job.site!=='doctorville'||pcDetailRead||!doctorvilleDetailNavigation(page.url,reply.url))){receipt={status:'blocked',reason:'policy_rejected'};break;}
+     if(++navigations>3||!navigable(job.site,reply.url)||detail&&(job.site!=='doctorville'||pcDetailRead||!doctorvilleDetailNavigation(page.url,reply.url)||job.scheduleIdentity&&detailIdentity(reply.url)!==job.scheduleIdentity)){receipt={status:'blocked',reason:'policy_rejected'};break;}
      if(detail){pcDetailRead=true;detailOpened=true;emit('open_detail',cleanReceipt(receipt,this.now()));}
      trace.event('target_open_requested',{status:'navigate'});await page.load(reply.url);trace.event('target_open_response',{status:'detail_opened'});continue;
     }
@@ -325,7 +336,7 @@ export class EntryRunner{
     if(['login','blocked','ambiguous','invalid','lecture_ended','not_registered'].includes(reply.status))break;
     if(this.now()-began>=8000)break;await this.sleep(900,controller.signal);
    }
-  }catch(error){receipt={status:dispatched?'unknown':controller.signal.aborted?'cancelled':'network',reason:safeReason(controller.signal.aborted?'cancelled':error.code??error.message),attempted:dispatched};}
+  }catch(error){const code=error.code??error.message;receipt={status:dispatched?'unknown':controller.signal.aborted?'cancelled':code==='policy_rejected'?'blocked':'network',reason:safeReason(controller.signal.aborted?'cancelled':code),attempted:dispatched};}
   finally{
    trace?.finish({...receipt,attempted:dispatched,readOnly:prepare});
    let diagnostics={};try{diagnostics=run.page?.diagnostics?.()??{};}catch{}

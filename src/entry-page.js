@@ -29,7 +29,14 @@ export function pcEntryPage(job,mode='preflight'){
  const label=e=>norm(e.getAttribute('aria-label')||text(e)||all('img[alt]',e).map(i=>i.getAttribute('alt')).join(' '));
  const controls=root=>[...(root.matches('a,button,[role="button"]')?[root]:[]),...all('a,button,[role="button"]',root)].filter(e=>/^(?:(?:live|라이브|강의|세미나|웨비나|온라인|웹심포지엄|웹심포지움))?(?:입장|입장하기|바로입장|시청하기|시청)$/.test(label(e))||['강의보기','시청하러가기','바로시청하기','라이브보기'].includes(label(e))||job.site==='hmp'&&/^강의시청(?:하기)?$/.test(label(e))||job.site==='bluepharm'&&label(e)==='참여하기'&&all('.W_status.ongoing',root).length>0);
  const sameTitle=value=>norm(value)===norm(job.title)||job.title.length===250&&norm(String(value).replace(/\s+/g,' ').trim().slice(0,250))===norm(job.title);
- const titleSelector=job.site==='hmp'?'.subject':job.site==='doctorville'?(doctorDetail?'.tit,h1,h2,h3,h4,h5,h6,strong,p,span,div':'.tit,h1,h2,h3,h4'):job.site==='medigate'?'h1,h2,h3,h4,h5,h6,.tit,.title,[class*="title"],[class*="subject"]':'h1,h2,h3,h4,h5,h6,p,span,strong,.tit,.title';
+ const titleSelector=job.site==='hmp'?'.subject':job.site==='doctorville'?(doctorDetail?'.tit,h1,h2,h3,h4,h5,h6,strong,b,em,p,span,div':'.tit,h1,h2,h3,h4'):job.site==='medigate'?'h1,h2,h3,h4,h5,h6,.tit,.title,[class*="title"],[class*="subject"]':'h1,h2,h3,h4,h5,h6,p,span,strong,.tit,.title';
+ if(doctorDetail){
+  // Counts are diagnostic only. Formatting/substring/image matches never
+  // authorize entry or replace the complete visible title comparison.
+  const candidates=all('.tit,h1,h2,h3,h4,h5,h6,strong,b,em,p,span,img[alt]').filter(e=>!e.closest('nav,footer,aside,[role="dialog"]')).slice(0,1000),format=s=>norm(s).normalize('NFKC').replace(/[\u200b\u200c\u200d]/g,'');
+  diag.titleCandidates=candidates.length;diag.titleFormatMatches=0;diag.titleContainsMatches=0;diag.titleImageMatches=0;
+  for(const e of candidates){const value=text(e);if(value.length<=800&&!sameTitle(value)){if(format(value)===format(job.title))diag.titleFormatMatches++;else if(norm(value).includes(norm(job.title)))diag.titleContainsMatches++;}if(e.matches('img[alt]')&&sameTitle(e.getAttribute('alt')))diag.titleImageMatches++;}
+ }
  const selectors={doctorville:'a.list_detail',medigate:'article',keymedi:'[data-gtm-event-name="content_click"][data-gtm-content-category="메디 TV_메디TV Live"]',hmp:'.area',intermd:'.webinarItem--live,.webinarItem--main,.webinarItem--brand,.webinarItem--home,.webinar__boxLink,.mWebinar__item',bluepharm:'.sem_info,.sem_cal_item'};
  const cards=all(selectors[job.site]);diag.candidateCards=cards.length;
  const titled=root=>{
@@ -305,7 +312,12 @@ export function pcEntryPage(job,mode='preflight'){
  diag.entryControls=unique.reduce((count,root)=>count+controls(root).length,0);
  diag.scheduleMatches=unique.length;diag.matchedTargets=unique.length;diag.targetMatched=unique.length===1;
  if(unique.length!==1)return out(unique.length?'ambiguous':'target_missing',unique.length?'duplicate_target':doctorStartMismatch?'scope_changed':diag.titleMatches?'schedule_unmatched':'title_unmatched');
- const root=unique[0],words=all('button,a,[role="button"],span,p,strong,dt,dd'+(job.site==='doctorville'?',div,em,small':''),root).map(label);
+ const root=unique[0];
+ if(job.site==='doctorville'&&!doctorDetail&&job.requireDoctorDetail===true&&mode==='inspect'){
+  try{const target=new URL(safeLink(root.getAttribute('href')));if(target.origin===here.origin&&target.pathname==='/seminar/seminarDetail'&&!target.hash&&[...target.searchParams.keys()].length===1&&target.searchParams.getAll('seminarId').length===1&&/^[1-9]\d{0,11}$/.test(target.searchParams.get('seminarId')))return {...out('navigate','read_only'),url:target.href};}catch{}
+  return out('blocked','policy_rejected');
+ }
+ const words=all('button,a,[role="button"],span,p,strong,dt,dd'+(job.site==='doctorville'?',div,em,small':''),root).map(label);
  if(!registration&&mode!=='preflight'&&!scheduleRead&&diag.endsAt&&Date.now()>=diag.endsAt)return out('lecture_ended','lecture_ended');
  if(!registration&&mode!=='preflight'&&!scheduleRead&&job.entryClosesAt&&!diag.endsAt)return out('target_missing','scope_changed');
  if(job.site==='doctorville'&&words.some(doctorEnded))return out('lecture_ended','lecture_ended');

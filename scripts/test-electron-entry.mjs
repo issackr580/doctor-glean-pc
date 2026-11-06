@@ -6,6 +6,7 @@ import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import assert from 'node:assert/strict';
 import {portingCases} from './electron-porting-cases.mjs';
+import {nov06Cases} from './electron-nov06-cases.mjs';
 import {AutomationPage} from '../src/automation-page.js';
 import {EntryRunner} from '../src/entry-runner.js';
 import {WorkflowStore} from '../src/workflow-store.js';
@@ -359,6 +360,7 @@ async function run(){
   const r=await page.call('pc-entry.js',[{...job('doctorville'),date:'2020-01-01',time:'12:45',entryClosesAt:Date.now()+600000},'click']);
   check('a recovered entry still rejects a freshly ended detail before the original click',r.status==='lecture_ended');
  }});
+ await nov06Cases({root,date,title,clock,check,inspect,job,detailHeader});
  await portingCases(check);
  check('all inspection and entry windows are released',BrowserWindow.getAllWindows().length===0);
  mkdirSync(new URL('../verification/',import.meta.url),{recursive:true});writeFileSync(new URL('../verification/electron-entry.json',import.meta.url),JSON.stringify({runtime:{platform:process.platform,electron:process.versions.electron,chromium:process.versions.chrome},environment:'Linux Electron45; synthetic HTTPS; PC exact entry and read-only preflight',checks:checks.length,passed:checks,actualProviderVerified:false,windowsVerified:false},null,2)+'\n');

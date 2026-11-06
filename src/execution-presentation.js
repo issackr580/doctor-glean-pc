@@ -26,6 +26,8 @@ export function entrySummary(entries){
 export function entryFailureLabel(job){
  const r=job.receipt;if(!r)return '';
  const suffix=r.attempted===false?' · PC 입장 클릭 없음':'';
+ if(r.status==='blocked'&&r.reason==='policy_rejected')return '허용되지 않은 사이트 이동을 차단함 · 사이트 열기에서 로그인·입장 확인'+suffix;
+ if(r.status==='target_missing'&&r.reason==='title_unmatched')return '예약한 전체 제목을 현재 화면에서 찾지 못함'+suffix;
  if(r.status==='target_missing'&&r.reason==='scope_changed')return '예약한 시작 시각과 사이트의 시작 시각이 다름'+suffix;
  if(r.titleMatches>0&&r.scheduleMatches===0)return '제목은 찾았지만 날짜·시작 시각을 대조하지 못함'+suffix;
  if(r.matchedTargets>1)return '날짜·제목이 맞는 대상이 여러 개여서 중단'+suffix;
