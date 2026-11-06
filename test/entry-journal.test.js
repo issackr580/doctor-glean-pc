@@ -21,6 +21,15 @@ test('repeated unchanged inspections do not update timestamps or consume the lim
  const {journal}=fixture(t);journal.setEnabled(true,now);for(let i=1;i<80;i++)journal.entry(job,'entry','inspect',{status:'ambiguous',reason:'multiple_entry_controls',entryControls:2,elapsedMs:i},now+i);
  const row=journal.export(now+100).entryJournal.records[0];assert.equal(row.events.length,1);assert.equal(row.updatedAt,now+1);
 });
+test('all entry providers retain bounded title and redirect evidence without private values',t=>{
+ const {journal}=fixture(t);journal.setEnabled(true,now);
+ for(const [i,site] of ['doctorville','medigate','intermd','bluepharm','keymedi','hmp','docple','whodadoc','dtalks'].entries()){
+  journal.entry({...job,site,key:(i+1).toString(16).repeat(64)},'entry','inspect',{status:'target_missing',reason:'title_unmatched',titleCandidates:12,titleFormatMatches:1,titleContainsMatches:2,titleImageMatches:0,targetSource:'live_catalog',destinationKind:'unapproved_https',networkKind:'tls',url:'https://PRIVATE',title:'PRIVATE'},now+1);
+ }
+ const out=journal.export(now+2).entryJournal;assert.equal(out.recordCount,9);
+ for(const r of out.records){assert.equal(r.events[0].titleCandidates,12);assert.equal(r.events[0].targetSource,'live_catalog');assert.equal(r.events[0].networkKind,'tls');}
+ assert.doesNotMatch(JSON.stringify(out),/PRIVATE|https:|"title":|"url":/);
+});
 test('date-reading failures survive selected export as bounded counts without raw schedule text',t=>{
  const {dir,journal}=fixture(t);journal.setEnabled(true,now);
  journal.entry({...job,site:'doctorville'},'preflight','inspect',{status:'target_missing',reason:'scope_changed',catalogReference:'schedule_changed',dateMissingCards:2,dateMismatchCards:1,dateInvalidCards:0,dateConflictCards:0,startInvalidCards:1,startMismatchCards:0,sharedDateCards:0,rawDate:'PRIVATE_DATE',rawTitle:'PRIVATE_TITLE',html:'PRIVATE_HTML'},now+1);

@@ -14,9 +14,12 @@ import {docpleId} from './docple-policy.js';
 const assets=new Map();
 const NAMES=new Set(['daily.js','auto-entry.js','pc-entry.js','keymedi-lounge.js','doctorville-quiz-pilot.js','doctorville-quiz-journey.js','doctorville-quiz-page.js','doctorville-survey.js','credential-login.js','credential-keymedi-proof.js','credential-background-keymedi-proof.js','credential-page-state.js','credential-docple-session.js']);
 const failure=code=>Object.assign(Error(code),{code});
+const destinationKind=raw=>{try{const u=new URL(raw);return u.protocol==='http:'?'insecure':u.protocol==='https:'?'unapproved_https':'other_scheme';}catch{return 'invalid';}};
+const networkKind=code=>code===-105?'dns':code===-7||code===-118?'timeout':code<=-200&&code>=-299?'tls':[-100,-101,-102,-106,-109,-111,-130].includes(code)?'connection':'other';
+const dtalksLoginRedirect=raw=>{try{const u=new URL(raw);return u.origin==='http://www.dtalks.kr'&&!u.username&&!u.password&&!u.port&&!u.hash&&u.pathname==='/login.do'&&u.searchParams.getAll('backUrl').length<=1&&[...u.searchParams.keys()].every(k=>k==='backUrl');}catch{return false;}};
 export class AutomationPage{
  constructor(site,signal,preferences,{onDialog=()=>({accept:false,status:'unknown',reason:'manual_confirmation'}),onDiagnostic=()=>{},externalEntryAllowed=()=>false}={}){
-  Object.assign(this,{site,signal,preferences,onDialog,onDiagnostic,externalEntryAllowed});this.entryDispatchArmed=false;this.windows=[];this.generation=0;this.popupAllowed=false;this.focusPopup=false;this.closed=false;this.dialogResult=null;this.dialogs=0;
+  Object.assign(this,{site,signal,preferences,onDialog,onDiagnostic,externalEntryAllowed});this.navigationBlocks=new WeakMap();this.pendingLoads=new WeakMap();this.secureLoginFallbackUsed=false;this.entryDispatchArmed=false;this.windows=[];this.generation=0;this.popupAllowed=false;this.focusPopup=false;this.closed=false;this.dialogResult=null;this.dialogs=0;
   this.runtime={navigationBlocked:0,popupDenied:0,mainFrameFailures:0,consoleErrors:0,credentialRequestObservationSupported:['doctorville','dtalks','whodadoc','hmp'].includes(site),credentialNetworkEnabled:false,credentialRequests:0,credentialResponses:0,credentialHttpStatus:0,credentialNetworkFailures:0};this.root=this.#create();this.current=this.root;this.abort=()=>this.close();signal.addEventListener('abort',this.abort,{once:true});
  }
  #diagnostic(stage,detail={}){if(!this.closed&&!this.signal.aborted)try{this.onDiagnostic(stage,{...detail,pageGeneration:this.generation});}catch{}}
@@ -26,13 +29,13 @@ export class AutomationPage{
  }
  #guard(window){
   this.windows.push(window);const contents=window.webContents;
-  const guard=(event,url)=>{if(!this.allowsEntryNavigation(typeof url==='string'?url:event.url)){this.runtime.navigationBlocked=Math.min(1000,this.runtime.navigationBlocked+1);event.preventDefault();this.#diagnostic('navigation_blocked');}};
+  const guard=(event,url)=>{const target=typeof url==='string'?url:event.url;if(!this.allowsEntryNavigation(target)){this.runtime.navigationBlocked=Math.min(1000,this.runtime.navigationBlocked+1);this.navigationBlocks.set(contents,(this.navigationBlocks.get(contents)??0)+1);const load=this.pendingLoads.get(contents);if(load&&this.site==='dtalks'&&dtalksLoginRedirect(target))load.secureLoginRedirect=true;event.preventDefault();this.#diagnostic('navigation_blocked',{destinationKind:destinationKind(target)});}};
   contents.on('will-navigate',guard);contents.on('will-redirect',(event,url,_inPlace,main)=>{if((main??event.isMainFrame)!==false)guard(event,url);});
   contents.on('will-attach-webview',event=>event.preventDefault());
   contents.on('did-start-navigation',(event,_url,inPlace,main)=>{if((main??event.isMainFrame)&&!(inPlace??event.isInPlace)){this.generation++;this.#diagnostic('page_started',{mainFrame:true});}});
   contents.on('did-finish-load',()=>this.#diagnostic('page_finished',{mainFrame:true}));
   contents.on('render-process-gone',()=>this.#diagnostic('renderer_gone'));
-  contents.on('did-fail-load',(_event,code,_description,_url,main)=>{if(main!==false&&code!==-3){this.runtime.mainFrameFailures=Math.min(1000,this.runtime.mainFrameFailures+1);this.#diagnostic('network_error',{mainFrame:true});}});
+  contents.on('did-fail-load',(_event,code,_description,_url,main)=>{if(main!==false&&code!==-3){this.runtime.mainFrameFailures=Math.min(1000,this.runtime.mainFrameFailures+1);this.#diagnostic('network_error',{mainFrame:true,networkKind:networkKind(code)});}});
   contents.on('console-message',(event,details)=>{const level=typeof details==='number'?details:details?.level??event.level;if(level==='error'||level===3)this.runtime.consoleErrors=Math.min(1000,this.runtime.consoleErrors+1);});
   contents.setWindowOpenHandler(({url})=>{if(this.popupAllowed&&this.windows.length<3&&(allowedPopup(this.site,url,contents.getURL())||this.entryDispatchArmed&&this.externalEntryAllowed(this.site,url)))return {action:'allow',overrideBrowserWindowOptions:{show:false,width:1100,height:1800,webPreferences:{...this.preferences,backgroundThrottling:false}}};this.runtime.popupDenied=Math.min(1000,this.runtime.popupDenied+1);return {action:'deny'};});
   contents.on('did-create-window',child=>{try{this.#guard(child);if(this.focusPopup)this.current=child;this.#diagnostic('popup_opened',{popup:true});}catch{child.destroy();this.dialogResult={status:'unknown',reason:'worker_closed'};}});
@@ -70,9 +73,9 @@ export class AutomationPage{
  }
  #alive(){if(this.closed||this.signal.aborted||!this.current||this.current.isDestroyed())throw failure('cancelled');}
  async load(url){
-  this.#alive();if(!allowedNavigation(this.site,url))throw failure('policy_rejected');const window=this.current,contents=window.webContents;
+  this.#alive();if(!allowedNavigation(this.site,url))throw failure('policy_rejected');const window=this.current,contents=window.webContents,blockedBefore=this.navigationBlocks.get(contents)??0,context={secureLoginRedirect:false};this.pendingLoads.set(contents,context);
   const loading=window.loadURL(url).catch(async error=>{
-   if(error.errno!==-3||this.signal.aborted)throw error;
+   if(error.errno!==-3||this.signal.aborted||(this.navigationBlocks.get(contents)??0)>blockedBefore)throw error;
    const until=Date.now()+15000;let version=this.version,stableAt=Date.now();
    while(Date.now()<until){
     this.#alive();if(contents.isDestroyed())throw error;
@@ -81,7 +84,18 @@ export class AutomationPage{
     await waitFor(80,this.signal);
    }throw error;
   });
-  await bounded(loading,this.signal,45000);this.#alive();await bounded(this.current.webContents.debugger.sendCommand('Page.enable'),this.signal,10000);
+  try{
+   await bounded(loading,this.signal,45000);this.#alive();if((this.navigationBlocks.get(contents)??0)>blockedBefore)throw failure('policy_rejected');
+  }catch(error){
+   // Discard the insecure Location and its return query entirely. This is one
+   // new, fixed HTTPS GET, only for the original read-only catalog load. Never
+   // upgrade arbitrary URLs or replay credential/entry POSTs.
+   if(!this.closed&&!this.signal.aborted&&context.secureLoginRedirect&&!this.secureLoginFallbackUsed&&!this.entryDispatchArmed&&!this.credentialNetwork&&url==='https://www.dtalks.kr/websim/vodList.do'){
+    this.secureLoginFallbackUsed=true;this.#diagnostic('login_fallback',{readOnly:true});await AutomationPage.prototype.load.call(this,'https://www.dtalks.kr/login.do');return;
+   }
+   if(!this.signal.aborted&&(this.navigationBlocks.get(contents)??0)>blockedBefore)throw failure('policy_rejected');throw error;
+  }finally{if(this.pendingLoads.get(contents)===context)this.pendingLoads.delete(contents);}
+  await bounded(this.current.webContents.debugger.sendCommand('Page.enable'),this.signal,10000);
  }
  armEntryDispatch(){this.entryDispatchArmed=true;}
  allowsEntryNavigation(url){return allowedNavigation(this.site,url)||this.entryDispatchArmed&&this.externalEntryAllowed(this.site,url);}

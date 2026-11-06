@@ -38,8 +38,10 @@ export class LoungeRunner{
      if(![6,7].includes(result.total)||missionMask!==(result.total===6?95:127)||!Number.isInteger(result.current)||result.current<0||result.current>result.total||!Number.isInteger(result.eligibleMask)||result.eligibleMask<0||result.eligibleMask>127||!Number.isInteger(result.successMask)||result.successMask<0||result.successMask>127)throw Error('invalid_response');
      if((result.eligibleMask&~missionMask)||(result.successMask&~missionMask))throw Error('invalid_response');
      row.firstMissionReadAt??=this.now();row.missionTotal=result.total;row.missionMask=missionMask;
-     if(Number.isInteger(result.current)&&result.current>=0&&result.current<=7){row.providerComplete=result.current;row.successMask=result.current===result.total?missionMask:(result.successMask??0)&127;}
-     if(row.providerComplete===result.total){row.status='complete';row.reason=row.sentMask?'confirmed':'already_complete';save();break;}
+     // The provider can still show yesterday's completed missions before its
+     // reset. Only the mandatory post-opening GET can prove today's completion.
+     if(fresh&&now>=opensAt){row.providerComplete=result.current;row.successMask=result.current===result.total?missionMask:(result.successMask??0)&127;}
+     if(fresh&&now>=opensAt&&row.providerComplete===result.total){row.status='complete';row.reason=row.sentMask?'confirmed':'already_complete';save();break;}
      const mask=(result.eligibleMask??0)&missionMask&~row.attemptMask;
      if(fresh&&mask&&now>=opensAt&&now<closesAt){
       const inputs=[];let safeMask=0;
