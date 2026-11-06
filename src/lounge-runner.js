@@ -24,7 +24,7 @@ export class LoungeRunner{
    emit('start',{startedAt:row.startedAt,delayMs:row.alarmDelayMs});
    if(this.isManualOpen('keymedi')){row.status='busy';row.reason='manual_view_open';return false;}
    run.page=await this.createPage('keymedi',controller.signal);const page=run.page;
-   const reload=async()=>{await page.load('https://www.keymedi.com/drlounge');lastRefresh=this.now();if(lastRefresh>=opensAt){fresh=true;refreshes++;}row.firstPageReadyAt??=this.now();};
+   const reload=async()=>{const requestedAt=this.now();await page.load('https://www.keymedi.com/drlounge');lastRefresh=this.now();if(requestedAt>=opensAt){fresh=true;refreshes++;}row.firstPageReadyAt??=this.now();};
    await reload();let openedVersion=-1;
    while(valid()){
     const now=this.now();

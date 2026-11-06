@@ -148,6 +148,12 @@ test('cancelling during a stale lounge completion does not claim or mark today c
  const runner=new LoungeRunner({ledger,store,createPage:async()=>p,now:clock.now,sleep:async()=>runner.cancel()});
  await runner.run(date,clock.now());assert.equal(sent,0);assert.equal(store.day(date).lounge.status,'unknown');assert.equal(store.day(date).lounge.successMask,0);assert.equal(Object.keys(ledger.snapshot().jobs).length,0);
 });
+test('a lounge GET begun before opening cannot become fresh just by finishing after opening',async t=>{
+ const {clock,ledger,store}=setup(t);clock.set(at('00:01:03')-50);store.setFeature('lounge',true);let loads=0,sent=0,postOpening=false;
+ const p=page(async(_name,[input])=>{if(input.mode==='claim'){assert.ok(postOpening);sent++;return {sentMask:95};}const complete=!postOpening||sent>0;return {status:'ready',total:6,missionMask:95,current:complete?6:0,eligibleMask:complete?0:95,successMask:complete?95:0};});
+ p.load=async()=>{loads++;postOpening=clock.now()>=at('00:01:03');if(loads===1)clock.advance(100);p.version++;p.route='lounge';};
+ await new LoungeRunner({ledger,store,createPage:async()=>p,now:clock.now,sleep:clock.sleep}).run(date,clock.now());assert.ok(loads>=2);assert.equal(sent,1);assert.equal(store.day(date).lounge.status,'complete');
+});
 test('a blocked entry load is terminal before dispatch, but uncertain dispatch remains consumed',async t=>{
  for(const dispatch of [false,true]){
   const {clock,ledger,store}=setup(t);store.setFeature('entry',true);store.setEntrySites(['dtalks']);
