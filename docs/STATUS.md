@@ -1,10 +1,10 @@
 # PC판 현재 상태와 다음 작업
 
-## PC-020 — 공식 강의 ID 연결 (preview.31 검증 중)
+기준 공개 빌드: **0.1.0-preview.31**. 실행 소스 `8678d498b62abeb750c1166c43ad081742b8ea72` / `pc-source-v0.1.0-preview.31`. [배포용](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.31) 공개 prerelease·[개발자용](https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-a27ff258b377eab34f98) 협업자 Draft(ID436838597)와 서명 피드를 확인했다. Node393·구문·Linux Electron45/Xvfb 합성 HTTPS 조회115·일일30·계정121·입장402·replay136·신청193·업데이트23, Electron 전체1020개·최종 Windows resources/app의 Linux 관리 창 개발자115/배포101·에디션 데이터 분리·깨끗한 소스234파일·의존성/Node393/구문 재현·같은 에디션20~30의 실제 ZIP runtime·전체 app 패치 교체22경우,12자산 재다운로드/서버 SHA/ZIP 전체·독립 웹 공개/404를 대조했다. 실제 Windows/회원 사이트 결과는 미확인이다.
 
-실제 preview.30 원본 위의 별도 작업본에서 모바일 v148 ID 정책을 연결했다. [조사/저장 호환/지원 화면](PORTING_ID_V148.md)·[수용표](PORTING_ID_V148_ACCEPTANCE.json)를 기준으로 한다. 닥터빌·키메디·메디게이트·후다닥·닥플·한미의 관측된 site+namespace+공식 ID를 전달하며 기존 단일 예약 key에 별칭만 붙인다. ID 같은 제목 변경·다른 ID 분리와 날짜/시작/등록/종료/버튼/보안/기한을 별도로 확인한다. 중복 옛 key·저장 실패·소비·취소·수동·늦은 callback은 추가 전송을 허용하지 않는다. 기존 계정/선택·에디션/프로필·반복/일정 이력·필수 시도·서명/updater는 유지한다. 인터엠디·블루팜·디톡스는 legacy이며 장기 시청/월간 집계/native 재시도 proof는 기존 PC에 없어 완료로 표시하지 않는다. Windows 실계정 결과는 미확인이다.
+## PC-020 — 공식 강의 ID 연결 (게시 완료)
 
-기준 공개 빌드: **0.1.0-preview.30**. 실행 소스 `8848de5fa086d235778fac3a6d5d05b9cf49c454` / `pc-source-v0.1.0-preview.30`. [배포용](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.30) 공개 prerelease·개발자용(ID436459401) 협업자 Draft와 서명 피드를 확인했다. Node326·구문·Linux Electron45/Xvfb 합성 HTTPS 조회115·일일30·계정121·입장314·replay136·신청193·업데이트23, Electron 전체932개·최종 Windows resources/app의 Linux 관리 창 개발자115/배포101·에디션 데이터 분리·깨끗한 소스212파일·의존성/Node326/구문 재현·같은 에디션20~29의 실제 ZIP runtime·전체 app 패치 교체20경우, 자산12개 재다운로드/서버 SHA/전체 ZIP·독립 웹 공개/404를 대조했다. 실제 Windows/회원 사이트 결과는 별도 확인이다.
+preview.30 원본을 확인하고 별도 작업본에서 v148 ID 정책을 연결했다. [조사/저장 호환/지원 화면](PORTING_ID_V148.md)·[수용표](PORTING_ID_V148_ACCEPTANCE.json)·[v31 기록](releases/0.1.0-preview.31.md)을 기준으로 한다. 닥터빌·키메디·메디게이트·후다닥·닥플·한미의 관측된 site+namespace+공식 ID를 전달하며 기존 단일 예약 key에만 별칭을 붙인다. ID 같은 제목 변경·다른 ID 분리와 날짜/시작/등록/종료/버튼/보안/기한을 따로 확인한다. 중복 옛 key·저장 실패·소비·취소·수동·늦은 callback은 추가 전송을 허용하지 않는다. 기존 계정/선택·에디션/프로필·반복/일정/실행·필수 시도·서명/updater는 유지한다. 인터엠디·블루팜·디톡스는 legacy이고 장기 시청/월간 집계/native retry proof는 기존 PC에 없어 완료로 표시하지 않는다. 합성46계약/320항목은 실제 PC 어댑터를 호출하며 모바일/PC legacy 키 차이도 명시했다. 실제 Windows·회원 결과는 미확인이다.
 
 ## PC-019 — 입장 상세 재확인·HTTPS 로그인·개장 후 라운지 (게시 완료)
 

@@ -38,7 +38,7 @@ PC 기존 호스트 허용 목록을 넘기지 않는다. 숨긴/과대 DOM, 잘
 
 기존 예약을 재작성하지 않는다. 단일 기존 키만 증명된 별칭을 얻으며 취소/시도/unknown/수동/슬롯/일정계획·이력·실행 ID는 유지한다. 여러 옛 키가 같은 ID면 새 조회 전 재시작에서도 자동 선택하지 않는다. ID 없는 소비/취소 예약과 새 제목의 동일 시각이 겹치면 연결을 추정하지 않는다. 명시적 재예약도 미시도·미소비·원래 기한을 요구한다. 진단 삭제/목록 갱신이 필수 소비를 지우지 않는다.
 
-주 프로세스의 단일 실행 소유자가 기존 시도 키로 원자적 reserve와 beginDispatch를 저장하고 WorkflowStore의 entryAttempted까지 저장한 다음 renderer를 호출한다. 어느 저장이든 실패하면 클릭0회다. renderer 요청 직전에 계정/선택/ledger epoch·같은 worker·소비 상태를 확인한다. 실제 원격 창의 isolated world1003에서 문서 nonce와 원래 버튼/root/처리기 참조를 묶고, click 시 같은 ID·일정·상태·보안·버튼을 다시 판독한다. 새 문서·같은 내용의 교체 카드·다른 handler는 이전 관찰을 사용할 수 없다. 사이트 main world의 JSON true나 nonce는 권한이 아니다. 수동 관찰은 별도 world1001에서 trusted input만 기존 key로 통지하고 worker를 중단한다.
+주 프로세스의 단일 실행 소유자가 기존 시도 키로 원자적 reserve와 beginDispatch를 저장하고 WorkflowStore의 entryAttempted까지 저장한 다음 renderer를 호출한다. 어느 저장이든 실패하면 클릭0회다. renderer 요청 직전에 계정/선택/ledger epoch·같은 worker·소비 상태를 확인한다. 실제 원격 창의 isolated world1003에서 문서 nonce와 원래 버튼/root와 관측한 href·onclick 등의 속성를 묶고, click 시 같은 ID·일정·상태·보안·버튼을 다시 판독한다. 새 문서·같은 내용의 교체 카드·다른 handler는 이전 관찰을 사용할 수 없다. 사이트 main world의 JSON true나 nonce는 권한이 아니다. 수동 관찰은 별도 world1001에서 trusted input만 기존 key로 통지하고 worker를 중단한다.
 
 PC는 실제 관측한 링크·카드·원래 버튼만 쓴다. ID로 detail/player URL을 조립하거나 원래 goDetail handler를 평가해 탐색하지 않는다. 불확실 응답/프로세스 중단/재시작은 소비 상태를 남기며 재전송하지 않는다.
 
@@ -57,3 +57,9 @@ v30은 선택적 예약 메타데이터를 무시할 수 있도록 필수 root/s
 추가 Node 장애 검사와 `electron-id148-cases.mjs`는 원자적 저장 실패·경쟁·재시작·소비 후 응답 유실·계정/선택/취소/수동의 늦은 callback·다른 ID/문서/root/handler·독립 날짜/시작/등록/보안·실제 주입된6수집기/엔진·trusted 수동 통지를 검사한다. [runtime 수용표](PORTING_ID_V148_ACCEPTANCE.json)에 증거 범위와 미확인을 기록한다. 고정 입력 전체 `npm run verify:pc -- --container-no-sandbox` 및 Windows 묶음/에디션 분리/패치/서명 검증을 따로 수행한다.
 
 이는 Linux Electron 합성 HTTPS와 PC 정책 검사다. 실제 Windows/DPAPI·실계정 로그인·회원 화면 DOM·실제 강의 입장/재생/출석/보상·절전/복귀/재부팅·사용자 버튼 설치 성공을 뜻하지 않는다. 사용자 개인 로그/인증 자료는 소스·보고에 복사하지 않았다.
+
+## PC 최종 게시 검증
+
+실행 소스 `8678d498b62abeb750c1166c43ad081742b8ea72` / pc-source-v0.1.0-preview.31, [PR75](https://github.com/issackr580/doctor-glean-pc/pull/75). 실제 PC 어댑터46계약/320항목·Node393·구문·Linux Electron45/Xvfb 합성 HTTPS 조회115·일일30·계정121·입장402·replay136·신청193·업데이트23, Electron 전체1020개. 입력 SHA `7e1b10e6d1486b8f00fe488eb25afb6403b4ff52f3f269b2f49f2865e4b65ea3` 전후 일치. 최종 Windows resources/app의 Linux 관리 창 개발자115/배포101·에디션 데이터 분리·깨끗한 소스234파일·의존성/Node393/구문 재현·같은 에디션20~30의 실제 ZIP runtime·전체 app 패치 교체22경우·12서버 자산/독립 공개·Draft404·고정 Ed25519 서명/실제 서버 패치를 대조했다. [수동 runner](https://github.com/issackr580/doctor-glean-pc/actions/runs/42269812067)와 [릴리스 기록](releases/0.1.0-preview.31.md)을 따른다.
+
+v30 저장소가 v31의 선택적 필드를 읽고 다시 써도 기존 key/identity/owner/소비를 보존하는 것은 별도 합성으로 확인했다. v30의 ID 실행 의미가 동일하다는 증거는 아니다. 되돌릴 때 자동 작업을 중지하고 더 새로운 소비/unknown/취소를 유지하며, 옛 자동 작업을 즉시 재개하지 않는다. 실제 Windows와 실계정 결과는 계속 미확인이다.

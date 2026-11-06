@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "allRowsStatus": "synthetic_verified_windows_and_accounts_pending",
+  "allRowsStatus": "pc_synthetic_and_packaging_verified_windows_and_accounts_pending",
   "rows": [
     {
       "id": "atomic_attempt_commit",
       "requirement": "저장 실패/경쟁 패배에는 DOM dispatch 0회; 성공 후 정확히1회",
-      "status": "synthetic_verified_fixed_input_run_required",
+      "status": "passed_pc_policy_and_electron_synthetic",
       "evidence": [
         "test/official-id-runtime.test.js",
         "scripts/electron-id148-cases.mjs"
@@ -14,7 +14,7 @@
     {
       "id": "crash_after_commit",
       "requirement": "commit 뒤 crash/restart/응답 유실에 sent/unknown 보존·재전송0",
-      "status": "synthetic_verified_fixed_input_run_required",
+      "status": "passed_pc_policy_and_electron_synthetic",
       "evidence": [
         "test/official-id-runtime.test.js",
         "scripts/electron-id148-cases.mjs"
@@ -23,7 +23,7 @@
     {
       "id": "restart_before_catalog",
       "requirement": "새 조회 전 같은 공식 ID의 옛 복수 key가 있으면 자동 선택 없음",
-      "status": "synthetic_verified_fixed_input_run_required",
+      "status": "passed_pc_policy_and_electron_synthetic",
       "evidence": [
         "test/official-id-runtime.test.js",
         "scripts/electron-id148-cases.mjs"
@@ -32,7 +32,7 @@
     {
       "id": "cancel_during_navigation",
       "requirement": "취소/수동 입장/계정 epoch 변경/사이트 해제 후 늦은 callback 클릭0",
-      "status": "synthetic_verified_fixed_input_run_required",
+      "status": "passed_pc_policy_and_electron_synthetic",
       "evidence": [
         "test/official-id-runtime.test.js",
         "scripts/electron-id148-cases.mjs"
@@ -41,7 +41,7 @@
     {
       "id": "id_crosscheck_on_click",
       "requirement": "inspect 뒤 ID/원래 root/문서/일정/신청/disabled 변경을 click 직전 재검사",
-      "status": "synthetic_verified_fixed_input_run_required",
+      "status": "passed_pc_policy_and_electron_synthetic",
       "evidence": [
         "test/official-id-runtime.test.js",
         "scripts/electron-id148-cases.mjs"
@@ -50,7 +50,7 @@
     {
       "id": "same_title_different_id",
       "requirement": "다른 ID의 실제 카드와 다른 날짜/시각을 혼동하지 않음",
-      "status": "synthetic_verified_fixed_input_run_required",
+      "status": "passed_pc_policy_and_electron_synthetic",
       "evidence": [
         "test/official-id-runtime.test.js",
         "scripts/electron-id148-cases.mjs"
@@ -59,7 +59,7 @@
     {
       "id": "preserve_users",
       "requirement": "조회/출석/자동입장 선택·계정·키·journal·슬롯·예약 설정 유지",
-      "status": "synthetic_verified_fixed_input_run_required",
+      "status": "passed_pc_policy_and_electron_synthetic",
       "evidence": [
         "test/official-id-runtime.test.js",
         "scripts/electron-id148-cases.mjs"
@@ -68,7 +68,7 @@
     {
       "id": "manual_alias_notify",
       "requirement": "수동 저장을 기존 key에 기록하고 해당 worker를 즉시 중단",
-      "status": "synthetic_verified_fixed_input_run_required",
+      "status": "passed_pc_policy_and_electron_synthetic",
       "evidence": [
         "test/official-id-runtime.test.js",
         "scripts/electron-id148-cases.mjs"
@@ -77,16 +77,17 @@
     {
       "id": "schedule_revision",
       "requirement": "원래 일정/추가 schedule slot·기한·retry/소비 기록 유지",
-      "status": "synthetic_verified_fixed_input_run_required",
+      "status": "passed_pc_policy_and_electron_synthetic",
       "evidence": [
-        "test/official-id-runtime.test.js",
-        "scripts/electron-id148-cases.mjs"
+        "test/entry-schedule-refresh.test.js",
+        "test/porting-v139.test.js",
+        "scripts/test-electron-entry.mjs"
       ]
     },
     {
       "id": "session_partition",
       "requirement": "현재 PC의 persistent session/profile 분리를 준수; Android 암호문 복사 없음",
-      "status": "synthetic_verified_fixed_input_run_required",
+      "status": "passed_pc_policy_and_electron_synthetic",
       "evidence": [
         "test/editions.test.js",
         "scripts/test-electron-catalog.mjs"
@@ -95,7 +96,7 @@
     {
       "id": "bundle_dependencies",
       "requirement": "실제 주입 번들에서 새 helper가 동작; Node import만 통과한 상태로 종료하지 않음",
-      "status": "synthetic_verified_fixed_input_run_required",
+      "status": "passed_pc_policy_and_electron_synthetic",
       "evidence": [
         "test/official-id-runtime.test.js",
         "scripts/electron-id148-cases.mjs"
@@ -104,7 +105,7 @@
     {
       "id": "blocked_navigation",
       "requirement": "ID로 player URL 구성/임의 외부/HTTP/로그인 POST 재생/자동 신청·동의 없음",
-      "status": "synthetic_verified_fixed_input_run_required",
+      "status": "passed_pc_policy_and_electron_synthetic",
       "evidence": [
         "test/official-id-runtime.test.js",
         "scripts/electron-id148-cases.mjs"
@@ -131,25 +132,27 @@
     {
       "id": "diagnostic_does_not_authorize",
       "requirement": "진단 삭제/JSON true/중복 보고가 시도·auth·retry 권한을 만들지 않음",
-      "status": "synthetic_verified_fixed_input_run_required",
+      "status": "passed_pc_policy_and_electron_synthetic",
       "evidence": [
-        "test/official-id-runtime.test.js",
-        "scripts/electron-id148-cases.mjs"
+        "test/entry-journal.test.js",
+        "test/official-id-runtime.test.js"
       ]
     },
     {
       "id": "clock_boundaries",
       "requirement": "KST 자정/재부팅/절전/창 종료·최대 유지 예산·원래 클릭 기한 분리",
-      "status": "synthetic_verified_fixed_input_run_required",
+      "status": "passed_pc_policy_and_electron_synthetic",
       "evidence": [
-        "test/official-id-runtime.test.js",
-        "scripts/electron-id148-cases.mjs"
+        "test/policy.test.js",
+        "test/entry-schedule-refresh.test.js",
+        "test/automation.test.js",
+        "scripts/test-electron-entry.mjs"
       ]
     },
     {
       "id": "existing_suite",
       "requirement": "PC 기존 조회/로그인/출석/퀴즈/반복 입장/설문/업데이터/서명 회귀 검사",
-      "status": "synthetic_verified_fixed_input_run_required",
+      "status": "passed_pc_policy_and_electron_synthetic",
       "evidence": [
         "scripts/verify-pc.mjs"
       ]
@@ -157,8 +160,9 @@
     {
       "id": "pc_build",
       "requirement": "실제 PC 플랫폼 빌드/서명/업데이트 후보 필터와 설치 경로 확인",
-      "status": "pending_packaging_and_release_validation",
+      "status": "passed_windows_packaging_pc_signature_and_patch_synthetic_not_windows_execution",
       "evidence": [
+        "docs/releases/0.1.0-preview.31.md",
         "docs/RELEASE_PROCESS.md"
       ]
     }
@@ -173,5 +177,16 @@
     "actualPcPolicies": true,
     "legacyDtoProjectionDocumented": true
   },
-  "entryElectronChecks": 402
+  "entryElectronChecks": 402,
+  "sourceCommit": "8678d498b62abeb750c1166c43ad081742b8ea72",
+  "sourceSha256": "7e1b10e6d1486b8f00fe488eb25afb6403b4ff52f3f269b2f49f2865e4b65ea3",
+  "nodeTests": 393,
+  "electronChecks": 1020,
+  "packagedCatalog": {
+    "developer": 115,
+    "distribution": 101
+  },
+  "directPatchCombinations": 22,
+  "releaseAssetDownloadsVerified": 12,
+  "stagingRun": "https://github.com/issackr580/doctor-glean-pc/actions/runs/42269812067"
 }
