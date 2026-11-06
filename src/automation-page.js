@@ -8,7 +8,9 @@ import {isCredentialRequest,bareDoctorvilleProvider} from './credential-policy.j
 import {credentialProviderLanding} from './credential-provider-landing.js';
 import {doctorvilleQuizPage} from './doctorville-quiz-page.js';
 import {credentialDocpleSession} from './credential-session-page.js';
-import {pcEntryPage} from './entry-page.js';
+import {pcEntrySource} from './entry-page.js';
+import {officialIdentity,identityInvalid} from './entry-identity.js';
+import {randomUUID} from 'node:crypto';
 import {doctorvilleDetailNavigation} from './automation-policy.js';
 import {docpleId} from './docple-policy.js';
 const assets=new Map();
@@ -114,7 +116,8 @@ export class AutomationPage{
   if(this.current.webContents.isLoadingMainFrame()||this.url==='about:blank')throw failure('time_limit');
   return {url:this.url,version:this.version};
  }
- async call(name,args,{navigation=false}={}){
+ entryBinding(){return this.lastEntryBinding?{...this.lastEntryBinding}:undefined;}
+ async call(name,args,{navigation=false,expectedDocument,authorize=()=>true}={}){
   await this.ready();
   const landing=name==='credential-provider-landing.js';
   if(landing){
@@ -127,20 +130,30 @@ export class AutomationPage{
   if(name==='credential-docple-session.js'&&(this.site!=='docple'||args?.[0]?.site!=='docple'||args[0].mode!=='verify'||args[0].kind!=='attendance'||args[0].autoClaim!==false||args[0].attempted!==false||args[0].phase!==undefined||args[0].action!==undefined||navigation))throw failure('policy_rejected');
   if(name==='pc-entry.js'&&(args?.[0]?.site!==this.site||!['preflight','inspect','click','schedule-inspect'].includes(args?.[1])||navigation&&args[1]!=='click'))throw failure('policy_rejected');
   if(name==='pc-entry.js'&&args[1]==='schedule-inspect'&&(this.site!=='doctorville'||!doctorvilleDetailNavigation('https://www.doctorville.co.kr/seminar/main',this.url)||navigation))throw failure('policy_rejected');
-  if(!assets.has(name))assets.set(name,name==='pc-registration.js'?`(job)=>(${pcEntryPage.toString()})(job,'registration-inspect')`:landing?credentialProviderLanding.toString():name==='pc-entry.js'?pcEntryPage.toString():name==='credential-page-state.js'?credentialPageState.toString():name==='credential-docple-session.js'?credentialDocpleSession.toString():name==='doctorville-quiz-page.js'?doctorvilleQuizPage.toString():readFileSync(new URL('../vendor/'+(name.startsWith('credential-')?'credentials/':'automation/')+name,import.meta.url),'utf8'));
+  const entry=['auto-entry.js','pc-entry.js'].includes(name),official=entry&&officialIdentity(args?.[0]);
+  if(entry&&identityInvalid(args?.[0]))throw failure('policy_rejected');
+  if(official&&!['preflight','inspect','click','schedule-inspect','open_target','open_catalog','entry_probe','playback_start','playback_probe'].includes(args?.[1]))throw failure('policy_rejected');
+  const assetKey=official&&name==='auto-entry.js'?'identity/'+name:name;
+  if(!assets.has(assetKey))assets.set(assetKey,name==='pc-registration.js'?`(job)=>(${pcEntrySource()})(job,'registration-inspect')`:landing?credentialProviderLanding.toString():name==='pc-entry.js'?pcEntrySource():name==='credential-page-state.js'?credentialPageState.toString():name==='credential-docple-session.js'?credentialDocpleSession.toString():name==='doctorville-quiz-page.js'?doctorvilleQuizPage.toString():readFileSync(new URL('../vendor/'+(official&&name==='auto-entry.js'?'identity/':name.startsWith('credential-')?'credentials/':'automation/')+name,import.meta.url),'utf8'));
   const contents=this.current.webContents,url=this.url,version=this.version;
   const credential=name.startsWith('credential-'),reading=credential&&['probe','verify','cancel'].includes(args?.[0]?.mode);
   // A read may wait across a POST redirect, but its caller must bind a fresh
   // request after that wait. Never deliver secrets into a replacement document.
   if(credential&&(args?.[0]?.expectedUrl!==url||args?.[0]?.pageTag!=='1:'+Math.max(1,version)))return {status:reading?'loading':'stale',submitted:false,documentChanged:true};
-  const script=`(()=>{if(location.href!==${JSON.stringify(url)})return null;return JSON.stringify((${assets.get(name)})(...${JSON.stringify(args)}));})()`;
+  if(expectedDocument&&(expectedDocument.url!==url||expectedDocument.version!==version))throw failure('page_changed');
+  const nonce=randomUUID().replaceAll('-','');
+  const binding=entry?`if(${JSON.stringify(!!expectedDocument)}&&window.__pcEntryDocument!==${JSON.stringify(expectedDocument?.tag??'')})return JSON.stringify({value:{status:'blocked',reason:'page_changed'},tag:''});window.__pcEntryDocument??=${JSON.stringify(nonce)};`:'';
+  const result=`(${assets.get(assetKey)})(...${JSON.stringify(args)})`;
+  const script=`(()=>{if(location.href!==${JSON.stringify(url)})return null;${binding}return JSON.stringify(${entry?'{value:'+result+',tag:window.__pcEntryDocument}':result});})()`;
   let encoded;
-  try{encoded=await bounded(contents.executeJavaScript(script,false),this.signal,10000);}
+  if(!authorize())throw failure('scope_changed');
+  try{encoded=await bounded(entry?contents.executeJavaScriptInIsolatedWorld(1003,[{code:script}]):contents.executeJavaScript(script,false),this.signal,10000);}
   catch(error){if(navigation&&!this.closed&&!this.signal.aborted&&this.version!==version)return {status:'unknown',reason:'navigation_unconfirmed',navigationObserved:true};throw error;}
   this.#alive();
   if(!navigation&&(this.version!==version||this.url!==url)){if(reading)return {status:'loading',submitted:false,documentChanged:true};throw failure('page_changed');}
   if(typeof encoded!=='string'||encoded.length>500000)throw failure('invalid_response');
   let value;try{value=JSON.parse(encoded);}catch{throw failure('invalid_response');}
+  if(entry){if(typeof value.tag==='string'&&/^[a-f0-9]{32}$/.test(value.tag))this.lastEntryBinding={url,version,tag:value.tag};else this.lastEntryBinding=undefined;value=value.value;}
   if(!value||typeof value!=='object'||Array.isArray(value))throw failure('invalid_response');return value;
  }
  async flushSession(){

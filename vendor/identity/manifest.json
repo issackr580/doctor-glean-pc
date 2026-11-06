@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "sourceVersion": "0.7.148",
+  "sourceCommit": "32d9080c77decadd48ed520b7e357bbcdd5928fd",
+  "supported": [
+    "doctorville",
+    "keymedi",
+    "medigate",
+    "whodadoc",
+    "docple",
+    "hmp"
+  ],
+  "sourceFiles": {
+    "engine/lecture-identity.js": "174cb607ae4d258bce85b91d88c6ff5e5cb388611cdd49b0e59e206851d55a0e",
+    "app/src/main/assets/reader-catalog.js": "dd8f70140495c82aff4088fdeb34000bf0ee25f32b98faf80478a3e38c710e1c",
+    "app/src/main/assets/reader-additional.js": "4978fe93bff80c826ab9f188bba2b76c2f6858f760600346fd4ac05b054259ec",
+    "app/src/main/assets/reader-keymedi.js": "54234979ac9f4304571ba62120f4e0fed3903d9315f21d7973fdfa6a07611bd7",
+    "app/src/main/assets/catalog-action.js": "6ea70133213435f003464588ef3f2738d3cabd535c6fb54525469b5b4c46c6d2",
+    "app/src/main/assets/additional-action.js": "db6b12fcb4c0c6b4ac8635470e8c25d52e117affd046c750f0719555ea47bdad",
+    "app/src/main/assets/auto-entry.js": "68326af04035101a4a252df58422fdeeeba0d1d2dff50ae521c446099ffc9a8e"
+  },
+  "acceptanceSha256": "0960fd791fa4eb68169039b3199c2579e8451027a666edba0344bb3e762d7e8c",
+  "pcHardening": [
+    "existing PC host allowlist",
+    "isolated original control/root binding",
+    "reject empty/malformed raw queries, fragments and dot segments"
+  ],
+  "outputs": {
+    "lecture-identity.js": "319b3b44e5f879823d83ef65c953991c774d9e735f16fb4237c7d69ab72d4acf",
+    "reader-catalog.js": "f2d27b5dbd3f65f411d41c339065c7bda0e1be512c6aac6ebe25f5b373044fd7",
+    "reader-additional.js": "ca5193b5ed6d322591216eaac82d1f6afae925818371df1dd3bbef136a1bd91d",
+    "reader-keymedi.js": "c30f6c1603ebd48ffa807b85fbcd04861e9678cd3850b9d23c60c9d724eb7d90",
+    "catalog-action.js": "6ea70133213435f003464588ef3f2738d3cabd535c6fb54525469b5b4c46c6d2",
+    "additional-action.js": "db6b12fcb4c0c6b4ac8635470e8c25d52e117affd046c750f0719555ea47bdad",
+    "auto-entry.js": "d7f2658493f12060b858f08c0b51bb778d5f98fb5fe41350ecc285f5df2f21d9"
+  }
+}

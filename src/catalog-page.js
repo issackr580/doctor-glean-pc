@@ -1,9 +1,10 @@
 import {readFileSync} from 'node:fs';
 import {allowedNavigation,siteById} from './security.js';
 import {pageRole} from './page-role.js';
+import {ID_SITES,officialIdentity} from './entry-identity.js';
 
 const ASSETS=new Map();
-function asset(name){if(!ASSETS.has(name))ASSETS.set(name,readFileSync(new URL('../vendor/engine/'+name,import.meta.url),'utf8'));return ASSETS.get(name);}
+function asset(name,site){const family=ID_SITES.includes(site)?'identity':'engine',key=family+'/'+name;if(!ASSETS.has(key))ASSETS.set(key,readFileSync(new URL('../vendor/'+key,import.meta.url),'utf8'));return ASSETS.get(key);}
 const readerName=profile=>profile.id==='dtalks'?'reader-additional.js':profile.id==='ckd'?'reader-ckd.js':profile.id==='keymedi'?'reader-keymedi.js':['additional-catalog-v1','docple-live-v1'].includes(profile.crawler)?'reader-additional.js':'reader-catalog.js';
 const fail=code=>Object.assign(Error(code),{code});
 export function safeCatalogNavigation(profile,action,state){
@@ -49,7 +50,7 @@ export class CatalogPage{
   if(before.loading)return {status:'loading',done:false,events:[]};
   if(!allowedNavigation(this.profile.id,before.url))throw fail('navigation_changed');
   if(!site.hosts.includes(new URL(before.url).hostname)||/\/login(?:\/|\.|$)|\/auth\/login|\/sign.?in/i.test(new URL(before.url).pathname))return {site:site.id,status:'login',done:true,events:[],coverage:false};
-  const source=`(()=>{if(document.readyState!=='complete')return JSON.stringify({status:'loading',done:false,events:[]});const read=${asset(readerName(this.profile))};const result=read(${JSON.stringify(this.profile)},${JSON.stringify(date)},${JSON.stringify(previous)});return JSON.stringify(result);})()`;
+  const source=`(()=>{if(document.readyState!=='complete')return JSON.stringify({status:'loading',done:false,events:[]});const read=${asset(readerName(this.profile),this.profile.id)};const result=read(${JSON.stringify(this.profile)},${JSON.stringify(date)},${JSON.stringify(previous)});return JSON.stringify(result);})()`;
   let encoded;
   try{encoded=await this.#evaluate(source);}catch(error){
    const after=this.#current();
@@ -58,6 +59,7 @@ export class CatalogPage{
   }
   if(typeof encoded!=='string'||encoded.length>2_000_000)throw fail('invalid_response');
   let result;try{result=JSON.parse(encoded);}catch{throw fail('invalid_response');}
+  if(Array.isArray(result.events))result.events=result.events.map(event=>{const id=event?.site===this.profile.id&&officialIdentity(event);return id?{...event,lectureIdentity:id}:event;});
   result.diagnostics={...(result.diagnostics??result.state?.diagnostics??{}),reads:this.reads,elapsedMs:Math.max(0,Math.round(performance.now()-this.started)),pageRole:pageRole(this.#current().url)};
   return result;
  }
@@ -69,7 +71,7 @@ export class CatalogPage{
   }
   if(!action||!['click','scroll','date','select'].includes(action.kind)||JSON.stringify(action).length>16_000)return false;
   const name=['additional-catalog-v1','docple-live-v1'].includes(this.profile.crawler)?'additional-action.js':'catalog-action.js',before=this.#current();
-  try{return await this.#evaluate(`(${asset(name)})(${JSON.stringify(action)})`)===true;}
+  try{return await this.#evaluate(`(${asset(name,this.profile.id)})(${JSON.stringify(action)})`)===true;}
   catch(error){
    const after=this.#current();
    // A reviewed list button may navigate before its JS return reaches us.

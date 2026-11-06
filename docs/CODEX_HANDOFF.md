@@ -1,5 +1,7 @@
 # PC판 현재 인계 — preview.30
 
+후속 구현: preview.31 공식 ID 연결을 별도 작업본에서 검증 중이다. [사전 조사/지원 화면/저장 호환](PORTING_ID_V148.md)·[수용표](PORTING_ID_V148_ACCEPTANCE.json)·PC-020을 읽는다. 아래 표는 직전 공개본이다. 실행 소스와 게시 결과는 확정 뒤 별도 기록한다.
+
 | 항목 | 기준 |
 |---|---|
 | 제품 | Windows PC 전용, Electron45.0.0 / Node24/npm11 개발 |

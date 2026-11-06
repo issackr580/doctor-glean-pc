@@ -5,7 +5,7 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {randomUUID} from 'node:crypto';
 import assert from 'node:assert/strict';
-import {pcEntryPage} from '../src/entry-page.js';
+import {pcEntryPage,pcEntrySource} from '../src/entry-page.js';
 import {RegistrationController,RegistrationStore} from '../src/registration.js';
 import {AutomationPage} from '../src/automation-page.js';
 import {remotePreferences} from '../src/security.js';
@@ -38,7 +38,7 @@ async function run(){let window;try{
  for(const width of [360,1240])for(const c of cases){
   const site=c.site??'medigate',profile=session.fromPartition('registration-'+randomUUID());profile.protocol.handle('https',()=>new Response('<!doctype html><meta charset="utf-8">'+c.body,{headers:{'content-type':'text/html; charset=utf-8'}}));
   window=new BrowserWindow({show:false,width,height:1000,webPreferences:{...remotePreferences(site),session:profile}});await window.loadURL(urls[site]);
-  const job={site,key:'a'.repeat(64),date,time:clock,title,due:Date.now()-1000,deadline:Date.now()+60000,slot:0},call=mode=>window.webContents.executeJavaScriptInIsolatedWorld(1002,[{code:`(${pcEntryPage.toString()})(${JSON.stringify(job)},${JSON.stringify('registration-'+mode)})`}]);
+  const job={site,key:'a'.repeat(64),date,time:clock,title,due:Date.now()-1000,deadline:Date.now()+60000,slot:0},call=mode=>window.webContents.executeJavaScriptInIsolatedWorld(1002,[{code:`(${pcEntrySource()})(${JSON.stringify(job)},${JSON.stringify('registration-'+mode)})`}]);
   const inspected=await call('inspect');check(width+' '+c.id+' inspect '+JSON.stringify(inspected),inspected.status===c.status);
   check(width+' '+c.id+' inspect has no action',await window.webContents.executeJavaScript('(window.syntheticClicks||0)===0'));
   const result=await call('click');check(width+' '+c.id+' original action is gated',c.status==='registration_ready'?result.status==='registration_clicked'&&await window.webContents.executeJavaScript('window.syntheticClicks===1'):result.status!=='registration_clicked'&&await window.webContents.executeJavaScript('(window.syntheticClicks||0)===0'));
@@ -52,7 +52,7 @@ async function run(){let window;try{
  profile.protocol.handle('https',request=>{if(request.method==='POST'){posts++;durable=store.status(target)?.attempted===true;registered=true;return new Response('{}');}return new Response('<!doctype html><meta charset="utf-8">'+card(site,registered?'<span>신청완료</span>':`<button onclick="fetch('/synthetic-registration',{method:'POST'}).then(()=>this.outerHTML='<span>신청완료</span>')">신청하기</button>`),{headers:{'content-type':'text/html; charset=utf-8'}});});
  const controller=new RegistrationController({store,resolve:()=>target,createPage:async(job,signal)=>{
   window=new BrowserWindow({show:false,webPreferences:{...remotePreferences(site),session:profile}});let version=0;window.webContents.on('did-start-navigation',()=>version++);const w=window;
-  return {get url(){return w.webContents.getURL();},get version(){return version;},load:url=>w.loadURL(url),call:async(j,mode,binding)=>{if(mode==='click')assert.equal(binding.version,version);return w.webContents.executeJavaScriptInIsolatedWorld(1002,[{code:`(${pcEntryPage.toString()})(${JSON.stringify(j)},${JSON.stringify('registration-'+mode)})`}]);},close(){w.destroy();}};
+  return {get url(){return w.webContents.getURL();},get version(){return version;},load:url=>w.loadURL(url),call:async(j,mode,binding)=>{if(mode==='click')assert.equal(binding.version,version);return w.webContents.executeJavaScriptInIsolatedWorld(1002,[{code:`(${pcEntrySource()})(${JSON.stringify(j)},${JSON.stringify('registration-'+mode)})`}]);},close(){w.destroy();}};
  },createInspectionPage:async(job,signal)=>{
   const page=new AutomationPage(site,signal,{...remotePreferences(site),session:profile});return {get url(){return page.url;},get version(){return page.version;},load:url=>page.load(url),ready:()=>page.ready(),call:(j,mode)=>page.call('pc-registration.js',[j,mode]),close:()=>page.close()};
  }});

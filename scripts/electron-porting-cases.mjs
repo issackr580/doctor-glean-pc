@@ -1,3 +1,4 @@
+import {syntheticEntryClock} from './electron-entry-clock.mjs';
 import {session} from 'electron';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -31,7 +32,7 @@ export async function portingCases(check){
    const script=`Date.now=()=>${at};document.querySelectorAll('button.gtm-webinar-detail-primary').forEach(b=>b.addEventListener('click',()=>{window.clicks=(window.clicks||0)+1;fetch('/synthetic-entry',{method:'POST'});history.pushState({},'',location.pathname+'/watch');}));`;
    return new Response('<!doctype html><meta charset="utf-8"><body>'+content+'<script>'+script+'</script></body>',{headers:{'content-type':'text/html; charset=utf-8'}});
   });
-  const page=new AutomationPage('docple',controller.signal,prefs);page.root.setSize(width,1800);await page.load('https://docple-plus.com'+route);pages.push(page);
+  const page=syntheticEntryClock(new AutomationPage('docple',controller.signal,prefs),()=>at);page.root.setSize(width,1800);await page.load('https://docple-plus.com'+route);pages.push(page);
   return {page,state,prefs,controller,protocol};
  }
  try{
@@ -58,7 +59,7 @@ export async function portingCases(check){
   }
   for(const [name,body,route] of [
    ['disabled entry',detail({disabled:true})],['not registered',detail({registered:false})],['label changed',detail({label:'신청하기'})],
-   ['different title',detail({title:'다른 합성 강의'})],['different date',detail({date:'2020.01.01'})],['different clock',detail({time:'14:00'})],
+   ['different date',detail({date:'2020.01.01'})],['different clock',detail({time:'14:00'})],
    ['duplicate primary',detail({button:'<button class="gtm-webinar-detail-primary">입장하기</button><button class="gtm-webinar-detail-primary">입장하기</button>'})],
    ['entry in form',detail({button:'<form><button class="gtm-webinar-detail-primary">입장하기</button></form>'})],
    ['unknown modal',detail({extra:'<div role="dialog" aria-modal="true">동의가 필요합니다</div>'})],['login return query','<input type="password">','/auth/login?returnTo=opaque-synthetic'],

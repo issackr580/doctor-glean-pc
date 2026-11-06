@@ -1,0 +1,1618 @@
+{
+  "schemaVersion": 1,
+  "syntheticOnly": true,
+  "sourceVersion": "0.7.148",
+  "sourceNativeTestClass": "LectureIdentityEntryTest",
+  "clock": "explicit now; Asia/Seoul date, UTC milliseconds",
+  "comparison": "expected is a structural subset; absent uses JSON Pointer",
+  "cases": [
+    {
+      "id": "parse_doctorville",
+      "input": {
+        "operation": "parse",
+        "now": 1793923200000,
+        "site": "doctorville",
+        "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901"
+      },
+      "expected": {
+        "identity": {
+          "schemaVersion": 1,
+          "kind": "seminar",
+          "id": "901",
+          "source": "detail_url"
+        }
+      }
+    },
+    {
+      "id": "parse_keymedi",
+      "input": {
+        "operation": "parse",
+        "now": 1793923200000,
+        "site": "keymedi",
+        "url": "https://www.keymedi.com/meditv/live/701"
+      },
+      "expected": {
+        "identity": {
+          "schemaVersion": 1,
+          "kind": "live",
+          "id": "701",
+          "source": "detail_url"
+        }
+      }
+    },
+    {
+      "id": "parse_medigate",
+      "input": {
+        "operation": "parse",
+        "now": 1793923200000,
+        "site": "medigate",
+        "url": "https://new.medigate.net/symposium/701"
+      },
+      "expected": {
+        "identity": {
+          "schemaVersion": 1,
+          "kind": "symposium",
+          "id": "701",
+          "source": "detail_url"
+        }
+      }
+    },
+    {
+      "id": "parse_docple",
+      "input": {
+        "operation": "parse",
+        "now": 1793923200000,
+        "site": "docple",
+        "url": "https://docple-plus.com/webinar/701?category=C01"
+      },
+      "expected": {
+        "identity": {
+          "schemaVersion": 1,
+          "kind": "webinar",
+          "id": "701",
+          "source": "detail_url"
+        }
+      }
+    },
+    {
+      "id": "parse_whodadoc",
+      "input": {
+        "operation": "parse",
+        "now": 1793923200000,
+        "site": "whodadoc",
+        "url": "https://hcp.whodadoc.com/webinar/webi/view?id=701"
+      },
+      "expected": {
+        "identity": {
+          "schemaVersion": 1,
+          "kind": "webi",
+          "id": "701",
+          "source": "detail_url"
+        }
+      }
+    },
+    {
+      "id": "reject_unproven_id_0",
+      "input": {
+        "operation": "parse",
+        "now": 1793923200000,
+        "site": "doctorville",
+        "url": "901"
+      },
+      "expected": {
+        "identity": null
+      }
+    },
+    {
+      "id": "reject_unproven_id_1",
+      "input": {
+        "operation": "parse",
+        "now": 1793923200000,
+        "site": "doctorville",
+        "url": "Original"
+      },
+      "expected": {
+        "identity": null
+      }
+    },
+    {
+      "id": "reject_unproven_id_2",
+      "input": {
+        "operation": "parse",
+        "now": 1793923200000,
+        "site": "doctorville",
+        "url": "https://www.doctorville.co.kr/member?memberId=901"
+      },
+      "expected": {
+        "identity": null
+      }
+    },
+    {
+      "id": "reject_unproven_id_3",
+      "input": {
+        "operation": "parse",
+        "now": 1793923200000,
+        "site": "doctorville",
+        "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901&token=SYNTHETIC_PRIVATE"
+      },
+      "expected": {
+        "identity": null
+      }
+    },
+    {
+      "id": "reject_unproven_id_4",
+      "input": {
+        "operation": "parse",
+        "now": 1793923200000,
+        "site": "doctorville",
+        "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901&seminarId=902"
+      },
+      "expected": {
+        "identity": null
+      }
+    },
+    {
+      "id": "reject_unproven_id_5",
+      "input": {
+        "operation": "parse",
+        "now": 1793923200000,
+        "site": "doctorville",
+        "url": "https://outside.example/seminar/seminarDetail?seminarId=901"
+      },
+      "expected": {
+        "identity": null
+      }
+    },
+    {
+      "id": "reject_unproven_id_6",
+      "input": {
+        "operation": "parse",
+        "now": 1793923200000,
+        "site": "doctorville",
+        "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=%39%30%31"
+      },
+      "expected": {
+        "identity": null
+      }
+    },
+    {
+      "id": "job_Original_901",
+      "input": {
+        "operation": "job",
+        "now": 1793923200000,
+        "event": {
+          "site": "doctorville",
+          "date": "2026-11-06",
+          "time": "18:00",
+          "title": "Original",
+          "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901"
+        }
+      },
+      "expected": {
+        "job": {
+          "key": "2a8ccd0ad86cc294b523717cc7a152ffa64f1f4e7c34fb09598f7bb92b303af9",
+          "title": "Original",
+          "lectureIdentity": {
+            "kind": "seminar",
+            "id": "901"
+          }
+        }
+      }
+    },
+    {
+      "id": "job_Renamed_901",
+      "input": {
+        "operation": "job",
+        "now": 1793923200000,
+        "event": {
+          "site": "doctorville",
+          "date": "2026-11-06",
+          "time": "18:00",
+          "title": "Renamed",
+          "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901"
+        }
+      },
+      "expected": {
+        "job": {
+          "key": "2a8ccd0ad86cc294b523717cc7a152ffa64f1f4e7c34fb09598f7bb92b303af9",
+          "title": "Renamed",
+          "lectureIdentity": {
+            "kind": "seminar",
+            "id": "901"
+          }
+        }
+      }
+    },
+    {
+      "id": "job_Original_902",
+      "input": {
+        "operation": "job",
+        "now": 1793923200000,
+        "event": {
+          "site": "doctorville",
+          "date": "2026-11-06",
+          "time": "18:00",
+          "title": "Original",
+          "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=902"
+        }
+      },
+      "expected": {
+        "job": {
+          "key": "298ab1316f356cd63b120e35cd6eb2f0c8ddc67e6548f533c0bdefe834dfe5ab",
+          "title": "Original",
+          "lectureIdentity": {
+            "kind": "seminar",
+            "id": "902"
+          }
+        }
+      }
+    },
+    {
+      "id": "keep_legacy_reserved",
+      "input": {
+        "operation": "refresh",
+        "now": 1793923200000,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc",
+            "site": "doctorville",
+            "date": "2026-11-06",
+            "time": "18:00",
+            "title": "Original",
+            "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901",
+            "start": 1793955600000,
+            "due": 1793952600000,
+            "deadline": 1793956200000,
+            "state": "reserved",
+            "entryAttempted": false,
+            "retryCount": 2,
+            "executionId": "SYNTHETIC-EXISTING"
+          }
+        },
+        "site": "doctorville",
+        "result": {
+          "site": "doctorville",
+          "status": "ok",
+          "events": [
+            {
+              "site": "doctorville",
+              "date": "2026-11-06",
+              "time": "18:00",
+              "title": "Renamed",
+              "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "count": 1,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc",
+            "state": "reserved",
+            "entryAttempted": false,
+            "retryCount": 2,
+            "executionId": "SYNTHETIC-EXISTING",
+            "title": "Renamed",
+            "lectureIdentity": {
+              "id": "901",
+              "kind": "seminar"
+            }
+          }
+        },
+        "next": {
+          "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc"
+        }
+      }
+    },
+    {
+      "id": "keep_legacy_clicked",
+      "input": {
+        "operation": "refresh",
+        "now": 1793923200000,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc",
+            "site": "doctorville",
+            "date": "2026-11-06",
+            "time": "18:00",
+            "title": "Original",
+            "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901",
+            "start": 1793955600000,
+            "due": 1793952600000,
+            "deadline": 1793956200000,
+            "state": "clicked",
+            "entryAttempted": true,
+            "retryCount": 2,
+            "executionId": "SYNTHETIC-EXISTING"
+          }
+        },
+        "site": "doctorville",
+        "result": {
+          "site": "doctorville",
+          "status": "ok",
+          "events": [
+            {
+              "site": "doctorville",
+              "date": "2026-11-06",
+              "time": "18:00",
+              "title": "Renamed",
+              "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "count": 1,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc",
+            "state": "clicked",
+            "entryAttempted": true,
+            "retryCount": 2,
+            "executionId": "SYNTHETIC-EXISTING",
+            "title": "Renamed",
+            "lectureIdentity": {
+              "id": "901",
+              "kind": "seminar"
+            }
+          }
+        },
+        "next": null
+      }
+    },
+    {
+      "id": "keep_legacy_cancelled",
+      "input": {
+        "operation": "refresh",
+        "now": 1793923200000,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc",
+            "site": "doctorville",
+            "date": "2026-11-06",
+            "time": "18:00",
+            "title": "Original",
+            "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901",
+            "start": 1793955600000,
+            "due": 1793952600000,
+            "deadline": 1793956200000,
+            "state": "cancelled",
+            "entryAttempted": false,
+            "retryCount": 2,
+            "executionId": "SYNTHETIC-EXISTING"
+          }
+        },
+        "site": "doctorville",
+        "result": {
+          "site": "doctorville",
+          "status": "ok",
+          "events": [
+            {
+              "site": "doctorville",
+              "date": "2026-11-06",
+              "time": "18:00",
+              "title": "Renamed",
+              "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "count": 1,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc",
+            "state": "cancelled",
+            "entryAttempted": false,
+            "retryCount": 2,
+            "executionId": "SYNTHETIC-EXISTING",
+            "title": "Renamed",
+            "lectureIdentity": {
+              "id": "901",
+              "kind": "seminar"
+            }
+          }
+        },
+        "next": null
+      }
+    },
+    {
+      "id": "keep_legacy_unknown",
+      "input": {
+        "operation": "refresh",
+        "now": 1793923200000,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc",
+            "site": "doctorville",
+            "date": "2026-11-06",
+            "time": "18:00",
+            "title": "Original",
+            "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901",
+            "start": 1793955600000,
+            "due": 1793952600000,
+            "deadline": 1793956200000,
+            "state": "unknown",
+            "entryAttempted": true,
+            "retryCount": 2,
+            "executionId": "SYNTHETIC-EXISTING"
+          }
+        },
+        "site": "doctorville",
+        "result": {
+          "site": "doctorville",
+          "status": "ok",
+          "events": [
+            {
+              "site": "doctorville",
+              "date": "2026-11-06",
+              "time": "18:00",
+              "title": "Renamed",
+              "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "count": 1,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc",
+            "state": "unknown",
+            "entryAttempted": true,
+            "retryCount": 2,
+            "executionId": "SYNTHETIC-EXISTING",
+            "title": "Renamed",
+            "lectureIdentity": {
+              "id": "901",
+              "kind": "seminar"
+            }
+          }
+        },
+        "next": null
+      }
+    },
+    {
+      "id": "keep_legacy_manual_clicked",
+      "input": {
+        "operation": "refresh",
+        "now": 1793923200000,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc",
+            "site": "doctorville",
+            "date": "2026-11-06",
+            "time": "18:00",
+            "title": "Original",
+            "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901",
+            "start": 1793955600000,
+            "due": 1793952600000,
+            "deadline": 1793956200000,
+            "state": "manual_clicked",
+            "entryAttempted": true,
+            "retryCount": 2,
+            "executionId": "SYNTHETIC-EXISTING"
+          }
+        },
+        "site": "doctorville",
+        "result": {
+          "site": "doctorville",
+          "status": "ok",
+          "events": [
+            {
+              "site": "doctorville",
+              "date": "2026-11-06",
+              "time": "18:00",
+              "title": "Renamed",
+              "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "count": 1,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc",
+            "state": "manual_clicked",
+            "entryAttempted": true,
+            "retryCount": 2,
+            "executionId": "SYNTHETIC-EXISTING",
+            "title": "Renamed",
+            "lectureIdentity": {
+              "id": "901",
+              "kind": "seminar"
+            }
+          }
+        },
+        "next": null
+      }
+    },
+    {
+      "id": "keep_legacy_attempting",
+      "input": {
+        "operation": "refresh",
+        "now": 1793923200000,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc",
+            "site": "doctorville",
+            "date": "2026-11-06",
+            "time": "18:00",
+            "title": "Original",
+            "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901",
+            "start": 1793955600000,
+            "due": 1793952600000,
+            "deadline": 1793956200000,
+            "state": "attempting",
+            "entryAttempted": true,
+            "retryCount": 2,
+            "executionId": "SYNTHETIC-EXISTING"
+          }
+        },
+        "site": "doctorville",
+        "result": {
+          "site": "doctorville",
+          "status": "ok",
+          "events": [
+            {
+              "site": "doctorville",
+              "date": "2026-11-06",
+              "time": "18:00",
+              "title": "Renamed",
+              "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "count": 1,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc",
+            "state": "attempting",
+            "entryAttempted": true,
+            "retryCount": 2,
+            "executionId": "SYNTHETIC-EXISTING",
+            "title": "Renamed",
+            "lectureIdentity": {
+              "id": "901",
+              "kind": "seminar"
+            }
+          }
+        },
+        "next": null
+      }
+    },
+    {
+      "id": "upgrade_same_name_keeps_cancellation",
+      "input": {
+        "operation": "refresh",
+        "now": 1793923200000,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc",
+            "site": "doctorville",
+            "date": "2026-11-06",
+            "time": "18:00",
+            "title": "Original",
+            "url": "",
+            "start": 1793955600000,
+            "due": 1793952600000,
+            "deadline": 1793956200000,
+            "state": "cancelled",
+            "entryAttempted": false,
+            "retryCount": 2,
+            "executionId": "SYNTHETIC-EXISTING"
+          }
+        },
+        "site": "doctorville",
+        "result": {
+          "site": "doctorville",
+          "status": "ok",
+          "events": [
+            {
+              "site": "doctorville",
+              "date": "2026-11-06",
+              "time": "18:00",
+              "title": "Original",
+              "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "count": 1,
+        "next": null,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "state": "cancelled",
+            "entryAttempted": false,
+            "lectureIdentity": {
+              "id": "901"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "unidentified_legacy_clicked_cannot_authorize_rename",
+      "input": {
+        "operation": "refresh",
+        "now": 1793923200000,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc",
+            "site": "doctorville",
+            "date": "2026-11-06",
+            "time": "18:00",
+            "title": "Original",
+            "url": "",
+            "start": 1793955600000,
+            "due": 1793952600000,
+            "deadline": 1793956200000,
+            "state": "clicked",
+            "entryAttempted": true,
+            "retryCount": 2,
+            "executionId": "SYNTHETIC-EXISTING"
+          }
+        },
+        "site": "doctorville",
+        "result": {
+          "site": "doctorville",
+          "status": "ok",
+          "events": [
+            {
+              "site": "doctorville",
+              "date": "2026-11-06",
+              "time": "18:00",
+              "title": "Renamed",
+              "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "count": 2,
+        "next": null,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "state": "clicked",
+            "entryAttempted": true
+          },
+          "2a8ccd0ad86cc294b523717cc7a152ffa64f1f4e7c34fb09598f7bb92b303af9": {
+            "state": "ambiguous",
+            "entryAttempted": false,
+            "scheduleUpdateReason": "legacy_identity_unconfirmed"
+          }
+        }
+      }
+    },
+    {
+      "id": "unidentified_legacy_unknown_cannot_authorize_rename",
+      "input": {
+        "operation": "refresh",
+        "now": 1793923200000,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc",
+            "site": "doctorville",
+            "date": "2026-11-06",
+            "time": "18:00",
+            "title": "Original",
+            "url": "",
+            "start": 1793955600000,
+            "due": 1793952600000,
+            "deadline": 1793956200000,
+            "state": "unknown",
+            "entryAttempted": true,
+            "retryCount": 2,
+            "executionId": "SYNTHETIC-EXISTING"
+          }
+        },
+        "site": "doctorville",
+        "result": {
+          "site": "doctorville",
+          "status": "ok",
+          "events": [
+            {
+              "site": "doctorville",
+              "date": "2026-11-06",
+              "time": "18:00",
+              "title": "Renamed",
+              "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "count": 2,
+        "next": null,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "state": "unknown",
+            "entryAttempted": true
+          },
+          "2a8ccd0ad86cc294b523717cc7a152ffa64f1f4e7c34fb09598f7bb92b303af9": {
+            "state": "ambiguous",
+            "entryAttempted": false,
+            "scheduleUpdateReason": "legacy_identity_unconfirmed"
+          }
+        }
+      }
+    },
+    {
+      "id": "unidentified_legacy_cancelled_cannot_authorize_rename",
+      "input": {
+        "operation": "refresh",
+        "now": 1793923200000,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc",
+            "site": "doctorville",
+            "date": "2026-11-06",
+            "time": "18:00",
+            "title": "Original",
+            "url": "",
+            "start": 1793955600000,
+            "due": 1793952600000,
+            "deadline": 1793956200000,
+            "state": "cancelled",
+            "entryAttempted": false,
+            "retryCount": 2,
+            "executionId": "SYNTHETIC-EXISTING"
+          }
+        },
+        "site": "doctorville",
+        "result": {
+          "site": "doctorville",
+          "status": "ok",
+          "events": [
+            {
+              "site": "doctorville",
+              "date": "2026-11-06",
+              "time": "18:00",
+              "title": "Renamed",
+              "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "count": 2,
+        "next": null,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "state": "cancelled",
+            "entryAttempted": false
+          },
+          "2a8ccd0ad86cc294b523717cc7a152ffa64f1f4e7c34fb09598f7bb92b303af9": {
+            "state": "ambiguous",
+            "entryAttempted": false,
+            "scheduleUpdateReason": "legacy_identity_unconfirmed"
+          }
+        }
+      }
+    },
+    {
+      "id": "unidentified_legacy_manual_clicked_cannot_authorize_rename",
+      "input": {
+        "operation": "refresh",
+        "now": 1793923200000,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc",
+            "site": "doctorville",
+            "date": "2026-11-06",
+            "time": "18:00",
+            "title": "Original",
+            "url": "",
+            "start": 1793955600000,
+            "due": 1793952600000,
+            "deadline": 1793956200000,
+            "state": "manual_clicked",
+            "entryAttempted": true,
+            "retryCount": 2,
+            "executionId": "SYNTHETIC-EXISTING"
+          }
+        },
+        "site": "doctorville",
+        "result": {
+          "site": "doctorville",
+          "status": "ok",
+          "events": [
+            {
+              "site": "doctorville",
+              "date": "2026-11-06",
+              "time": "18:00",
+              "title": "Renamed",
+              "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "count": 2,
+        "next": null,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "state": "manual_clicked",
+            "entryAttempted": true
+          },
+          "2a8ccd0ad86cc294b523717cc7a152ffa64f1f4e7c34fb09598f7bb92b303af9": {
+            "state": "ambiguous",
+            "entryAttempted": false,
+            "scheduleUpdateReason": "legacy_identity_unconfirmed"
+          }
+        }
+      }
+    },
+    {
+      "id": "restart_before_collection_blocks_duplicate_reserved",
+      "input": {
+        "operation": "next",
+        "now": 1793923200000,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc",
+            "site": "doctorville",
+            "date": "2026-11-06",
+            "time": "18:00",
+            "title": "Original",
+            "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901",
+            "start": 1793955600000,
+            "due": 1793952600000,
+            "deadline": 1793956200000,
+            "state": "reserved",
+            "entryAttempted": false,
+            "retryCount": 2,
+            "executionId": "SYNTHETIC-EXISTING"
+          },
+          "52ce94d459d915e37cf4f7eb33ebf15727ee009a67ee73cb1f3c9d00c96f9494": {
+            "key": "52ce94d459d915e37cf4f7eb33ebf15727ee009a67ee73cb1f3c9d00c96f9494",
+            "site": "doctorville",
+            "date": "2026-11-06",
+            "time": "18:00",
+            "title": "Renamed",
+            "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901",
+            "start": 1793955600000,
+            "due": 1793952600000,
+            "deadline": 1793956200000,
+            "state": "reserved",
+            "entryAttempted": false,
+            "retryCount": 2,
+            "executionId": "SYNTHETIC-EXISTING"
+          }
+        }
+      },
+      "expected": {
+        "count": 2,
+        "next": null,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "state": "reserved",
+            "entryAttempted": false
+          },
+          "52ce94d459d915e37cf4f7eb33ebf15727ee009a67ee73cb1f3c9d00c96f9494": {
+            "state": "reserved",
+            "entryAttempted": false
+          }
+        }
+      }
+    },
+    {
+      "id": "restart_before_collection_blocks_duplicate_clicked",
+      "input": {
+        "operation": "next",
+        "now": 1793923200000,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc",
+            "site": "doctorville",
+            "date": "2026-11-06",
+            "time": "18:00",
+            "title": "Original",
+            "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901",
+            "start": 1793955600000,
+            "due": 1793952600000,
+            "deadline": 1793956200000,
+            "state": "reserved",
+            "entryAttempted": false,
+            "retryCount": 2,
+            "executionId": "SYNTHETIC-EXISTING"
+          },
+          "52ce94d459d915e37cf4f7eb33ebf15727ee009a67ee73cb1f3c9d00c96f9494": {
+            "key": "52ce94d459d915e37cf4f7eb33ebf15727ee009a67ee73cb1f3c9d00c96f9494",
+            "site": "doctorville",
+            "date": "2026-11-06",
+            "time": "18:00",
+            "title": "Renamed",
+            "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901",
+            "start": 1793955600000,
+            "due": 1793952600000,
+            "deadline": 1793956200000,
+            "state": "clicked",
+            "entryAttempted": true,
+            "retryCount": 2,
+            "executionId": "SYNTHETIC-EXISTING"
+          }
+        }
+      },
+      "expected": {
+        "count": 2,
+        "next": null,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "state": "reserved",
+            "entryAttempted": false
+          },
+          "52ce94d459d915e37cf4f7eb33ebf15727ee009a67ee73cb1f3c9d00c96f9494": {
+            "state": "clicked",
+            "entryAttempted": true
+          }
+        }
+      }
+    },
+    {
+      "id": "restart_before_collection_blocks_duplicate_cancelled",
+      "input": {
+        "operation": "next",
+        "now": 1793923200000,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc",
+            "site": "doctorville",
+            "date": "2026-11-06",
+            "time": "18:00",
+            "title": "Original",
+            "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901",
+            "start": 1793955600000,
+            "due": 1793952600000,
+            "deadline": 1793956200000,
+            "state": "reserved",
+            "entryAttempted": false,
+            "retryCount": 2,
+            "executionId": "SYNTHETIC-EXISTING"
+          },
+          "52ce94d459d915e37cf4f7eb33ebf15727ee009a67ee73cb1f3c9d00c96f9494": {
+            "key": "52ce94d459d915e37cf4f7eb33ebf15727ee009a67ee73cb1f3c9d00c96f9494",
+            "site": "doctorville",
+            "date": "2026-11-06",
+            "time": "18:00",
+            "title": "Renamed",
+            "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901",
+            "start": 1793955600000,
+            "due": 1793952600000,
+            "deadline": 1793956200000,
+            "state": "cancelled",
+            "entryAttempted": false,
+            "retryCount": 2,
+            "executionId": "SYNTHETIC-EXISTING"
+          }
+        }
+      },
+      "expected": {
+        "count": 2,
+        "next": null,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "state": "reserved",
+            "entryAttempted": false
+          },
+          "52ce94d459d915e37cf4f7eb33ebf15727ee009a67ee73cb1f3c9d00c96f9494": {
+            "state": "cancelled",
+            "entryAttempted": false
+          }
+        }
+      }
+    },
+    {
+      "id": "restart_before_collection_blocks_duplicate_unknown",
+      "input": {
+        "operation": "next",
+        "now": 1793923200000,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc",
+            "site": "doctorville",
+            "date": "2026-11-06",
+            "time": "18:00",
+            "title": "Original",
+            "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901",
+            "start": 1793955600000,
+            "due": 1793952600000,
+            "deadline": 1793956200000,
+            "state": "reserved",
+            "entryAttempted": false,
+            "retryCount": 2,
+            "executionId": "SYNTHETIC-EXISTING"
+          },
+          "52ce94d459d915e37cf4f7eb33ebf15727ee009a67ee73cb1f3c9d00c96f9494": {
+            "key": "52ce94d459d915e37cf4f7eb33ebf15727ee009a67ee73cb1f3c9d00c96f9494",
+            "site": "doctorville",
+            "date": "2026-11-06",
+            "time": "18:00",
+            "title": "Renamed",
+            "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901",
+            "start": 1793955600000,
+            "due": 1793952600000,
+            "deadline": 1793956200000,
+            "state": "unknown",
+            "entryAttempted": true,
+            "retryCount": 2,
+            "executionId": "SYNTHETIC-EXISTING"
+          }
+        }
+      },
+      "expected": {
+        "count": 2,
+        "next": null,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "state": "reserved",
+            "entryAttempted": false
+          },
+          "52ce94d459d915e37cf4f7eb33ebf15727ee009a67ee73cb1f3c9d00c96f9494": {
+            "state": "unknown",
+            "entryAttempted": true
+          }
+        }
+      }
+    },
+    {
+      "id": "restart_before_collection_blocks_duplicate_manual_clicked",
+      "input": {
+        "operation": "next",
+        "now": 1793923200000,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc",
+            "site": "doctorville",
+            "date": "2026-11-06",
+            "time": "18:00",
+            "title": "Original",
+            "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901",
+            "start": 1793955600000,
+            "due": 1793952600000,
+            "deadline": 1793956200000,
+            "state": "reserved",
+            "entryAttempted": false,
+            "retryCount": 2,
+            "executionId": "SYNTHETIC-EXISTING"
+          },
+          "52ce94d459d915e37cf4f7eb33ebf15727ee009a67ee73cb1f3c9d00c96f9494": {
+            "key": "52ce94d459d915e37cf4f7eb33ebf15727ee009a67ee73cb1f3c9d00c96f9494",
+            "site": "doctorville",
+            "date": "2026-11-06",
+            "time": "18:00",
+            "title": "Renamed",
+            "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901",
+            "start": 1793955600000,
+            "due": 1793952600000,
+            "deadline": 1793956200000,
+            "state": "manual_clicked",
+            "entryAttempted": true,
+            "retryCount": 2,
+            "executionId": "SYNTHETIC-EXISTING"
+          }
+        }
+      },
+      "expected": {
+        "count": 2,
+        "next": null,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "state": "reserved",
+            "entryAttempted": false
+          },
+          "52ce94d459d915e37cf4f7eb33ebf15727ee009a67ee73cb1f3c9d00c96f9494": {
+            "state": "manual_clicked",
+            "entryAttempted": true
+          }
+        }
+      }
+    },
+    {
+      "id": "same_id_two_current_starts",
+      "input": {
+        "operation": "refresh",
+        "now": 1793923200000,
+        "jobs": {},
+        "site": "doctorville",
+        "result": {
+          "site": "doctorville",
+          "status": "ok",
+          "events": [
+            {
+              "site": "doctorville",
+              "date": "2026-11-06",
+              "time": "18:00",
+              "title": "Original",
+              "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901"
+            },
+            {
+              "site": "doctorville",
+              "date": "2026-11-06",
+              "time": "19:00",
+              "title": "Renamed",
+              "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "count": 1,
+        "next": null,
+        "jobs": {
+          "2a8ccd0ad86cc294b523717cc7a152ffa64f1f4e7c34fb09598f7bb92b303af9": {
+            "state": "ambiguous"
+          }
+        }
+      }
+    },
+    {
+      "id": "bad_attempt_marker_missing",
+      "input": {
+        "operation": "next",
+        "now": 1793923200000,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc",
+            "site": "doctorville",
+            "date": "2026-11-06",
+            "time": "18:00",
+            "title": "Original",
+            "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901",
+            "start": 1793955600000,
+            "due": 1793952600000,
+            "deadline": 1793956200000,
+            "state": "reserved",
+            "retryCount": 2,
+            "executionId": "SYNTHETIC-EXISTING"
+          }
+        }
+      },
+      "expected": {
+        "next": null,
+        "count": 1
+      }
+    },
+    {
+      "id": "bad_attempt_marker_null",
+      "input": {
+        "operation": "next",
+        "now": 1793923200000,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc",
+            "site": "doctorville",
+            "date": "2026-11-06",
+            "time": "18:00",
+            "title": "Original",
+            "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901",
+            "start": 1793955600000,
+            "due": 1793952600000,
+            "deadline": 1793956200000,
+            "state": "reserved",
+            "entryAttempted": null,
+            "retryCount": 2,
+            "executionId": "SYNTHETIC-EXISTING"
+          }
+        }
+      },
+      "expected": {
+        "next": null,
+        "count": 1
+      }
+    },
+    {
+      "id": "bad_attempt_marker_string_false",
+      "input": {
+        "operation": "next",
+        "now": 1793923200000,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc",
+            "site": "doctorville",
+            "date": "2026-11-06",
+            "time": "18:00",
+            "title": "Original",
+            "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901",
+            "start": 1793955600000,
+            "due": 1793952600000,
+            "deadline": 1793956200000,
+            "state": "reserved",
+            "entryAttempted": "false",
+            "retryCount": 2,
+            "executionId": "SYNTHETIC-EXISTING"
+          }
+        }
+      },
+      "expected": {
+        "next": null,
+        "count": 1
+      }
+    },
+    {
+      "id": "contradictory_metadata_stops_job",
+      "input": {
+        "operation": "job",
+        "now": 1793923200000,
+        "event": {
+          "site": "doctorville",
+          "date": "2026-11-06",
+          "time": "18:00",
+          "title": "Original",
+          "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901",
+          "lectureIdentity": {
+            "schemaVersion": 1,
+            "kind": "seminar",
+            "id": "902",
+            "source": "detail_url"
+          }
+        }
+      },
+      "expected": {
+        "job": null
+      }
+    },
+    {
+      "id": "raw_event_id_not_official",
+      "input": {
+        "operation": "job",
+        "now": 1793923200000,
+        "event": {
+          "site": "doctorville",
+          "date": "2026-11-06",
+          "time": "18:00",
+          "title": "Original",
+          "url": "",
+          "id": "901"
+        }
+      },
+      "expected": {
+        "job": {
+          "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc"
+        }
+      },
+      "absent": [
+        "/job/lectureIdentity"
+      ]
+    },
+    {
+      "id": "old_worker_cannot_target_another_id",
+      "input": {
+        "operation": "same_worker",
+        "now": 1793923200000,
+        "expectedJob": {
+          "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc",
+          "site": "doctorville",
+          "date": "2026-11-06",
+          "time": "18:00",
+          "title": "Original",
+          "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901",
+          "start": 1793955600000,
+          "due": 1793952600000,
+          "deadline": 1793956200000,
+          "state": "reserved",
+          "entryAttempted": false,
+          "retryCount": 2,
+          "executionId": "SYNTHETIC-EXISTING"
+        },
+        "savedJob": {
+          "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc",
+          "site": "doctorville",
+          "date": "2026-11-06",
+          "time": "18:00",
+          "title": "Original",
+          "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=902",
+          "start": 1793955600000,
+          "due": 1793952600000,
+          "deadline": 1793956200000,
+          "state": "reserved",
+          "entryAttempted": false,
+          "retryCount": 2,
+          "executionId": "SYNTHETIC-EXISTING"
+        }
+      },
+      "expected": {
+        "same": false
+      }
+    },
+    {
+      "id": "receipt_owner_701",
+      "input": {
+        "operation": "same_receipt",
+        "now": 1793923200000,
+        "expectedJob": {
+          "site": "medigate",
+          "date": "2026-11-06",
+          "time": "18:00",
+          "title": "Original",
+          "url": "https://www.medigate.net/symposium/701",
+          "key": "SYNTHETIC",
+          "state": "clicked"
+        },
+        "savedJob": {
+          "site": "medigate",
+          "date": "2026-11-06",
+          "time": "18:00",
+          "title": "Renamed",
+          "url": "https://www.medigate.net/symposium/701",
+          "key": "SYNTHETIC",
+          "state": "clicked"
+        }
+      },
+      "expected": {
+        "same": true
+      }
+    },
+    {
+      "id": "receipt_owner_702",
+      "input": {
+        "operation": "same_receipt",
+        "now": 1793923200000,
+        "expectedJob": {
+          "site": "medigate",
+          "date": "2026-11-06",
+          "time": "18:00",
+          "title": "Original",
+          "url": "https://www.medigate.net/symposium/701",
+          "key": "SYNTHETIC",
+          "state": "clicked"
+        },
+        "savedJob": {
+          "site": "medigate",
+          "date": "2026-11-06",
+          "time": "18:00",
+          "title": "Renamed",
+          "url": "https://www.medigate.net/symposium/702",
+          "key": "SYNTHETIC",
+          "state": "clicked"
+        }
+      },
+      "expected": {
+        "same": false
+      }
+    },
+    {
+      "id": "trusted_manual_uses_alias_reserved",
+      "input": {
+        "operation": "manual",
+        "now": 1793923200000,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc",
+            "site": "doctorville",
+            "date": "2026-11-06",
+            "time": "18:00",
+            "title": "Original",
+            "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901",
+            "start": 1793955600000,
+            "due": 1793952600000,
+            "deadline": 1793956200000,
+            "state": "reserved",
+            "entryAttempted": false,
+            "retryCount": 2,
+            "executionId": "SYNTHETIC-EXISTING"
+          }
+        },
+        "candidateEvent": {
+          "site": "doctorville",
+          "date": "2026-11-06",
+          "time": "18:00",
+          "title": "Renamed",
+          "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901"
+        },
+        "site": "doctorville",
+        "source": "site_click"
+      },
+      "expected": {
+        "marked": true,
+        "count": 1,
+        "candidateKey": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc",
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "state": "manual_clicked",
+            "entryAttempted": true
+          }
+        }
+      }
+    },
+    {
+      "id": "trusted_manual_uses_alias_clicked",
+      "input": {
+        "operation": "manual",
+        "now": 1793923200000,
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc",
+            "site": "doctorville",
+            "date": "2026-11-06",
+            "time": "18:00",
+            "title": "Original",
+            "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901",
+            "start": 1793955600000,
+            "due": 1793952600000,
+            "deadline": 1793956200000,
+            "state": "clicked",
+            "entryAttempted": true,
+            "retryCount": 2,
+            "executionId": "SYNTHETIC-EXISTING"
+          }
+        },
+        "candidateEvent": {
+          "site": "doctorville",
+          "date": "2026-11-06",
+          "time": "18:00",
+          "title": "Renamed",
+          "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901"
+        },
+        "site": "doctorville",
+        "source": "site_click"
+      },
+      "expected": {
+        "marked": false,
+        "count": 1,
+        "candidateKey": "2a8ccd0ad86cc294b523717cc7a152ffa64f1f4e7c34fb09598f7bb92b303af9",
+        "jobs": {
+          "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc": {
+            "state": "clicked",
+            "entryAttempted": true
+          }
+        }
+      }
+    },
+    {
+      "id": "explicit_rebook_preserves_key",
+      "input": {
+        "operation": "rebook",
+        "now": 1793923200000,
+        "previous": {
+          "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc",
+          "site": "doctorville",
+          "date": "2026-11-06",
+          "time": "18:00",
+          "title": "Original",
+          "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901",
+          "start": 1793955600000,
+          "due": 1793952600000,
+          "deadline": 1793956200000,
+          "state": "cancelled",
+          "entryAttempted": false,
+          "retryCount": 2,
+          "executionId": "SYNTHETIC-EXISTING"
+        },
+        "result": {
+          "site": "doctorville",
+          "status": "ok",
+          "events": [
+            {
+              "site": "doctorville",
+              "date": "2026-11-06",
+              "time": "18:00",
+              "title": "Renamed",
+              "url": "https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=901"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "candidate": {
+          "key": "bc13fdff420badb3d0976feae5cbb7c655c3fd98997bc533cbea2c09fcff10dc",
+          "state": "reserved",
+          "title": "Renamed",
+          "entryAttempted": false,
+          "rebookedAt": 1793923200000,
+          "rebookCount": 1
+        }
+      }
+    },
+    {
+      "id": "hmp_same_schedule_id_two_starts",
+      "input": {
+        "operation": "hmp_targets",
+        "now": 1793923200000,
+        "events": [
+          {
+            "site": "hmp",
+            "date": "2026-11-06",
+            "time": "18:00",
+            "title": "Original",
+            "url": "",
+            "registrationStatus": "registered",
+            "lectureIdentity": {
+              "schemaVersion": 1,
+              "kind": "schedule",
+              "id": "901",
+              "source": "hmp_go_detail"
+            }
+          },
+          {
+            "site": "hmp",
+            "date": "2026-11-06",
+            "time": "19:00",
+            "title": "Original",
+            "url": "",
+            "registrationStatus": "registered",
+            "lectureIdentity": {
+              "schemaVersion": 1,
+              "kind": "schedule",
+              "id": "901",
+              "source": "hmp_go_detail"
+            }
+          }
+        ],
+        "jobs": {}
+      },
+      "expected": {
+        "count": 0,
+        "targets": []
+      }
+    },
+    {
+      "id": "hmp_key_1310",
+      "input": {
+        "operation": "job",
+        "now": 1793923200000,
+        "event": {
+          "site": "hmp",
+          "date": "2026-11-06",
+          "time": "13:10",
+          "title": "Original",
+          "url": "",
+          "registrationStatus": "registered",
+          "lectureIdentity": {
+            "schemaVersion": 1,
+            "kind": "schedule",
+            "id": "901",
+            "source": "hmp_go_detail"
+          },
+          "hmpRepeatRequested": true
+        }
+      },
+      "expected": {
+        "job": {
+          "key": "54edce46c4f066a1dfac3d020d837562742e41028d5dbdd305e39bcc62531efd",
+          "lectureIdentity": {
+            "kind": "schedule",
+            "id": "901"
+          }
+        }
+      }
+    },
+    {
+      "id": "hmp_key_1800",
+      "input": {
+        "operation": "job",
+        "now": 1793923200000,
+        "event": {
+          "site": "hmp",
+          "date": "2026-11-06",
+          "time": "18:00",
+          "title": "Original",
+          "url": "",
+          "registrationStatus": "registered",
+          "lectureIdentity": {
+            "schemaVersion": 1,
+            "kind": "schedule",
+            "id": "901",
+            "source": "hmp_go_detail"
+          },
+          "hmpRepeatRequested": true
+        }
+      },
+      "expected": {
+        "job": {
+          "key": "ef2d08638aefcb73883f9c25cbcbdf7019b15f1cb3f192646e2ea843ba0bdaf3",
+          "lectureIdentity": {
+            "kind": "schedule",
+            "id": "901"
+          }
+        }
+      }
+    }
+  ],
+  "actualPcProductTested": false
+}

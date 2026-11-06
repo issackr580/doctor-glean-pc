@@ -34,3 +34,10 @@ test('credential helpers and exact routes match the immutable Android source sna
  const root=new URL('../vendor/credentials/',import.meta.url),manifest=JSON.parse(readFileSync(new URL('manifest.json',root),'utf8'));assert.equal(manifest.sourceVersion,'0.7.139');assert.equal(Object.keys(manifest.outputs).length,4);
  for(const [name,expected] of Object.entries(manifest.outputs)){const bytes=readFileSync(new URL(name,root));assert.equal(createHash('sha256').update(bytes).digest('hex'),expected);if(name.endsWith('.js'))assert.equal(typeof new vm.Script(bytes.toString()).runInNewContext(),'function');else assert.equal(JSON.parse(bytes).length,10);}
 });
+
+test('the explicit v148 identity outputs and portable synthetic corpus match their reviewed hashes',()=>{
+ const root=new URL('../',import.meta.url),manifest=JSON.parse(readFileSync(new URL('vendor/identity/manifest.json',root)));
+ assert.equal(manifest.sourceVersion,'0.7.148');assert.equal(manifest.sourceCommit,'32d9080c77decadd48ed520b7e357bbcdd5928fd');
+ for(const [name,sha] of Object.entries(manifest.outputs))assert.equal(createHash('sha256').update(readFileSync(new URL('vendor/identity/'+name,root))).digest('hex'),sha,name);
+ assert.equal(createHash('sha256').update(readFileSync(new URL('test/fixtures/official-id-v148.synthetic.json',root))).digest('hex'),manifest.acceptanceSha256);
+});

@@ -34,3 +34,4 @@ doctor-glean-pc-developer-diagnostics*.json
 **/quiz-action-fuses-v1.json
 **/credential-action-fuses-v1.json
 **/surveys-v1.json
+**/identity-state-snapshots/

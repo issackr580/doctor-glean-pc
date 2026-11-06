@@ -15,7 +15,9 @@ test('results reject other dates and hostile links, keeping display text inert',
 });
 test('public lecture links cannot carry authentication fields into the cache',()=>{
  const r=sanitiseResult('doctorville',date,{status:'review',events:[{...event,url:event.url+'&authToken=secret#cookie'}]},now);
- assert.equal(r.events.length,1);assert.doesNotMatch(r.events[0].url,/secret|authToken|#/);
+ assert.equal(r.events.length,0);assert.doesNotMatch(JSON.stringify(r),/secret|authToken|#/);
+ const legacy=sanitiseResult('doctorville',date,{status:'review',events:[{...event,url:'https://www.doctorville.co.kr/seminar/main?authToken=secret#cookie'}]},now);
+ assert.equal(legacy.events.length,1);assert.equal(legacy.events[0].lectureIdentity,undefined);assert.doesNotMatch(legacy.events[0].url,/secret|authToken|#/);
 });
 test('failed refresh retains only same-day cached rows and marks them stale',t=>{
  const {store}=setup(t);store.record('doctorville',date,{status:'ok',coverage:true,events:[event]},now);

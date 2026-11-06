@@ -5,6 +5,7 @@ import {SITES} from '../vendor/engine/core.js';
 import {allowedNavigation,siteById} from './security.js';
 import {validDocpleEvent} from './docple-policy.js';
 import {kstInstant} from './schedule.js';
+import {officialIdentity,identityInvalid} from './entry-identity.js';
 
 const IDS=new Set(SITES.map(s=>s.id));
 const STATUSES=new Set(['ok','review','login','blocked','error','cancelled','busy']);
@@ -48,6 +49,8 @@ function cleanEvent(site,date,event){
  if(!event||event.site!==site||event.date!==date||typeof event.time!=='string'||!/^([01]\d|2[0-3]):[0-5]\d$/.test(event.time)||typeof event.title!=='string')return null;
  const title=event.title.replace(/[\x00-\x1f\x7f]/g,' ').replace(/\s+/g,' ').trim();
  if(!title||title.length>800)return null;
+ if(identityInvalid(event))return null;
+ const lectureIdentity=officialIdentity(event);
  let url='';
  if(event.url){
   if(!allowedNavigation(site,event.url)||!siteById(site).hosts.includes(new URL(event.url).hostname))return null;
@@ -58,6 +61,7 @@ function cleanEvent(site,date,event){
  if(site==='docple'&&!validDocpleEvent(event))return null;
  const id=site==='docple'?String(event.id):typeof event.id==='string'&&/^[a-f0-9]{64}$/.test(event.id)?event.id:sha(JSON.stringify([site,date,event.time,title,String(event.id??'').slice(0,2000)]));
  const out={site,date,time:event.time,title,id,url,advanced:event.advanced===true};
+ if(lectureIdentity)out.lectureIdentity=lectureIdentity;
  if(['hmp','docple'].includes(site)){
   out.registrationStatus=['registered','not_registered','closed','unknown'].includes(event.registrationStatus)?event.registrationStatus:'unknown';
   out.lectureEnded=event.lectureEnded===true;

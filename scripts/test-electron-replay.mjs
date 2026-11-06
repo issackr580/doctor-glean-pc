@@ -4,7 +4,7 @@ import {mkdtempSync,mkdirSync,writeFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import assert from 'node:assert/strict';
-import {pcEntryPage} from '../src/entry-page.js';
+import {pcEntryPage,pcEntrySource} from '../src/entry-page.js';
 import {remotePreferences} from '../src/security.js';
 import {kstDate} from '../src/schedule.js';
 const directory=mkdtempSync(join(tmpdir(),'pc-replay-'));app.setPath('userData',directory);
@@ -41,7 +41,7 @@ async function run(){try{
   await window.loadURL((fixture.origin??'https://www.medigate.net')+'/symposium');
   const input={...job,due:fixture.due??job.due};
   await window.webContents.executeJavaScript(`Date.now=()=>${now};window.syntheticClicks=0;document.addEventListener('click',e=>{if(e.target.closest('button,a'))window.syntheticClicks++;});`);
-  const call=mode=>window.webContents.executeJavaScript(`(${pcEntryPage.toString()})(${JSON.stringify(input)},${JSON.stringify(mode)})`);
+  const call=mode=>window.webContents.executeJavaScript(`(${pcEntrySource()})(${JSON.stringify(input)},${JSON.stringify(mode)})`);
   const inspected=await call('inspect');check(width+' '+fixture.id+' PC inspect '+JSON.stringify({inspected,input,location:await window.webContents.executeJavaScript('location.href')}),inspected.status===fixture.status);
   check(width+' '+fixture.id+' inspection zero clicks',await window.webContents.executeJavaScript('window.syntheticClicks===0')&&posts===0);
   if(fixture.changed)await window.webContents.executeJavaScript('document.body.innerHTML='+JSON.stringify(fixture.changed));

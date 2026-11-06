@@ -9,9 +9,11 @@ import {BUILD_INFO,executionEvent} from './build-info.js';
 import {catalogEntryReference} from './entry-reference.js';
 import {canPreflightEntry} from './execution-presentation.js';
 import {catalogScheduleRevision,confirmedRevisionTiming,detailIdentity} from './entry-revision.js';
+import {createEntryJob} from './entry-job.js';
+import {canonicalIdentity,identityRunnable,duplicateIdentityKeys,sameWorker,sameReceiptOwner,sameEntryTarget,priorIdentityKeys,rebookIdentity,nextIdentityEntry} from './entry-identity.js';
 const navigable=(site,raw)=>{try{const u=new URL(raw);return allowedNavigation(site,raw)&&!/(?:login|logout|regist|apply|enroll|payment|order|cart|token|auth|session|password|email|ticket|delete|withdraw)/i.test(decodeURIComponent(u.pathname+u.search));}catch{return false;}};
 export class EntryRunner{
- constructor({ledger,store,createPage,createInspectionPage,catalog=()=>({}),isManualOpen=()=>false,onChange=()=>{},onEvent=()=>{},now=Date.now,sleep=waitFor,traceEntry=()=>({}),observeEntry=()=>{},onSurvey=()=>{}}){Object.assign(this,{ledger,store,createPage,createInspectionPage,catalog,isManualOpen,onChange,onEvent,now,sleep,traceEntry,observeEntry,onSurvey});this.active=null;this.revisions=new Map();}
+ constructor({ledger,store,createPage,createInspectionPage,catalog=()=>({}),contextEpoch=()=>0,isManualOpen=()=>false,onChange=()=>{},onEvent=()=>{},now=Date.now,sleep=waitFor,traceEntry=()=>({}),observeEntry=()=>{},onSurvey=()=>{}}){Object.assign(this,{ledger,store,createPage,createInspectionPage,catalog,contextEpoch,isManualOpen,onChange,onEvent,now,sleep,traceEntry,observeEntry,onSurvey});this.active=null;this.revisions=new Map();}
  #trace(job,kind){let trace;try{trace=this.traceEntry(job,kind);}catch{}return {event:(...args)=>{try{trace?.event?.(...args);}catch{}},finish:(...args)=>{try{trace?.finish?.(...args);}catch{}}};}
  #observe(job,phase,detail){try{this.observeEntry(job,phase,detail);}catch{}}
  async #catalogDetail(job,page,trace,signal,reference){
@@ -34,15 +36,15 @@ export class EntryRunner{
  cancel(){this.active?.controller.abort();this.active?.page?.close();}
  manualOpened(site){if(this.active?.job.site===site)this.cancel();}
  #revision(job,results=this.catalog(job?.date)){
-  if(!job||!this.store.features().entry||!this.store.entrySites().includes(job.site))return null;
+  if(!job||!identityRunnable(job.site==='doctorville'&&job.identityBlock==='identity_conflict'?{...job,identityBlock:undefined}:job,this.store.entries(job.date))||!this.store.features().entry||!this.store.entrySites().includes(job.site))return null;
   const input={site:job.site,kind:'entry',date:job.date,target:job.key,slot:job.slot,dueAt:job.due,deadline:job.deadline};
-  return this.ledger.consumed(input)?null:catalogScheduleRevision(job,results,this.now());
+  const proposal=this.ledger.consumed(input)?null:catalogScheduleRevision(job,results,this.now());return proposal?{...proposal,selectionEpoch:this.store.selectionEpoch,accountEpoch:this.contextEpoch(job.site),ledgerEpoch:this.ledger.snapshot().epoch}:null;
  }
  #currentRevision(proposal){
   const job=this.store.entries().find(row=>row.key===proposal.key);
   if(!job||JSON.stringify(job)!==proposal.before)return null;
   const current=this.#revision(job);
-  return current&&current.catalogAt===proposal.catalogAt&&current.identity===proposal.identity&&current.job.time===proposal.job.time?current:null;
+  return current&&current.catalogAt===proposal.catalogAt&&current.identity===proposal.identity&&current.job.time===proposal.job.time&&current.selectionEpoch===proposal.selectionEpoch&&current.accountEpoch===proposal.accountEpoch&&current.ledgerEpoch===proposal.ledgerEpoch?current:null;
  }
  revisionDue(key){
   if(this.ledger.snapshot().paused||this.store.failed||!this.createInspectionPage)return null;
@@ -88,7 +90,7 @@ export class EntryRunner{
      const now=this.now(),job=confirmedRevisionTiming(original,reply,now);if(!job)return rejected('scope_changed');
      const changed=!job.unchanged,change={oldTime:original.time,time:job.time,oldStart:original.start,start:job.start,oldDue:original.due,due:job.due,oldDeadline:original.deadline,deadline:job.deadline,checkedAt:now,...(job.recovered?{recovered:true}:{})};
      result={...reply,status:reply.status==='ready'?'complete':reply.status,attempted:false,reads,elapsedMs:Math.max(0,now-began)};
-     this.store.updateEntry(key,{status:'reserved',time:job.time,start:job.start,due:job.due,deadline:job.deadline,nextAt:job.nextAt,entryClosesAt:job.entryClosesAt,scheduleIdentity:current.identity,...(changed?{scheduleChanges:[...(original.scheduleChanges??[]),change].slice(-8)}:{}),preflight:cleanReceipt(result,now),inspection:cleanEntryInspection({...reply,timeMatches:1,readOnly:true},now)});
+     this.store.updateEntry(key,{status:'reserved',identityBlock:undefined,time:job.time,start:job.start,due:job.due,deadline:job.deadline,nextAt:job.nextAt,entryClosesAt:job.entryClosesAt,scheduleIdentity:current.identity,...(changed?{scheduleChanges:[...(original.scheduleChanges??[]),change].slice(-8)}:{}),preflight:cleanReceipt(result,now),inspection:cleanEntryInspection({...reply,timeMatches:1,readOnly:true},now)});
      updated=true;if(changed)trace.event('schedule_updated',{status:'reserved',reason:'scope_changed',readOnly:true,oldTime:original.time,confirmedTime:job.time});return {ok:true,changed};
     }
     if(['login','blocked','ambiguous','not_registered','lecture_ended'].includes(reply.status))break;
@@ -104,57 +106,55 @@ export class EntryRunner{
  }
  reserveCatalog(date,results){
   if(!this.store.features().entry||date!==kstDate(this.now()))return;
-  const selected=this.store.entrySites(),existing=new Set(this.store.entries(date).map(row=>row.key));
-  const hmpGroups=new Map();for(const row of Object.values(results))for(const event of row.events??[])if(event.site==='hmp'&&entrySchedule(event,this.now())){const ids=hmpGroups.get(event.time)??new Set();ids.add(this.store.entryKey(event));hmpGroups.set(event.time,ids);}
+  const selected=this.store.entrySites();
   for(const [site,result] of Object.entries(results)){
-   if(!selected.includes(site)||result.stale||!['ok','review'].includes(result.status))continue;
-   for(const event of result.events){
-    const key=this.store.entryKey(event);
-    if(existing.has(key)){
-     const prior=this.store.entries(date).find(job=>job.key===key),timing=entrySchedule(event,this.now());
-     const peers=result.events.filter(e=>this.store.entryKey(e)===key);
-     if(site!=='doctorville'&&new Set(peers.map(e=>e.time)).size===1&&timing){const pair=attachCheckpoints(prior,{...event,...timing},this.now());if(pair)this.store.updateEntry(key,pair);}
-     const proposal=this.#revision(this.store.entries(date).find(job=>job.key===key),results);
-     if(proposal&&(this.revisions.has(key)||this.revisions.size<40))this.revisions.set(key,proposal);else this.revisions.delete(key);
-     continue;
+   if(!selected.includes(site)||result.stale||result.pending||!['ok','review'].includes(result.status)||!Array.isArray(result.events))continue;
+   const targets=this.store.bindIdentities(site,date,result.events);
+   const hmpGroups=new Map();for(const event of result.events)if(site==='hmp'&&entrySchedule(event,this.now())){const ids=hmpGroups.get(event.time)??new Set();ids.add(this.store.entryKey(event));hmpGroups.set(event.time,ids);}
+   for(const target of targets){
+    const event=target.event,key=target.key??this.store.entryKey(event),prior=this.store.entries(date).find(j=>j.key===key);
+    if(prior){
+     const timing=entrySchedule(event,this.now()),peers=result.events.filter(e=>sameEntryTarget(event,e));
+     if(!target.blocked&&site!=='doctorville'&&new Set(peers.map(e=>e.time)).size===1&&timing){const pair=attachCheckpoints(prior,{...event,...timing},this.now());if(pair)this.store.updateEntry(key,pair);}
+     const proposal=this.#revision(this.store.entries(date).find(j=>j.key===key),results);
+     if(proposal&&(this.revisions.has(key)||this.revisions.size<40))this.revisions.set(key,proposal);else this.revisions.delete(key);continue;
     }
-    const timing=entrySchedule(event,this.now());if(!timing||site==='hmp'&&hmpGroups.get(event.time)?.size!==1)continue;
-    let slot=0;if(site==='hmp')while(slot<5&&this.now()>timing.start+slot*600000+90000)slot++;
-    if(slot===5)continue;
-    const due=site==='hmp'?timing.start+slot*600000:Math.max(timing.due,kstInstant(date,'00:00')),deadline=site==='hmp'?due+90000:timing.deadline;
-    const reference=catalogEntryReference(event,results);
-    this.store.putEntry({key,site,date,time:event.time,title:event.title,start:timing.start,due,deadline,nextAt:due,status:'reserved',slot,retries:0,attempts:[],entryAttempted:false,prepAt:site==='hmp'?timing.start-600000:0,...(['whodadoc','dtalks'].includes(site)?{repeatSchema:1,url:event.url}:{}),...(site==='docple'?{id:event.id,url:event.url,registrationStatus:event.registrationStatus}:{}),...(reference?.status==='navigate'?{scheduleIdentity:detailIdentity(reference.url)}:{})});existing.add(key);
-    this.emit('scheduled',{key,site,slot,due},{status:'reserved'});
-    this.#observe(this.store.entries(date).find(row=>row.key===key),'reservation_observed',{status:'reserved'});
-    const proposal=this.#revision(this.store.entries(date).find(row=>row.key===key),results);if(proposal&&this.revisions.size<40)this.revisions.set(key,proposal);
+    const job=createEntryJob(event,this.now());if(!job||site==='hmp'&&(target.blocked||hmpGroups.get(event.time)?.size!==1))continue;
+    job.key=key;
+    if(target.blocked){job.status='ambiguous';job.identityBlock=target.blocked;job.scheduleUpdateReason=target.blocked;job.nextAt=0;}
+    const reference=catalogEntryReference(event,results);if(reference?.status==='navigate')job.scheduleIdentity=detailIdentity(reference.url);
+    this.store.putEntry(job);this.emit('scheduled',job,{status:job.status});this.#observe(job,'reservation_observed',{status:job.status});
+    const proposal=this.#revision(job,results);if(proposal&&this.revisions.size<40)this.revisions.set(key,proposal);
    }
-  }
-  this.onChange();
+  }this.onChange();
  }
  recover(){
   for(const job of this.store.entries())if(['attempting','running'].includes(job.status))this.#finish(job,{status:'unknown',reason:'unknown_result',attempted:job.entryAttempted===true});
  }
  due(now=this.now(),excludeKey){
-  const jobs=this.store.entries().filter(job=>this.store.entrySites().includes(job.site)&&job.status==='reserved');
+  const all=this.store.entries(kstDate(now)),jobs=all.filter(job=>identityRunnable(job,all)&&this.store.entrySites().includes(job.site)&&job.status==='reserved');
   for(const job of jobs)if(now>job.deadline&&!this.revisions.has(job.key)&&!(this.active?.kind==='schedule'&&this.active.job.key===job.key)){this.#finish(job,{status:'expired',reason:'expired',attempted:false});}
-  return this.store.entries().filter(job=>job.key!==excludeKey&&this.store.entrySites().includes(job.site)&&job.status==='reserved'&&now>=(job.nextAt??job.due)&&now<=job.deadline).sort((a,b)=>a.deadline-b.deadline)[0]??null;
+  return nextIdentityEntry(this.store.entries(kstDate(now)),now,{date:kstDate(now),readyOnly:true,selected:this.store.entrySites(),excludeKey});
  }
  prepareDue(now=this.now()){
-  return this.store.entries().find(job=>job.site==='hmp'&&job.status==='reserved'&&job.slot===0&&now>=job.prepAt&&now<job.start&&(job.prepNextAt??0)<=now)??null;
+  return this.store.entries(kstDate(now)).find(job=>identityRunnable(job,this.store.entries(kstDate(now)))&&job.site==='hmp'&&job.status==='reserved'&&job.slot===0&&now>=job.prepAt&&now<job.start&&(job.prepNextAt??0)<=now)??null;
  }
- cancelJob(key,manual=false){const job=this.store.entries().find(row=>row.key===key);if(!job)return false;if(this.active?.job.key===key)this.cancel();this.store.updateEntry(key,{status:manual?'manual_clicked':'cancelled',nextAt:0,receipt:cleanReceipt({status:manual?'manual_clicked':'cancelled',reason:manual?'manual_clicked':'cancelled'})});this.#observe(job,'state_observed',{status:manual?'manual_clicked':'cancelled'});this.onChange();return true;}
+ cancelJob(key,manual=false){const job=this.store.entries(kstDate(this.now())).find(row=>row.key===key);if(!job)return false;if(manual&&(this.#consumed(job)||job.entryAttempted!==false||['clicked','unknown','manual_clicked','cancelled'].includes(job.status)))return false;if(this.active?.job.key===key)this.cancel();this.store.updateEntry(key,{status:manual?'manual_clicked':'cancelled',...(manual?{entryAttempted:true}:{}),nextAt:0,receipt:cleanReceipt({status:manual?'manual_clicked':'cancelled',reason:manual?'manual_clicked':'cancelled'})});this.#observe(job,'state_observed',{status:manual?'manual_clicked':'cancelled'});this.onChange();return true;}
+ manualCandidate(candidate){const keys=priorIdentityKeys(this.store.entries(candidate.date),candidate);if(keys.length!==1||!this.cancelJob(keys[0],true))return false;candidate.key=keys[0];return true;}
+ #consumed(job){return this.ledger.consumed({site:job.site,kind:'entry',date:job.date,target:job.key,slot:job.slot,dueAt:job.due,deadline:job.deadline});}
  retryJob(key){
-  const job=this.store.entries().find(row=>row.key===key);if(!job||job.entryAttempted||['clicked','manual_clicked','cancelled','lecture_ended'].includes(job.status)||this.now()>job.deadline)return false;
+  const job=this.store.entries(kstDate(this.now())).find(row=>row.key===key);if(!job||this.#consumed(job)||this.active?.job.key===key||job.entryAttempted!==false||!identityRunnable(job,this.store.entries(job.date))||['clicked','manual_clicked','lecture_ended'].includes(job.status)||this.now()>job.deadline)return false;
+  if(job.status==='cancelled'){const row=this.catalog(job.date)[job.site];if(!row||row.stale||row.pending||!['ok','review'].includes(row.status))return false;const targets=(row.events??[]).filter(e=>e.date===job.date&&sameEntryTarget(job,e)&&e.time===job.time&&!e.historyOnly);if(targets.length!==1)return false;const candidate=rebookIdentity(job,targets[0],this.now());if(!candidate)return false;this.store.updateEntry(key,candidate);this.onChange();return true;}
   this.store.updateEntry(key,{status:'reserved',nextAt:Math.max(job.due,this.now()),retries:0});this.onChange();return true;
  }
  registrationConfirmed(target){
-  const job=this.store.entries(target.date).find(row=>row.site===target.site&&row.date===target.date&&row.time===target.time&&row.title.replace(/\s+/g,' ').trim()===target.title.replace(/\s+/g,' ').trim());
+  const job=this.store.entries(target.date).find(row=>row.site===target.site&&row.date===target.date&&row.time===target.time&&sameEntryTarget(row,target));
   if(!job||job.date!==kstDate(this.now())||!this.store.features().entry||!this.store.entrySites().includes(job.site)||job.status!=='not_registered'||job.entryAttempted||this.now()>job.deadline)return false;
   const input={site:job.site,kind:'entry',date:job.date,target:job.key,slot:job.slot,dueAt:job.due,deadline:job.deadline};if(this.ledger.consumed(input))return false;
   return this.retryJob(job.key);
  }
  #finish(job,raw){
-  const current=this.store.entries(job.date).find(row=>row.key===job.key);if(current&&['cancelled','manual_clicked'].includes(current.status))return;
+  const current=this.store.entries(job.date).find(row=>row.key===job.key);if(!sameWorker(job,current)||!sameReceiptOwner(job,current)||current&&['cancelled','manual_clicked'].includes(current.status))return;
   const now=this.now(),receipt=cleanReceipt({...raw,slot:job.slot,due:job.due},now),attempts=[...(job.attempts??[]),receipt].slice(-5);
   const next=nextCheckpoint(job,receipt,now);if(next){this.store.updateEntry(job.key,{...next,attempts,receipt,executionFinishedAt:now});this.onChange();return;}
   if(job.repeatSchema===1&&!['lecture_ended','manual_clicked','cancelled','blocked','login','ambiguous','not_registered'].includes(receipt.status)){
@@ -169,6 +169,7 @@ export class EntryRunner{
   this.store.updateEntry(job.key,{status:receipt.status,receipt,attempts,executionFinishedAt:receipt.checkedAt,nextAt:0,entryAttempted:raw.attempted===true||job.entryAttempted===true});this.onChange();
  }
  #unexecuted(job,receipt){
+  const current=this.store.entries(job.date).find(row=>row.key===job.key);if(!sameWorker(job,current)||['cancelled','manual_clicked','clicked','unknown'].includes(current.status)||this.#consumed(job))return;
   const now=this.now();
   if(job.site!=='hmp'&&['not_open','button_missing','target_missing','network','busy'].includes(receipt.status)&&job.retries<4){
    const nextAt=job.site==='doctorville'&&now<job.start-300000?job.start-300000:now+120000;
@@ -180,10 +181,13 @@ export class EntryRunner{
   this.#finish(job,{...receipt,attempted:false});
  }
  async preflight(key){
-  const job=this.store.entries().find(row=>row.key===key);
+  const job=this.store.entries(kstDate(this.now())).find(row=>row.key===key);
   if(!job||!this.createInspectionPage||this.active||this.isManualOpen(job.site))return {ok:false,reason:'busy'};
   if(!canPreflightEntry(job))return {ok:false,reason:'duplicate_prevented'};
   const controller=new AbortController(),run={job,controller,page:null};this.active=run;
+  const selectionEpoch=this.store.selectionEpoch,accountEpoch=this.contextEpoch(job.site),ledgerEpoch=this.ledger.snapshot().epoch;
+  const readOwner=()=>job.date===kstDate(this.now())&&this.store.selectionEpoch===selectionEpoch&&this.contextEpoch(job.site)===accountEpoch&&this.ledger.snapshot().epoch===ledgerEpoch&&sameWorker(job,this.store.entries(job.date).find(row=>row.key===key))&&this.store.entries(job.date).find(row=>row.key===key)?.status===job.status;
+  const currentRead=()=>!controller.signal.aborted&&readOwner();
   const began=this.now(),runId=randomUUID().replace(/-/g,'');let receipt={status:'unknown',reason:'provider_result_unconfirmed'},reply={},reads=0,trace;
   this.emit('preflight',job,{runId,status:'running',readOnly:true});this.onChange();
   try{
@@ -194,7 +198,7 @@ export class EntryRunner{
    // A loaded document can still be hydrating its catalog or redirecting to
    // login. Re-read only; never turn this observation into credential recovery.
    while(reads<21&&this.now()-observedAt<=8000){
-    if(controller.signal.aborted||job.date!==kstDate(this.now()))throw Error('cancelled');
+    if(!currentRead())throw Error('cancelled');
     await run.page.ready?.();
     if(['login','provider'].includes(run.page.route)){reply={status:'login',reason:'login_required'};break;}
     try{reply=await run.page.call(job.site==='docple'?'auto-entry.js':'pc-entry.js',[job.site==='docple'?{...job,due:this.now()-1,deadline:this.now()+10000}:job,job.site==='docple'?'inspect':'preflight']);reads++;
@@ -204,7 +208,7 @@ export class EntryRunner{
     const next=JSON.stringify([reply.status,reply.reason,reply.targetMatched,reply.candidateCards,reply.titleMatches,reply.scheduleMatches,reply.entryControls]);
     trace.event('inspect',{...reply,readOnly:true,pageGeneration:run.page.version});
     stable=next===fingerprint?stable+1:1;fingerprint=next;
-    if(!detailRead&&stable>=2&&job.site==='doctorville'&&reply.status==='target_missing'&&reply.titleMatches>0&&reply.dateMissingCards===reply.titleMatches){
+    if(!detailRead&&stable>=2&&job.site==='doctorville'&&reply.status==='target_missing'&&(canonicalIdentity(job)?reply.identityMatches:reply.titleMatches)>0&&reply.dateMissingCards===(canonicalIdentity(job)?reply.identityMatches:reply.titleMatches)){
      detailRead=true;const detail=await this.#catalogDetail(job,run.page,trace,controller.signal);
      if(detail.reply){reply=detail.reply;break;}
      if(detail.used){observedAt=this.now();fingerprint='';stable=0;continue;}
@@ -214,13 +218,13 @@ export class EntryRunner{
     if(reads>=21||this.now()-observedAt>=8000)break;
     await this.sleep(400,controller.signal);
    }
-   if(controller.signal.aborted||job.date!==kstDate(this.now()))throw Error('cancelled');
+   if(!currentRead())throw Error('cancelled');
    receipt=cleanReceipt({...reply,status:reply.status==='ready'?'complete':reply.status,attempted:false,reads,elapsedMs:Math.max(0,this.now()-began)},this.now());
    return {ok:true};
   }catch(error){receipt=cleanReceipt({status:controller.signal.aborted?'cancelled':'network',reason:controller.signal.aborted?'cancelled':'network_error',attempted:false},this.now());return {ok:false,reason:receipt.reason};}
   finally{
    trace?.finish({...receipt,readOnly:true});
-   try{if(job.date===kstDate(this.now()))this.store.updateEntry(job.key,{preflight:receipt,inspection:cleanEntryInspection({...reply,status:receipt.status==='complete'?'ready':receipt.status,reason:receipt.reason,readOnly:true},this.now())});this.emit('result',job,{...receipt,runId,readOnly:true,dateMatches:reply.dateMatches,timeMatches:reply.timeMatches});}
+   try{if(readOwner())this.store.updateEntry(job.key,{preflight:receipt,inspection:cleanEntryInspection({...reply,status:receipt.status==='complete'?'ready':receipt.status,reason:receipt.reason,readOnly:true},this.now())});this.emit('result',job,{...receipt,runId,readOnly:true,dateMatches:reply.dateMatches,timeMatches:reply.timeMatches});}
    finally{run.page?.close();this.active=null;this.onChange();}
   }
  }
@@ -228,13 +232,17 @@ export class EntryRunner{
   if(this.active)return false;
   const controller=new AbortController(),run={job,controller,page:null};this.active=run;const began=this.now(),runId=randomUUID().replace(/-/g,'');let ticket=null,dispatched=false,started=false,rescheduled=false,liveCatalogRead=false,receipt={status:'unknown',reason:'unknown_result'},adapter='auto-entry.js',trace;
   const emit=(phase,detail={})=>this.emit(phase,job,{runId,...detail});
-  const allowed=()=>!controller.signal.aborted&&!this.ledger.snapshot().paused&&this.store.features().entry&&this.store.entrySites().includes(job.site)&&this.store.entries(job.date).some(current=>current.key===job.key&&current.status!=='cancelled'&&current.status!=='manual_clicked')&&job.date===kstDate(this.now())&&!this.store.failed;
+  const ownerEpoch=this.ledger.snapshot().epoch,selectionEpoch=this.store.selectionEpoch,accountEpoch=this.contextEpoch(job.site);
+  const allowed=()=>{
+   const current=this.store.entries(job.date).find(j=>j.key===job.key),rows=this.store.entries(job.date),markers=current&&(current.entryAttempted===false||dispatched&&current.entryAttempted===true&&current.status==='attempting');
+   return !!markers&&sameWorker(job,current)&&!current.identityBlock&&!duplicateIdentityKeys(rows).has(job.key)&&!controller.signal.aborted&&!this.ledger.snapshot().paused&&this.ledger.snapshot().epoch===ownerEpoch&&this.store.selectionEpoch===selectionEpoch&&this.contextEpoch(job.site)===accountEpoch&&this.store.features().entry&&this.store.entrySites().includes(job.site)&&!['cancelled','manual_clicked','clicked','unknown'].includes(current.status)&&job.date===kstDate(this.now())&&!this.store.failed;
+  };
   const nativeJob=()=>({...job,due:prepare?job.prepAt:job.due,deadline:prepare?job.start-1:job.deadline,...(liveCatalogRead?{requireDoctorDetail:true}:{}),...(job.site==='hmp'?{hmpRepeatSchema:1,hmpSlot:job.slot}:job.repeatSchema===1?{repeatSlot:job.slot}:{})});
   try{
    if(!allowed())return false;
    started=true;
    trace=this.#trace(job,prepare?'prepare':'entry');
-   if(!prepare)this.store.updateEntry(job.key,{lastStartedAt:began,executionVersion:BUILD_INFO.version,...(BUILD_INFO.sourceCommit?{sourceCommit:BUILD_INFO.sourceCommit}:{})});
+   if(!prepare){this.store.updateEntry(job.key,{entryOwner:runId,lastStartedAt:began,executionVersion:BUILD_INFO.version,...(BUILD_INFO.sourceCommit?{sourceCommit:BUILD_INFO.sourceCommit}:{})});job.entryOwner=runId;}
    emit('start',{startedAt:began,delayMs:Math.max(0,began-job.due),readOnly:prepare});
    if(this.isManualOpen(job.site)){receipt={status:'busy',reason:'manual_view_open'};return false;}
    if(!prepare)this.store.updateEntry(job.key,{status:'running'});
@@ -251,15 +259,15 @@ export class EntryRunner{
    }
    while(allowed()&&this.now()-began<45000&&(prepare?this.now()<job.start:this.now()<=job.deadline)){
     if(['login','provider'].includes(page.route)){receipt={status:'login',reason:'login_required'};break;}
-    let reply=await page.call(pcDetailRead?'pc-entry.js':'auto-entry.js',[{...nativeJob(),detailOpened},'inspect']);adapter=pcDetailRead?'pc-entry.js':'auto-entry.js';
+    let reply=await page.call(pcDetailRead?'pc-entry.js':'auto-entry.js',[{...nativeJob(),detailOpened},'inspect']);if(!allowed()){receipt={status:'cancelled',reason:'scope_changed'};break;}adapter=pcDetailRead?'pc-entry.js':'auto-entry.js';
     // Doctorville's original reader can find an old clock in a title or end
     // time. Every result, including ready, must cross the strict PC reader.
     if(!pcDetailRead&&(job.site==='doctorville'||['medigate','keymedi','hmp','bluepharm'].includes(job.site)&&['target_missing','button_missing','ambiguous'].includes(reply.status))){
-     const supplement=await page.call('pc-entry.js',[nativeJob(),'inspect']);
+     const supplement=await page.call('pc-entry.js',[nativeJob(),'inspect']);if(!allowed()){receipt={status:'cancelled',reason:'scope_changed'};break;}
      emit('inspect',{...cleanReceipt(supplement,this.now()),reader:'pc',dateMatches:supplement.dateMatches,timeMatches:supplement.timeMatches,duplicateEquivalent:supplement.duplicateEquivalent});
      this.store.updateEntry(job.key,{inspection:cleanEntryInspection({...supplement,readOnly:false},this.now())});
      trace.event('inspect',{...supplement,reader:'pc',pageGeneration:page.version});
-     if(job.site==='doctorville'&&!prepare&&!liveCatalogRead&&supplement.titleMatches>0&&supplement.dateMissingCards===supplement.titleMatches&&['target_missing','navigate'].includes(supplement.status)){
+     if(job.site==='doctorville'&&!prepare&&!liveCatalogRead&&(canonicalIdentity(job)?supplement.identityMatches:supplement.titleMatches)>0&&supplement.dateMissingCards===(canonicalIdentity(job)?supplement.identityMatches:supplement.titleMatches)&&['target_missing','navigate'].includes(supplement.status)){
       const detail=await this.#catalogDetail(job,page,trace,controller.signal);
       if(detail.reply){receipt=detail.reply;break;}
       if(detail.used){pcDetailRead=true;detailOpened=true;navigations++;continue;}
@@ -291,7 +299,7 @@ export class EntryRunner{
     }
     if(reply.status==='navigate'){
      const detail=job.site==='doctorville';
-     if(++navigations>3||!navigable(job.site,reply.url)||detail&&(job.site!=='doctorville'||pcDetailRead||!doctorvilleDetailNavigation(page.url,reply.url)||job.scheduleIdentity&&detailIdentity(reply.url)!==job.scheduleIdentity)){receipt={status:'blocked',reason:'policy_rejected'};break;}
+     if(++navigations>3||!navigable(job.site,reply.url)||detail&&(job.site!=='doctorville'||pcDetailRead||!doctorvilleDetailNavigation(page.url,reply.url)||job.scheduleIdentity&&!canonicalIdentity(job)&&detailIdentity(reply.url)!==job.scheduleIdentity)){receipt={status:'blocked',reason:'policy_rejected'};break;}
      if(detail){pcDetailRead=true;detailOpened=true;emit('open_detail',cleanReceipt(receipt,this.now()));}
      trace.event('target_open_requested',{status:'navigate'});await page.load(reply.url);trace.event('target_open_response',{status:'detail_opened'});continue;
     }
@@ -307,13 +315,15 @@ export class EntryRunner{
     if(reply.status==='ready'){
      if(reply.targetMatched!==true){receipt={status:'ambiguous',reason:'no_target'};break;}
      if(job.entryClosesAt&&(!Number.isSafeInteger(reply.endsAt)||reply.endsAt<=this.now())){receipt={status:'lecture_ended',reason:'lecture_ended'};break;}
+     const documentBinding=page.entryBinding?.();
+     if(!allowed()){receipt={status:'cancelled',reason:'scope_changed',attempted:false};break;}
      const input={site:job.site,kind:'entry',date:job.date,target:job.key,slot:job.slot,dueAt:job.due,deadline:job.deadline};
      ticket=this.ledger.reserve(input,this.now());if(!ticket||!allowed()||!this.ledger.beginDispatch(ticket,this.now())){receipt={status:'unknown',reason:'duplicate_prevented'};break;}
      this.store.updateEntry(job.key,{status:'attempting',entryAttempted:true});page.allowPopups(true);const before=page.version,beforeUrl=page.url;dispatched=true;
      page.armEntryDispatch?.();
      emit('dispatch',{attempted:true,targetMatched:true});
      trace.event('click_requested',{attempted:true,targetMatched:true});
-     const executed=await page.call(adapter,[nativeJob(),'click'],{navigation:true});
+     const executed=await page.call(adapter,[nativeJob(),'click'],{navigation:true,expectedDocument:documentBinding,authorize:()=>allowed()&&this.ledger.snapshot().jobs[ticket.key]?.state==='attempting'&&this.ledger.snapshot().epoch===ticket.epoch});
      trace.event('click_response',executed);
      receipt={...reply,status:executed.status==='clicked'?'clicked':'unknown',reason:executed.status==='clicked'?'clicked':'navigation_unconfirmed',attempted:true};
      await this.sleep(800,controller.signal);receipt.navigationObserved=(page.version!==before||page.url!==beforeUrl)&&(allowedNavigation(job.site,page.url)||page.allowsEntryNavigation?.(page.url)===true);
@@ -342,9 +352,9 @@ export class EntryRunner{
    let diagnostics={};try{diagnostics=run.page?.diagnostics?.()??{};}catch{}
    emit('result',{...cleanReceipt({...receipt,attempted:dispatched,elapsedMs:Math.max(0,this.now()-began)},this.now()),readOnly:prepare,navigationBlocked:diagnostics.navigationBlocked,popupDenied:diagnostics.popupDenied,mainFrameFailures:diagnostics.mainFrameFailures});
    try{if(ticket&&dispatched)this.ledger.finish(ticket,'unknown',this.now());
-   if(started&&!rescheduled){if(prepare){this.store.updateEntry(job.key,{prepNextAt:Math.min(job.start,this.now()+60000),receipt:cleanReceipt(receipt)});if(receipt.status==='lecture_ended')this.#finish(job,receipt);}
-   else if(dispatched)this.#finish(job,{...receipt,attempted:true,elapsedMs:Math.max(0,this.now()-began)});
-   else this.#unexecuted(job,{...receipt,elapsedMs:Math.max(0,this.now()-began)});}}
+   if(started&&!rescheduled){if(prepare&&allowed()){this.store.updateEntry(job.key,{prepNextAt:Math.min(job.start,this.now()+60000),receipt:cleanReceipt(receipt)});if(receipt.status==='lecture_ended')this.#finish(job,receipt);}
+   else if(dispatched)this.#finish(job,{...(allowed()?receipt:{status:'unknown',reason:'scope_changed'}),attempted:true,elapsedMs:Math.max(0,this.now()-began)});
+   else if(!prepare&&allowed())this.#unexecuted(job,{...receipt,elapsedMs:Math.max(0,this.now()-began)});}}
    finally{run.page?.close();this.active=null;this.onChange();}
   }
   return true;
