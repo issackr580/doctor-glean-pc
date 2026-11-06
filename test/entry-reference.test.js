@@ -42,7 +42,7 @@ test('different observed identities for the same schedule remain ambiguous',()=>
  assert.equal(catalogEntryReference(job,catalog([event,{...event,time:'18:40',url:url.replace('17','18')}])).status,'ambiguous');
 });
 test('unsafe catalog links never become navigation hints',()=>{
- for(const bad of [url+'&token=PRIVATE',url+'&other=1',url+'&seminarId=18',url+'#fragment',url.replace('www.doctorville.co.kr','PRIVATE.invalid'),url.replace('https:','http:'),url.replace('www.','user:password@www.'),url.replace('seminarDetail','other'),url.replace('=17','=0')])assert.equal(catalogEntryReference(job,catalog([{...event,url:bad}])).status,'blocked');
+ for(const bad of [url+'&token=PRIVATE',url+'&other=1',url+'&seminarId=18',url+'#fragment',url.replace('www.doctorville.co.kr','PRIVATE.invalid'),url.replace('https:','http:'),url.replace('www.','user:password@www.'),url.replace('seminarDetail','other'),url.replace('=17','=BAD')])assert.equal(catalogEntryReference(job,catalog([{...event,url:bad}])).status,'blocked');
 });
 test('consumed jobs hide preflight but a future Hanmi slot remains inspectable',()=>{
  for(const status of ['clicked','manual_clicked','cancelled','expired','lecture_ended','running','attempting'])assert.equal(canPreflightEntry({...job,status}),false);

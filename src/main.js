@@ -4,6 +4,7 @@ import {join} from 'node:path';
 import {writeFile} from 'node:fs/promises';
 import {readFileSync,mkdirSync} from 'node:fs';
 import {release} from 'node:os';
+import {snapshotIdentityState} from './identity-snapshot.js';
 import {LocalState} from './local-state.js';
 import {SITES} from './sites.js';
 import {siteById,allowedNavigation,allowedPopup,remotePreferences,trustedControl} from './security.js';
@@ -32,7 +33,7 @@ import {PcUpdater} from './update-manager.js';
 import {downloadPrivateUpdate} from './private-update.js';
 import {electronPatchDownload} from './update-electron-download.js';
 import {RegistrationController,RegistrationStore,registrationKey} from './registration.js';
-import {pcEntryPage} from './entry-page.js';
+import {pcEntryPage,pcEntrySource} from './entry-page.js';
 import {doctorvilleDetailNavigation} from './automation-policy.js';
 import {boundedWork,waitFor} from './async-work.js';
 import {ReportPreview} from './report-preview.js';
@@ -132,7 +133,7 @@ function createRegistrationPage(job,signal,{check}){
    await page.ready();alive();const url=page.url,version=page.version;
    if(['login','provider'].includes(pageRole(url)))return {status:'login',reason:'login_required'};
    if(!allowedNavigation(job.site,url)||mode==='click'&&(!binding||binding.url!==url||binding.version!==version))throw Error('page_changed');
-   const code=`(()=>{if(location.href!==${JSON.stringify(url)})return null;return JSON.stringify((${pcEntryPage.toString()})(${JSON.stringify(target)},${JSON.stringify('registration-'+mode)}));})()`;
+   const code=`(()=>{if(location.href!==${JSON.stringify(url)})return null;return JSON.stringify((${pcEntrySource()})(${JSON.stringify(target)},${JSON.stringify('registration-'+mode)}));})()`;
    let encoded;try{encoded=await boundedWork(contents.executeJavaScriptInIsolatedWorld(1002,[{code}]),signal,10000);}catch(error){if(mode==='click'&&!signal.aborted&&!window.isDestroyed()&&page.version!==version)return {status:'unconfirmed'};throw error;}
    alive();if(mode!=='click'&&(page.version!==version||page.url!==url))throw Error('page_changed');
    if(typeof encoded!=='string'||encoded.length>32000)throw Error('invalid_response');return JSON.parse(encoded);
@@ -412,6 +413,7 @@ else{
   app.on('quit',()=>runtimeFaults.close());
   app.whenReady().then(()=>{
     try{
+      snapshotIdentityState(join(app.getPath('userData'),'workflows-v1.json'));
       state=new LocalState(join(app.getPath('userData'),'state-v1.json'));
       updater=new PcUpdater({context:{appPath:app.getAppPath(),executable:process.execPath,edition:EDITION.id,currentVersion:VERSION,electronVersion:process.versions.electron,platform:process.platform,arch:process.arch,channel:VERSION.includes('-preview.')?'preview':'stable'},
        fetch:(...args)=>net.fetch(...args),publicDownload:electronPatchDownload,privateDownload:(target,progress)=>downloadPrivateUpdate(target,progress,{parent:control}),
@@ -446,7 +448,7 @@ else{
         isManualOpen:id=>[...manualOwners.values()].includes(id)||credentials.active?.site===id,onChange:snapshot=>{developerTools.observe(snapshot);notify();if(!snapshot.running)queueMicrotask(()=>catalogQueue?.pump());}});
       catalogQueue=new CatalogQueue({start:async(date,ids)=>{await collector.start(date,ids);automation?.catalogFinished(date,ids,collector.snapshot());},busy:()=>updater.guarded||collector.snapshot().running||!!automation?.busy||credentials.busy,validDate:validQueryDate,onChange:notify});
       automation=new AutomationController({file:join(dataDirectory,'workflows-v1.json'),options:pcOptions,notifySurvey:key=>{if(Notification.isSupported()){const notice=new Notification({title:'닥터빌 설문 참여 안내',body:'설문 기한을 확인했어요. 앱에서 상세 화면을 열어 직접 참여해 주세요.'});notice.on('click',()=>showControl());notice.on('close',()=>surveyNotices.delete(key));surveyNotices.set(key,notice);notice.show();}},ledger:state,executionAllowed:()=>!updater.guarded,
-       createPage:(site,signal,options)=>credentials.wrapPage(site,new AutomationPage(site,signal,prepareSession(site),{...options,externalEntryAllowed:(id,url)=>pcOptions.allowsEntry(id,url)})),
+       entryContextEpoch:site=>credentials.vault.epoch(site),createPage:(site,signal,options)=>credentials.wrapPage(site,new AutomationPage(site,signal,prepareSession(site),{...options,externalEntryAllowed:(id,url)=>pcOptions.allowsEntry(id,url)})),
        createInspectionPage:(site,signal,options)=>new AutomationPage(site,signal,prepareSession(site),{...options,externalEntryAllowed:(id,url)=>pcOptions.allowsEntry(id,url)}),onEvent:event=>developerTools.event(event),traceEntry:(job,kind)=>developerTools.traceEntry(job,kind),observeEntry:(...args)=>developerTools.observeEntry(...args),
        isManualOpen:id=>[...manualOwners.values()].includes(id)||credentials.active?.site===id,catalog:date=>catalog.view(date).results,catalogBusy:()=>collector.snapshot().running||credentials.busy,
        queueCatalog:date=>{viewDate=date;catalogQueue.request(date,catalog.selected());},

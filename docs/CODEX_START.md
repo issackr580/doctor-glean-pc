@@ -1,5 +1,7 @@
 # PC판 Codex 작업 시작
 
+현재 작업: preview.31 공식 ID 연결. 먼저 [ID 이식 조사](PORTING_ID_V148.md)·[수용표](PORTING_ID_V148_ACCEPTANCE.json)·PC-020을 읽는다. 아래 preview.30 공개 상태와 v139 자료는 기존 기준이며 v31 게시 완료 증거가 아니다.
+
 이 작업은 의사 이삭 줍기 **Windows PC판만** 다룬다. 모바일판은 별도 Codex 작업이다. 사용자 지시가 이 문서보다 우선한다.
 
 1. 이 저장소를 작업 루트로 연다. 현재 환경에서는 `/workspace/doctor-glean-pc`다. 새 환경에서는 `https://github.com/issackr580/doctor-glean-pc`를 clone하거나 PC 시작 묶음의 `project` 폴더를 연다.

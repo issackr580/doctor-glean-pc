@@ -5,7 +5,10 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import assert from 'node:assert/strict';
+import {syntheticEntryClock} from './electron-entry-clock.mjs';
 import {portingCases} from './electron-porting-cases.mjs';
+import {parseOfficialIdentity} from '../src/entry-identity.js';
+import {id148Cases} from './electron-id148-cases.mjs';
 import {nov06Cases} from './electron-nov06-cases.mjs';
 import {AutomationPage} from '../src/automation-page.js';
 import {EntryRunner} from '../src/entry-runner.js';
@@ -47,6 +50,7 @@ async function catalog(page,site){
 }
 async function run(){
  await app.whenReady();
+ await id148Cases({root,date,title,clock,check,inspect,job,catalog});
  const corrected=doctor('<span class="detail_date" hidden>2020-01-01</span>');
  await inspect('doctorville',corrected,{work:async page=>{
   const original=await page.call('auto-entry.js',[job('doctorville'),'inspect']);check('original Doctorville reader reproduces a title match with rejected hidden old date',original.titleMatches>0&&original.scheduleMatches===0);
@@ -272,7 +276,7 @@ async function run(){
   const isEntry=['entry','wrong_start','changed_before_click','changed_catalog_entry','changed_catalog_original_detail','different_start_identity'].includes(scenario),changedClock=clock==='00:00'?'00:01':'00:00',changedCatalog=scenario.startsWith('changed_catalog');
   if(isEntry){ledger.setPaused(false);store.setFeature('entry',true);}
   const catalogStore=new CatalogStore(join(dir,'catalog.json'));
-  const catalogEvents=changedCatalog?observed.map(row=>({...row,time:changedClock})):['ambiguous_reference','different_start_identity'].includes(scenario)?[...observed,{...observed[0],id:'b'.repeat(64),time:scenario==='different_start_identity'?changedClock:clock,url:refUrl.replace('=17','=18')}]:observed;
+  const catalogEvents=changedCatalog?observed.map(row=>({...row,time:changedClock})):['ambiguous_reference','different_start_identity'].includes(scenario)?[...observed,{...observed[0],id:'b'.repeat(64),lectureIdentity:parseOfficialIdentity('doctorville',refUrl.replace('=17','=18')),time:scenario==='different_start_identity'?changedClock:clock,url:refUrl.replace('=17','=18')}]:observed;
   catalogStore.record('doctorville',date,{status:'review',coverage:true,events:catalogEvents});
   const savedCatalog=new CatalogStore(join(dir,'catalog.json'));
   const detail=detailHeader(scenario==='waiting_button'?'<button>신청취소</button>':`<button onclick="fetch('/synthetic-entry',{method:'POST'})">입장하기</button>`,(scenario==='wrong_date'?'2020-01-01':date)+' '+(['wrong_start','changed_catalog_preflight','changed_catalog_entry'].includes(scenario)?changedClock:clock)+' ~ 23:59',scenario==='wrong_title'?'별도 합성 강의':title);
@@ -313,7 +317,7 @@ async function run(){
    const datedOldList=doctor('',date,oldTime).replace('seminarId=11','seminarId=17');
    return new Response(shell((isDetail?detail:datedOldList)+`<script>Date.now=()=>${now}</script>`),{headers:{'content-type':'text/html; charset=utf-8'}});
   });
-  const runner=new EntryRunner({ledger,store,catalog:d=>catalogStore.view(d).results,now:()=>now,sleep:async ms=>{now+=ms;await new Promise(resolve=>setTimeout(resolve,0));},createInspectionPage:async(_site,signal)=>new AutomationPage('doctorville',signal,{...remotePreferences('doctorville'),partition}),createPage:async()=>{actionPages++;throw Error('revision cannot recover credentials or enter');}});
+  const runner=new EntryRunner({ledger,store,catalog:d=>catalogStore.view(d).results,now:()=>now,sleep:async ms=>{now+=ms;await new Promise(resolve=>setTimeout(resolve,0));},createInspectionPage:async(_site,signal)=>syntheticEntryClock(new AutomationPage('doctorville',signal,{...remotePreferences('doctorville'),partition}),()=>now),createPage:async()=>{actionPages++;throw Error('revision cannot recover credentials or enter');}});
   runner.reserveCatalog(date,catalogStore.view(date).results);let row=store.entries()[0];
   if(scenario==='retry')store.updateEntry(row.key,{retries:2,nextAt:kstInstant(date,'12:15')});
   if(scenario==='cancelled')runner.cancelJob(row.key);
@@ -326,15 +330,16 @@ async function run(){
   catalogStore.record('doctorville',date,{status:'review',events},now);const before=readFileSync(join(dir,'workflows.json'),'utf8'),ledgerBefore=readFileSync(join(dir,'state.json'),'utf8');runner.reserveCatalog(date,catalogStore.view(date).results);
   if(scenario==='storage_failure')fail=true;
   let threw=false;try{await runner.reviseSchedule(row.key);}catch(error){threw=error.message==='storage_error';}
-  row=store.entries()[0];const updated=['later','earlier','retry','expired','detail_corrects_catalog','live_after_expiry','live_until_end'].includes(scenario),eligible=!['ambiguous','changed_identity','cancelled','consumed'].includes(scenario),late=['live_after_expiry','live_until_end'].includes(scenario);
-  check('fresh schedule '+scenario+' changes persisted timing only after exact detail evidence',updated?row.time===detailTime&&row.start===kstInstant(date,detailTime)&&row.due===(late?now:kstInstant(date,detailTime)-3000000)&&row.deadline===(late?Math.min(kstInstant(date,detailEnd),now+600000):kstInstant(date,detailTime)+600000)&&row.nextAt===Math.max(row.due,now)&&row.scheduleChanges.length===1:scenario==='wrong_detail'?row.time===oldTime&&row.scheduleChanges===undefined:readFileSync(join(dir,'workflows.json'),'utf8')===before);
+  row=store.entries()[0];const updated=['later','earlier','retry','expired','ambiguous','detail_corrects_catalog','live_after_expiry','live_until_end'].includes(scenario),eligible=!['changed_identity','cancelled','consumed'].includes(scenario),late=['live_after_expiry','live_until_end'].includes(scenario);
+  check('fresh schedule '+scenario+' changes persisted timing only after exact detail evidence',updated?row.time===detailTime&&row.start===kstInstant(date,detailTime)&&row.due===(late?now:kstInstant(date,detailTime)-3000000)&&row.deadline===(late?Math.min(kstInstant(date,detailEnd),now+600000):kstInstant(date,detailTime)+600000)&&row.nextAt===Math.max(row.due,now)&&row.scheduleChanges.length===1:scenario==='wrong_detail'?row.time===oldTime&&row.scheduleChanges===undefined:scenario==='changed_identity'?JSON.stringify(row)===JSON.stringify(JSON.parse(before).entries[row.key])&&store.entries().length===2:readFileSync(join(dir,'workflows.json'),'utf8')===before);
   check('fresh schedule '+scenario+' reads at most its one observed detail',reads===(eligible?1:0));
   check('fresh schedule '+scenario+' is read-only and leaves durable entry bytes unchanged',posts===0&&actionPages===0&&readFileSync(join(dir,'state.json'),'utf8')===ledgerBefore);
   if(scenario==='retry')check('fresh schedule retry retains its previous retry allowance',row.retries===2);
   if(scenario==='storage_failure')check('fresh schedule failed persistence is visible and produces no new reservation',threw&&store.failed===true&&row.time===oldTime);
   if(['live_after_expiry','detail_corrects_catalog'].includes(scenario)){
-   runner.createPage=async(_site,signal)=>{actionPages++;return new AutomationPage('doctorville',signal,{...remotePreferences('doctorville'),partition});};
+   runner.createPage=async(_site,signal)=>{actionPages++;return syntheticEntryClock(new AutomationPage('doctorville',signal,{...remotePreferences('doctorville'),partition}),()=>now);};
    now=Math.max(now,row.due);await runner.run(row);
+   if(!(reads===2&&posts===1&&actionPages===1&&store.entries()[0].status==='clicked'))console.log('ID148_SCHEDULE_DEBUG:'+JSON.stringify({scenario,reads,posts,actionPages,row:store.entries()[0],ledger:ledger.snapshot()}));
    check('fresh schedule '+scenario+' reopens the verified detail despite the dated stale list and dispatches once',reads===2&&posts===1&&actionPages===1&&store.entries()[0].status==='clicked'&&Object.keys(ledger.snapshot().jobs).length===1);
   }
  }
@@ -348,7 +353,7 @@ async function run(){
    const detail=new URL(request.url).pathname==='/seminar/seminarDetail';return new Response(shell(detail?detailHeader(`<button onclick="fetch('/synthetic-entry',{method:'POST'})">입장하기</button>`,date+' '+actualStart+' ~ '+actualEnd,shownTitle):card),{headers:{'content-type':'text/html; charset=utf-8'}});
   });
   const entry={...job('doctorville'),title:shownTitle,time:wanted,start:now,status:'reserved',nextAt:now-1,retries:0,attempts:[],entryAttempted:false};store.putEntry(entry);
-  await new EntryRunner({ledger,store,now:()=>now,sleep:async ms=>{now+=ms;await new Promise(resolve=>setTimeout(resolve,0));},createPage:async(_site,signal)=>new AutomationPage('doctorville',signal,{...remotePreferences('doctorville'),partition})}).run(entry);
+  await new EntryRunner({ledger,store,now:()=>now,sleep:async ms=>{now+=ms;await new Promise(resolve=>setTimeout(resolve,0));},createPage:async(_site,signal)=>syntheticEntryClock(new AutomationPage('doctorville',signal,{...remotePreferences('doctorville'),partition}),()=>now)}).run(entry);
   check('PC host '+scenario+' rejects a ready original reader before any durable dispatch',posts===0&&Object.keys(ledger.snapshot().jobs).length===0&&store.entries()[0].receipt.reason==='scope_changed');
  }
 

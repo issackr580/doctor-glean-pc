@@ -1,4 +1,5 @@
 import {validDocpleEvent} from './docple-policy.js';
+import {parseOfficialIdentity} from './entry-identity.js';
 import {readFileSync} from 'node:fs';
 import {allowedNavigation,siteById} from './security.js';
 import {kstDate,kstInstant} from './schedule.js';
@@ -9,7 +10,7 @@ export const safeReason=value=>reasons.has(value)?value:'provider_result_unconfi
 export function doctorvilleDetailNavigation(from,raw){
  try{
   const before=new URL(from),next=new URL(raw),origin='https://www.doctorville.co.kr';
-  return before.origin===origin&&before.pathname==='/seminar/main'&&!before.search&&!before.hash&&next.origin===origin&&!next.username&&!next.password&&!next.port&&!next.hash&&next.pathname==='/seminar/seminarDetail'&&[...next.searchParams.keys()].length===1&&next.searchParams.getAll('seminarId').length===1&&/^[1-9]\d{0,11}$/.test(next.searchParams.get('seminarId'));
+  return allowedNavigation('doctorville',from)&&before.pathname==='/seminar/main'&&!before.search&&!before.hash&&allowedNavigation('doctorville',raw)&&next.pathname==='/seminar/seminarDetail'&&!!parseOfficialIdentity('doctorville',raw);
  }catch{return false;}
 }
 export const DAILY_TASKS=Object.freeze([

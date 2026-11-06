@@ -1,5 +1,7 @@
 import {docpleKey,validDocpleEvent} from './docple-policy.js';
 import {createHash} from 'node:crypto';
+import {legacyEntryKey,officialEntryKey,officialIdentity,identityInvalid,bindIdentityCatalog,priorIdentityKeys} from './entry-identity.js';
+import {snapshotIdentityState} from './identity-snapshot.js';
 import {atomicJson,readJson} from './atomic-json.js';
 import {kstDate,kstInstant} from './schedule.js';
 import {DEFAULT_FEATURES,DAILY_TASKS,ENTRY_SITES,safeReason} from './automation-policy.js';
@@ -45,9 +47,9 @@ function valid(data){
  return true;
 }
 export class WorkflowStore{
- constructor(file,{commit=atomicJson}={}){this.file=file;this.commit=commit;this.failed=false;this.data=readJson(file,{schemaVersion:1,features:{...DEFAULT_FEATURES},entrySites:ENTRY_SITES.filter(id=>!['docple','whodadoc','dtalks'].includes(id)),days:{},entries:{}},valid);}
+ constructor(file,{commit=atomicJson,snapshot=snapshotIdentityState,now=Date.now}={}){this.now=now;this.file=file;this.commit=commit;this.failed=false;this.selectionEpoch=0;this.data=readJson(file,{schemaVersion:1,features:{...DEFAULT_FEATURES},entrySites:ENTRY_SITES.filter(id=>!['docple','whodadoc','dtalks'].includes(id)),days:{},entries:{}},valid);snapshot(file);}
  #save(next){
-  const today=kstDate(),first=kstDate(Date.now()-7*86400000);
+  const today=kstDate(this.now()),first=kstDate(this.now()-7*86400000);
   for(const day of Object.keys(next.days))if(day<first||day>today)delete next.days[day];
   for(const [id,row] of Object.entries(next.entries))if(row.date<first)delete next.entries[id];
   if(!valid(next))throw Error('storage_error');
@@ -59,9 +61,9 @@ export class WorkflowStore{
   for(const row of Object.values(next.days))for(const group of [row.daily,row])for(const [key,value] of Object.entries(group))if(['running','attempting'].includes(value?.status)){group[key]=cleanReceipt({...value,status:'unknown',reason:'unknown_result'},value.checkedAt);changed=true;}
   if(changed)this.#save(next);
  }
- setFeature(key,value){if(!Object.hasOwn(DEFAULT_FEATURES,key)||typeof value!=='boolean')throw Error('invalid_setting');const next=clone(this.data);next.features[key]=value;this.#save(next);}
+ setFeature(key,value){if(!Object.hasOwn(DEFAULT_FEATURES,key)||typeof value!=='boolean')throw Error('invalid_setting');const next=clone(this.data);next.features[key]=value;this.#save(next);if(key==='entry')this.selectionEpoch++;}
  entrySites(){return [...this.data.entrySites];}
- setEntrySites(ids){if(!Array.isArray(ids)||ids.some(id=>!ENTRY_SITES.includes(id))||new Set(ids).size!==ids.length)throw Error('invalid_setting');const next=clone(this.data);next.entrySites=[...ids];this.#save(next);}
+ setEntrySites(ids){if(!Array.isArray(ids)||ids.some(id=>!ENTRY_SITES.includes(id))||new Set(ids).size!==ids.length)throw Error('invalid_setting');const next=clone(this.data);next.entrySites=[...ids];this.#save(next);this.selectionEpoch++;}
  day(day=kstDate()){
   const raw=this.data.days[day]??{daily:{}};const daily={};
   for(const task of DAILY_TASKS)if(raw.daily[task.key])daily[task.key]=cleanReceipt(raw.daily[task.key],raw.daily[task.key].checkedAt);
@@ -75,7 +77,8 @@ export class WorkflowStore{
   this.#save(next);return row;
  }
  entries(day=kstDate()){return Object.values(this.data.entries).filter(row=>row.date===day).map(clone);}
- entryKey(event){if(event.site==='docple')return docpleKey(event);return hash(JSON.stringify([event.site,event.date,event.site==='hmp'?event.time:'',event.title.replace(/\s+/g,' ').trim()]));}
+ entryKey(event){if(identityInvalid(event))throw Error('invalid_event');const keys=priorIdentityKeys(this.entries(event.date),event);if(keys.length===1)return keys[0];if(event.site==='docple')return docpleKey(event);return officialEntryKey(event)??legacyEntryKey(event);}
+ bindIdentities(site,date,events){const bound=bindIdentityCatalog(this.entries(date),events,site,date),next=clone(this.data);for(const row of bound.rows)next.entries[row.key]=row;if(JSON.stringify(next)!==JSON.stringify(this.data))this.#save(next);return bound.targets;}
  putEntry(row){const next=clone(this.data);next.entries[row.key]=clone(row);this.#save(next);}
  updateEntry(key,change){const row=this.data.entries[key];if(!row)return false;const next=clone(this.data);next.entries[key]={...next.entries[key],...clone(change)};this.#save(next);return true;}
  diagnostics(){return {features:this.features(),entrySites:this.entrySites(),today:this.day(),entries:this.entries().map(({key,site,date,time,status,due,deadline,nextAt,slot,retries,attempts,receipt,preflight,inspection,lastStartedAt,executionFinishedAt,executionVersion,sourceCommit,scheduleChanges,entryClosesAt,repeatSchema,repeatFirstEntryAt,schedulePairSchema,schedulePlan,scheduleSlot,scheduleConsumed})=>({key,site,date,time,status,due,deadline,nextAt,slot,retries,attempts:attempts?.map(item=>cleanReceipt(item,item.checkedAt)),receipt:receipt?cleanReceipt(receipt,receipt.checkedAt):undefined,...(preflight?{preflight:cleanReceipt(preflight,preflight.checkedAt)}:{}),...(inspection?{inspection:cleanEntryInspection(inspection,inspection.checkedAt)}:{}),...(lastStartedAt!==undefined?{lastStartedAt,executionFinishedAt,executionVersion,...(sourceCommit?{sourceCommit}:{})}:{}),...(repeatSchema?{repeatSchema,repeatFirstEntryAt}:{}),...(schedulePairSchema?{schedulePairSchema,schedulePlan:clone(schedulePlan),scheduleSlot,scheduleConsumed:[...scheduleConsumed]}:{}),...(scheduleChanges?{scheduleChanges:clone(scheduleChanges)}:{}),...(entryClosesAt?{entryClosesAt}:{})})),storageUnavailable:this.failed};}

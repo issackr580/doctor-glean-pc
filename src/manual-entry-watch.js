@@ -1,7 +1,10 @@
 import {readFileSync} from 'node:fs';
 import {allowedNavigation} from './security.js';
+import {pcEntrySource} from './entry-page.js';
+import {officialIdentity} from './entry-identity.js';
 const survey=readFileSync(new URL('../vendor/automation/doctorville-survey.js',import.meta.url),'utf8');
 const engine=readFileSync(new URL('../vendor/automation/auto-entry.js',import.meta.url),'utf8');
+const identityEngine=readFileSync(new URL('../vendor/identity/auto-entry.js',import.meta.url),'utf8');
 // This isolated world has no preload, IPC or Node. The website cannot write its
 // click queue. Only trusted user input is inspected, using the original engine.
 const WORLD=1001;
@@ -13,10 +16,10 @@ export function watchManualEntry(window,site,{jobs,onClick,onSurvey=()=>{},surve
   if(contents.isLoadingMainFrame()||!allowedNavigation(site,url))return;
   running=true;const boundGeneration=generation;
   try{
-   const eligible=jobs().filter(job=>job.site===site&&!['manual_clicked','cancelled','lecture_ended','expired'].includes(job.status)).map(job=>({...job,...(site==='hmp'?{hmpRepeatSchema:1,hmpSlot:job.slot}:job.repeatSchema===1?{repeatSlot:job.slot}:{})}));
+   const eligible=jobs().filter(job=>job.site===site&&!['manual_clicked','cancelled','lecture_ended','expired'].includes(job.status)).map(job=>({...job,...(officialIdentity(job)?{lectureIdentity:officialIdentity(job)}:{}),...(site==='hmp'?{hmpRepeatSchema:1,hmpSlot:job.slot}:job.repeatSchema===1?{repeatSlot:job.slot}:{})}));
    const install=`(()=>{
     const name='__doctorGleanManualObserver';let state=window[name];
-    if(!state){state={jobs:${JSON.stringify(eligible)},clicks:[]};window[name]=state;const inspect=${engine};
+    if(!state){state={jobs:${JSON.stringify(eligible)},clicks:[]};window[name]=state;const legacy=${engine},official=${identityEngine},pc=${pcEntrySource()};const inspect=(job,mode,target)=>job.lectureIdentity?(mode==='manual_click'&&['doctorville','keymedi','medigate','hmp'].includes(job.site)?pc(job,mode,target):official(job,mode,target)):legacy(job,mode,target);
      const manual=(job,target)=>{
       if(inspect(job,'manual_click',target).status==='manual_clicked')return true;
       if(job.repeatSchema!==1||!['whodadoc','dtalks'].includes(job.site))return false;

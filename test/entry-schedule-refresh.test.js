@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,rmSync,readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {parseOfficialIdentity} from '../src/entry-identity.js';
 import {EntryRunner} from '../src/entry-runner.js';
 import {WorkflowStore,cleanReceipt} from '../src/workflow-store.js';
 import {LocalState} from '../src/local-state.js';
@@ -122,7 +123,7 @@ test('another due entry interrupts schedule verification and keeps the original 
  const controller=new AutomationController({...s.options,file:s.file,catalogBusy:()=>false,queueCatalog(){},yieldCatalog(){},isManualOpen:site=>site==='doctorville'&&manual,createInspectionPage:async(_site,current)=>{signal=current;return s.page;}});clearInterval(controller.timer);controller.entry.sleep=s.clock.sleep;t.after(()=>controller.close());
  const jobs=[];controller.entry.run=async job=>{jobs.push(job.key);controller.store.updateEntry(job.key,{status:'cancelled',nextAt:0});};
  controller.catalogFinished(date,['doctorville'],{reason:'finished'});await waiting;
- const other={...controller.store.entries()[0],key:'b'.repeat(64),site:'medigate',due:s.clock.now()-1,nextAt:s.clock.now()-1};controller.store.putEntry(other);manual=true;controller.tick();assert.equal(signal.aborted,true);deliver();await flush();
+ const other={...controller.store.entries()[0],key:'b'.repeat(64),site:'medigate',url:'https://new.medigate.net/symposium/18',lectureIdentity:parseOfficialIdentity('medigate','https://new.medigate.net/symposium/18'),due:s.clock.now()-1,nextAt:s.clock.now()-1};controller.store.putEntry(other);manual=true;controller.tick();assert.equal(signal.aborted,true);deliver();await flush();
  assert.deepEqual(jobs,[other.key]);assert.equal(controller.store.entries().find(j=>j.key===s.key).time,'12:20');assert.equal(Object.keys(s.ledger.snapshot().jobs).length,0);
  manual=false;assert.ok(controller.entry.revisionDue(s.key));
 });
@@ -184,7 +185,7 @@ test('the controller recovers an unused expired lecture and dispatches once insi
 test('current unentered lectures are verified before later future reservations',t=>{
  const s=setup(t,{now:'13:30'}),sample=s.store.entries()[0];
  const events=[{site:'doctorville',date,time:'12:45',title:sample.title,url},{site:'doctorville',date,time:'13:00',title:'합성 진행 중 강의',url:url.replace('17','18')},{site:'doctorville',date,time:'15:00',title:'합성 예정 강의',url:url.replace('17','19')}];
- for(const event of events.slice(1)){const key=s.store.entryKey(event),start=at(event.time);s.store.putEntry({...sample,key,title:event.title,time:event.time,start,due:Math.max(start-3000000,at('00:00')),deadline:start+600000,nextAt:start-3000000,scheduleIdentity:undefined});}
+ for(const event of events.slice(1)){const key=s.store.entryKey(event),start=at(event.time);s.store.putEntry({...sample,url:event.url,lectureIdentity:parseOfficialIdentity(event.site,event.url),key,title:event.title,time:event.time,start,due:Math.max(start-3000000,at('00:00')),deadline:start+600000,nextAt:start-3000000,scheduleIdentity:undefined});}
  s.results=s.catalog('12:45',{events});s.runner.reserveCatalog(date,s.results);assert.equal(s.runner.revisionDue().job.time,'13:00');
 });
 test('an obsolete expired timer is rebooked for a verified future lecture before its entry button opens',async t=>{

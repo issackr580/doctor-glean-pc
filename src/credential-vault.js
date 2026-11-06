@@ -5,7 +5,9 @@ const valid=data=>data?.schemaVersion===1&&typeof data.applicationId==='string'&
 // In production, protect is Electron safeStorage backed by Windows DPAPI only.
 // The adapter is injected so Node tests never pretend to exercise Windows DPAPI.
 export class CredentialVault{
- constructor(file,applicationId,protect,{commit=atomicJson}={}){Object.assign(this,{file,applicationId,protect,commit});this.failed=false;this.data=readJson(file,{schemaVersion:1,applicationId,entries:{}},valid);if(this.data.applicationId!==applicationId)throw Error('storage_error');}
+ constructor(file,applicationId,protect,{commit=atomicJson}={}){Object.assign(this,{file,applicationId,protect,commit});this.failed=false;this.epochs=new Map();this.data=readJson(file,{schemaVersion:1,applicationId,entries:{}},valid);if(this.data.applicationId!==applicationId)throw Error('storage_error');}
+ epoch(site){return this.epochs.get(site)??0;}
+ changed(site){this.epochs.set(site,this.epoch(site)+1);}
  available(){try{return !this.failed&&this.protect.available()===true;}catch{return false;}}
  #write(next){try{if(!valid(next))throw Error();this.commit(this.file,next);this.data=next;}catch{this.failed=true;throw Error('storage_error');}}
  save(site,credentials,automatic,now=Date.now()){
@@ -13,7 +15,7 @@ export class CredentialVault{
   if(!this.available())throw Error('storage_unavailable');
   let plaintext=JSON.stringify({schemaVersion:1,applicationId:this.applicationId,site,id:credentials.id,password:credentials.password}),sealed;
   try{sealed=this.protect.encrypt(plaintext);if(!Buffer.isBuffer(sealed)||!sealed.length)throw Error();}catch{this.failed=true;throw Error('storage_error');}finally{plaintext='';}
-  const next=structuredClone(this.data);next.entries[site]={ciphertext:sealed.toString('base64'),automatic,savedAt:now};sealed.fill(0);this.#write(next);
+  const next=structuredClone(this.data);next.entries[site]={ciphertext:sealed.toString('base64'),automatic,savedAt:now};sealed.fill(0);this.#write(next);this.changed(site);
  }
  read(site,{automatic=false}={}){
   const row=this.data.entries[site];if(!row||automatic&&!row.automatic)return null;
@@ -22,7 +24,7 @@ export class CredentialVault{
  }
  enabled(site){return this.available()&&this.data.entries[site]?.automatic===true;}
  has(site){return !!this.data.entries[site];}
- setAutomatic(site,value){if(!credentialSite(site)||typeof value!=='boolean'||!this.has(site))throw Error('invalid_setting');if(value&&!this.available())throw Error('storage_unavailable');const next=structuredClone(this.data);next.entries[site].automatic=value;this.#write(next);}
- remove(site){if(!credentialSite(site))throw Error('invalid_site');const next=structuredClone(this.data);delete next.entries[site];this.#write(next);}
+ setAutomatic(site,value){if(!credentialSite(site)||typeof value!=='boolean'||!this.has(site))throw Error('invalid_setting');if(value&&!this.available())throw Error('storage_unavailable');const next=structuredClone(this.data);next.entries[site].automatic=value;this.#write(next);this.changed(site);}
+ remove(site){if(!credentialSite(site))throw Error('invalid_site');const next=structuredClone(this.data);delete next.entries[site];this.#write(next);this.changed(site);}
  snapshot(){return {available:this.available(),backend:this.available()?'windows_dpapi':'unavailable',sites:Object.entries(this.data.entries).map(([site,row])=>({site,saved:true,automatic:row.automatic,savedAt:row.savedAt}))};}
 }

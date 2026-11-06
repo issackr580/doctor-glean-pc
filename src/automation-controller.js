@@ -11,7 +11,7 @@ import {DAILY_TASKS} from './automation-policy.js';
 import {kstDate,kstInstant,nextLoungePreparation} from './schedule.js';
 function nextMorning(now){const today=kstDate(now),at=kstInstant(today,'08:10');return at>=now-1800000?at:kstInstant(kstDate(now+86400000),'08:10');}
 export class AutomationController{
- constructor({file,ledger,createPage,createInspectionPage,isManualOpen,catalog,catalogBusy,queueCatalog,yieldCatalog,onChange=()=>{},onEvent=()=>{},onError=()=>{},now=Date.now,traceEntry,observeEntry,executionAllowed=()=>true,options=new PcOptions(join(dirname(file),'pc-options-v1.json')),notifySurvey=()=>{}}){
+ constructor({file,ledger,createPage,createInspectionPage,isManualOpen,catalog,catalogBusy,queueCatalog,yieldCatalog,onChange=()=>{},onEvent=()=>{},onError=()=>{},now=Date.now,traceEntry,observeEntry,entryContextEpoch=()=>0,executionAllowed=()=>true,options=new PcOptions(join(dirname(file),'pc-options-v1.json')),notifySurvey=()=>{}}){
   Object.assign(this,{ledger,createPage,isManualOpen,catalog,catalogBusy,queueCatalog,yieldCatalog,onChange,onError,now,executionAllowed});this.store=new WorkflowStore(file);this.options=options;this.active=null;this.pendingDaily=[];this.followupReads=[];this.pendingReadOnly=true;this.closed=false;
   this.store.recover();
   const common={ledger,store:this.store,createPage,createInspectionPage,isManualOpen,onChange:()=>{onChange();},onEvent,now};
@@ -19,7 +19,7 @@ export class AutomationController{
   this.daily=new DailyRunner({...common,quiz:this.quiz,shouldYield:()=>this.allowed()&&!!(this.entry.due(this.now())||this.entry.revisionDue())});
   this.survey=new SurveyRunner({file:join(dirname(file),'surveys-v1.json'),options,createPage:createInspectionPage??createPage,isManualOpen,allowed:()=>this.allowed()&&this.store.features().survey,notify:notifySurvey,onChange,now});
   this.daily.taskSelected=key=>this.options.snapshot().dailyKeys.includes(key);
-  this.entry=new EntryRunner({...common,catalog,traceEntry,observeEntry,onSurvey:(url,raw)=>this.survey.observe(url,raw)});this.entry.recover();this.lounge=new LoungeRunner(common);
+  this.entry=new EntryRunner({...common,catalog,traceEntry,observeEntry,contextEpoch:entryContextEpoch,onSurvey:(url,raw)=>this.survey.observe(url,raw)});this.entry.recover();this.lounge=new LoungeRunner(common);
   this.rearm();this.timer=setInterval(()=>this.tick(),250);this.timer.unref();
  }
  allowed(){return !this.closed&&this.executionAllowed()&&!this.ledger.snapshot().paused&&!this.store.failed&&!this.options.failed;}

@@ -2,6 +2,7 @@ import {createHash} from 'node:crypto';
 import {entrySchedule} from './automation-policy.js';
 import {catalogEntryReference} from './entry-reference.js';
 import {kstDate,kstInstant} from './schedule.js';
+import {sameEntryTarget,canonicalIdentity} from './entry-identity.js';
 
 export const detailIdentity=url=>createHash('sha256').update(url).digest('hex');
 
@@ -15,12 +16,12 @@ export function catalogScheduleRevision(job,results,now){
  if(!row||row.stale!==false||!Number.isSafeInteger(row.checkedAt)||row.checkedAt>now||kstDate(row.checkedAt)!==job.date)return null;
  const ref=catalogEntryReference(job,results);if(ref?.status!=='navigate')return null;
  const title=value=>String(value??'').replace(/\s+/g,' ').trim();
- const matches=row.events.filter(e=>e?.site===job.site&&e.date===job.date&&title(e.title)===title(job.title));
+ const matches=row.events.filter(e=>e?.site===job.site&&e.date===job.date&&sameEntryTarget(job,e));
  if(matches.some(e=>e.lectureEnded===true))return null;
  const times=[...new Set(matches.map(e=>e.time))];
  const time=times.find(value=>/^([01]\d|2[0-3]):[0-5]\d$/.test(value));if(!time)return null;
  const timing=entrySchedule({...job,time},kstInstant(job.date,'00:00')),identity=detailIdentity(ref.url);
- if(!timing||job.scheduleIdentity&&job.scheduleIdentity!==identity)return null;
+ if(!timing||job.scheduleIdentity&&!canonicalIdentity(job)&&job.scheduleIdentity!==identity)return null;
  const due=Math.max(timing.due,kstInstant(job.date,'00:00'));
  return {key:job.key,before:JSON.stringify(job),reference:ref,identity,catalogAt:row.checkedAt,job:{...job,time,...timing,due,nextAt:Math.max(due,now)}};
 }
