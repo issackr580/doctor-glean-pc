@@ -7,6 +7,7 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import assert from 'node:assert/strict';
 import {kstDate,kstInstant} from '../src/schedule.js';
 import {resolveEdition} from '../src/edition.js';
+import {weekendCases} from './electron-weekend-cases.mjs';
 import {WorkflowStore,cleanReceipt} from '../src/workflow-store.js';
 
 const application=resolve(process.env.DOCTOR_GLEAN_PC_TEST_ROOT??fileURLToPath(new URL('../',import.meta.url)));
@@ -311,6 +312,8 @@ try{
  await evaluate('window.doctorGlean.finishLogin("doctorville")');
  await evaluate('window.doctorGlean.cancelCollection()');
  await until(()=>BrowserWindow.getAllWindows().length===1);
+ await weekendCases({application,temporary,check});
+ check('weekend acceptance releases all synthetic provider windows',BrowserWindow.getAllWindows().length===1);
  mkdirSync(new URL('../verification/',import.meta.url),{recursive:true});
  writeFileSync(resultFile,JSON.stringify({schemaVersion:1,edition:edition.id,version:appMetadata.version,runtime:{platform:process.platform,electron:process.versions.electron,chromium:process.versions.chrome},environment:'Linux Electron 45 with virtual X display and synthetic HTTPS',osSandboxVerified:false,windowsVerified:false,authenticatedProviderVerified:false,checks:checks.length,passed:checks,requests:requests.length},null,2)+'\n');
  console.log('ELECTRON_CATALOG_PASS:'+checks.length);
