@@ -48,14 +48,14 @@ test('an interrupted registration file is preserved and corrupt data disables on
 });
 test('fresh registration confirmation can rearm only an unattempted existing missing-registration entry',t=>{
  const s=setup(t),ledger=new LocalState(join(s.root,'state.json')),store=new WorkflowStore(join(s.root,'workflows.json'));store.setFeature('entry',true);
- const key=store.entryKey(s.target),due=kstInstant(s.target.date,s.target.time),job={...s.target,key,start:due,due,deadline:due+90000,nextAt:0,status:'not_registered',slot:0,retries:1,attempts:[],entryAttempted:false};store.putEntry(job);
+ const key=store.entryKey(s.target),due=kstInstant(s.target.date,s.target.time),job={...s.target,hmpRepeatSchema:2,hmpTiming:'start_0_25_35',hmpAttempts:[],key,start:due,due,deadline:due+90000,nextAt:0,status:'not_registered',slot:0,retries:1,attempts:[],entryAttempted:false};store.putEntry(job);
  const runner=new EntryRunner({ledger,store,now:s.now});assert.equal(runner.registrationConfirmed(s.target),true);assert.equal(store.entries()[0].status,'reserved');
  for(const status of ['cancelled','manual_clicked','clicked']){store.updateEntry(key,{status});assert.equal(runner.registrationConfirmed(s.target),false);assert.equal(store.entries()[0].status,status);}
- store.updateEntry(key,{status:'not_registered',entryAttempted:true});assert.equal(runner.registrationConfirmed(s.target),false);
- store.updateEntry(key,{entryAttempted:false});ledger.setPaused(false);const input={site:job.site,kind:'entry',date:job.date,target:key,slot:0,dueAt:due,deadline:due+90000};assert.ok(ledger.reserve(input,due));runner.now=()=>due;assert.equal(runner.registrationConfirmed(s.target),false);
+ store.updateEntry(key,{site:'hmp',status:'not_registered',entryAttempted:true});assert.equal(runner.registrationConfirmed(s.target),false);
+ store.updateEntry(key,{entryAttempted:false});ledger.setPaused(false);const input={site:job.site,kind:'entry',date:job.date,target:key,slot:32,dueAt:due,deadline:due+90000};assert.ok(ledger.reserve(input,due));runner.now=()=>due;assert.equal(runner.registrationConfirmed(s.target),false);
 });
 test('UI offers registration for unattempted reservations and never labels a click complete',()=>{
- assert.equal(canRegisterEntry({status:'reserved',entryAttempted:false}),true);assert.equal(canRegisterEntry({status:'running',entryAttempted:false}),false);
- assert.equal(canRegisterEntry({status:'not_registered',entryAttempted:false}),true);assert.equal(canRegisterEntry({status:'reserved',preflight:{status:'not_registered'}}),true);assert.equal(canRegisterEntry({status:'expired',preflight:{status:'not_registered'}}),false);assert.equal(canRegisterEntry({status:'not_registered',entryAttempted:true}),false);
+ assert.equal(canRegisterEntry({site:'hmp',status:'reserved',entryAttempted:false}),true);assert.equal(canRegisterEntry({site:'hmp',status:'running',entryAttempted:false}),false);
+ assert.equal(canRegisterEntry({site:'hmp',status:'not_registered',entryAttempted:false}),true);assert.equal(canRegisterEntry({site:'hmp',status:'reserved',preflight:{site:'hmp',status:'not_registered'}}),true);assert.equal(canRegisterEntry({status:'expired',preflight:{site:'hmp',status:'not_registered'}}),false);assert.equal(canRegisterEntry({site:'hmp',status:'not_registered',entryAttempted:true}),false);
  assert.match(registrationReplyLabel({ok:true,status:'requested'}),/최종/);assert.match(registrationReplyLabel({ok:false,reason:'storage_error',attempted:false}),/실행하지 않았/);assert.doesNotMatch(registrationReplyLabel({ok:false,reason:'storage_error',attempted:true}),/실행하지 않았/);
 });

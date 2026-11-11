@@ -1,3 +1,7 @@
+import {hiddenResources,observeResourceBytes} from './hidden-resources.js';
+import {resourceCount} from './resource-use.js';
+import {hmpEntrySource} from './hmp-browser.js';
+import {automaticEntrySite} from './entry-support.js';
 import {BrowserWindow} from 'electron';
 import {entryDialogObstacle} from './entry-dialog.js';
 import {readFileSync} from 'node:fs';
@@ -31,7 +35,7 @@ export class AutomationPage{
   try{this.#guard(window);return window;}catch{window.destroy();throw failure('worker_closed');}
  }
  #guard(window){
-  this.windows.push(window);const contents=window.webContents;
+  this.windows.push(window);const contents=window.webContents;const resources=hiddenResources(contents);if(this.entryDispatchArmed)resources.entry();window.once('closed',resources.close);
   const guard=(event,url)=>{const target=typeof url==='string'?url:event.url;if(!this.allowsEntryNavigation(target)){this.runtime.navigationBlocked=Math.min(1000,this.runtime.navigationBlocked+1);this.navigationBlocks.set(contents,(this.navigationBlocks.get(contents)??0)+1);const load=this.pendingLoads.get(contents);if(load&&this.site==='dtalks'&&dtalksLoginRedirect(target))load.secureLoginRedirect=true;event.preventDefault();this.#diagnostic('navigation_blocked',{destinationKind:destinationKind(target)});}};
   contents.on('will-navigate',guard);contents.on('will-redirect',(event,url,_inPlace,main)=>{if((main??event.isMainFrame)!==false)guard(event,url);});
   contents.on('will-attach-webview',event=>event.preventDefault());
@@ -45,7 +49,7 @@ export class AutomationPage{
   // Browser dialogs are read only to fixed classifications, never logged raw.
   // Unknown confirmations are dismissed; only a task-specific original claim
   // confirmation can be accepted by the host's callback.
-  contents.debugger.attach('1.3');contents.debugger.sendCommand('Page.enable').catch(()=>{});
+  contents.debugger.attach('1.3');contents.debugger.sendCommand('Page.enable').catch(()=>{});observeResourceBytes(contents);
   if(this.credentialNetwork)contents.debugger.sendCommand('Network.enable',{maxPostDataSize:0}).catch(()=>{this.runtime.credentialNetworkEnabled=false;});
   const requests=new Set(),response=status=>{this.runtime.credentialResponses=Math.min(1000,this.runtime.credentialResponses+1);if(Number.isInteger(status)&&status>=100&&status<=599)this.runtime.credentialHttpStatus=status;};
   contents.debugger.on('message',(_event,method,params)=>{
@@ -103,7 +107,7 @@ export class AutomationPage{
   }finally{if(this.pendingLoads.get(contents)===context)this.pendingLoads.delete(contents);}
   await bounded(this.current.webContents.debugger.sendCommand('Page.enable'),this.signal,10000);
  }
- armEntryDispatch(){this.entryDispatchArmed=true;}
+ armEntryDispatch(){this.entryDispatchArmed=true;this.entryArmedAt??=Date.now();for(const w of this.windows)if(!w.isDestroyed())hiddenResources(w.webContents).entry();}
  allowsEntryNavigation(url){return allowedNavigation(this.site,url)||this.entryDispatchArmed&&this.externalEntryAllowed(this.site,url);}
  async observeDocpleArrival(job){
   if(this.site!=='docple'||!this.entryDispatchArmed)return false;
@@ -132,13 +136,15 @@ export class AutomationPage{
   // This credential-prefixed session read cannot dispatch an attendance action.
   // It retains native document binding and bypasses the recovery wrapper itself.
   if(name==='credential-docple-session.js'&&(this.site!=='docple'||args?.[0]?.site!=='docple'||args[0].mode!=='verify'||args[0].kind!=='attendance'||args[0].autoClaim!==false||args[0].attempted!==false||args[0].phase!==undefined||args[0].action!==undefined||navigation))throw failure('policy_rejected');
+  if(['auto-entry.js','pc-entry.js'].includes(name)&&this.site==='dtalks')throw failure('disabled');
   if(name==='pc-entry.js'&&(args?.[0]?.site!==this.site||!['preflight','inspect','click','schedule-inspect'].includes(args?.[1])||navigation&&args[1]!=='click'))throw failure('policy_rejected');
   if(name==='pc-entry.js'&&args[1]==='schedule-inspect'&&(this.site!=='doctorville'||!doctorvilleDetailNavigation('https://www.doctorville.co.kr/seminar/main',this.url)||navigation))throw failure('policy_rejected');
   const entry=['auto-entry.js','pc-entry.js'].includes(name),official=entry&&officialIdentity(args?.[0]);
   if(entry&&identityInvalid(args?.[0]))throw failure('policy_rejected');
   if(official&&!['preflight','inspect','click','schedule-inspect','open_target','open_catalog','entry_probe','playback_start','playback_probe'].includes(args?.[1]))throw failure('policy_rejected');
-  const assetKey=official&&name==='auto-entry.js'?'identity/'+name:name;
+  const assetKey=(this.site==='hmp'&&name==='auto-entry.js'?'hmp/':'')+(official&&name==='auto-entry.js'?'identity/'+name:name);
   if(!assets.has(assetKey))assets.set(assetKey,name==='pc-registration.js'?`(job)=>(${pcEntrySource()})(job,'registration-inspect')`:landing?credentialProviderLanding.toString():name==='pc-entry.js'?pcEntrySource():name==='credential-page-state.js'?credentialPageState.toString():name==='credential-docple-session.js'?credentialDocpleSession.toString():name==='doctorville-quiz-page.js'?doctorvilleQuizPage.toString():readFileSync(new URL('../vendor/'+(official&&name==='auto-entry.js'?'identity/':name.startsWith('credential-')?'credentials/':'automation/')+name,import.meta.url),'utf8'));
+  if(this.site==='hmp'&&name==='auto-entry.js'&&!assets.get(assetKey).includes("key:'hmp:2:'"))assets.set(assetKey,hmpEntrySource(assets.get(assetKey)));
   const contents=this.current.webContents,url=this.url,version=this.version;
   const credential=name.startsWith('credential-'),reading=credential&&['probe','verify','cancel'].includes(args?.[0]?.mode);
   // A read may wait across a POST redirect, but its caller must bind a fresh
@@ -168,7 +174,7 @@ export class AutomationPage{
   await bounded(profile.cookies.flushStore().then(()=>profile.flushStorageData()),this.signal,3000);
  }
  close(){
-  if(this.closed)return;this.closed=true;this.signal.removeEventListener('abort',this.abort);
+  if(this.closed)return;if(this.entryArmedAt)resourceCount('entryWindowLifetimeMs',Math.max(0,Date.now()-this.entryArmedAt));this.closed=true;this.signal.removeEventListener('abort',this.abort);
   for(const window of this.windows)if(!window.isDestroyed()){try{if(window.webContents.debugger.isAttached())window.webContents.debugger.detach();}catch{}window.destroy();}
  }
 }

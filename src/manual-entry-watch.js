@@ -48,7 +48,7 @@ export function watchManualEntry(window,site,{jobs,onClick,onSurvey=()=>{},surve
   running=true;const boundGeneration=generation;
   try{
    await wire;if(closed||window.isDestroyed())return;
-   const eligible=jobs().filter(job=>job.site===site&&!['manual_clicked','cancelled','lecture_ended','expired'].includes(job.status)).map(job=>({...job,...(officialIdentity(job)?{lectureIdentity:officialIdentity(job)}:{}),...(site==='hmp'?{hmpRepeatSchema:1,hmpSlot:job.slot}:job.repeatSchema===1?{repeatSlot:job.slot}:{})}));
+   const eligible=jobs().filter(job=>job.site===site&&!['manual_clicked','cancelled','lecture_ended','expired'].includes(job.status)).map(job=>({...job,...(officialIdentity(job)?{lectureIdentity:officialIdentity(job)}:{}),...(site==='hmp'?{hmpRepeatSchema:job.hmpRepeatSchema??1,hmpSlot:job.slot}:job.repeatSchema===1?{repeatSlot:job.slot}:{})}));
    const install=`(()=>{
     const name='__doctorGleanManualObserver';let state=window[name];
     if(!state){state={jobs:${JSON.stringify(eligible)},clicks:[],sequence:0,tag:${JSON.stringify(randomUUID().replaceAll('-',''))},token:${JSON.stringify(token)}};window[name]=state;const legacy=${engine},official=${identityEngine},pc=${pcEntrySource()};const inspect=(job,mode,target)=>job.lectureIdentity?(mode==='manual_click'&&['doctorville','keymedi','medigate','hmp'].includes(job.site)?pc(job,mode,target):official(job,mode,target)):legacy(job,mode,target);

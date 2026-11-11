@@ -1,3 +1,4 @@
+import {hiddenResources,observeResourceBytes} from './hidden-resources.js';
 import {BrowserWindow} from 'electron';
 import {CatalogPage} from './catalog-page.js';
 import {allowedNavigation} from './security.js';
@@ -11,7 +12,7 @@ const bounded=(promise,signal,ms)=>boundedWork(promise,signal,ms,(code,error)=>O
 
 export function electronCatalogPage(profile,signal,preferences){
  const window=new BrowserWindow({show:false,width:1100,height:1800,autoHideMenuBar:true,webPreferences:{...preferences,backgroundThrottling:false}});
- const contents=window.webContents;let version=0,lastFailure='';
+ const contents=window.webContents;const resources=hiddenResources(contents);try{contents.debugger.attach('1.3');observeResourceBytes(contents);}catch{}window.once('closed',resources.close);let version=0,lastFailure='';
  contents.on('did-fail-load',(_event,code,_description,_url,main)=>{if(main!==false&&code!==-3)lastFailure=loadFailure(code);});
  contents.on('did-start-navigation',(event,_url,isInPlace,isMainFrame)=>{if((isMainFrame??event.isMainFrame)&&!(isInPlace??event.isInPlace))version++;});
  const navigation=(event,url)=>{if(!allowedNavigation(profile.id,typeof url==='string'?url:event.url))event.preventDefault();};

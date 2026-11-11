@@ -1,3 +1,5 @@
+import {kstDate} from './schedule.js';
+import {automaticEntrySite} from './entry-support.js';
 import {ActionFuses} from './action-fuses.js';
 import {randomUUID} from 'node:crypto';
 import {CredentialVault} from './credential-vault.js';
@@ -51,8 +53,9 @@ export class CredentialManager{
  }
  async prepareCollection(site,signal){
   if(site!=='ckd'||!this.automaticAllowed()||!this.vault.enabled(site)||this.busy||this.isManualOpen(site))return;
-  const at=this.now();if(this.attempts.decision(site,at,false,true)!=='ready'||signal?.aborted||!this.dailyFuses.claimCkd(at))return;let result={status:'unknown',submitted:false};
+  const epoch=this.vault.epoch(site),at=this.now();if(this.attempts.decision(site,at,false,true)!=='ready'||signal?.aborted||!this.dailyFuses.claimCkd(at))return;let result={status:'unknown',submitted:false};
   try{result=await this.recover(site,{signal,automatic:true,freshCollection:true});}finally{this.dailyFuses.finishCkd(at,result,this.now());}
+  if(result.status==='authenticated'&&result.submitted===true&&!signal?.aborted&&this.vault.epoch(site)===epoch)return {authenticated:true,date:kstDate(this.now()),accountEpoch:epoch};
  }
  async recover(site,options={}){
   if(!this.vault.has(site))return {status:'not_saved'};
@@ -70,17 +73,17 @@ export class CredentialManager{
   }
   return safeCredentialStatus(reply.status);
  }
- wrapPage(site,page){
+ wrapPage(site,page,{purpose='read'}={}){
   const load=page.load.bind(page),call=page.call.bind(page);let recovering=false,tried=false,target='';
   const recover=async()=>{
-   if(recovering||tried||!this.automaticAllowed()||!this.vault.enabled(site))return false;
+   if(purpose==='entry'&&!automaticEntrySite(site)||recovering||tried||!this.automaticAllowed()||!this.vault.enabled(site))return false;
    tried=true;recovering=true;
    try{const result=await this.recover(site,{automatic:true,signal:page.signal});if(result.status==='authenticated'&&!page.signal.aborted){await load(target);return true;}return false;}
    finally{recovering=false;}
   };
   page.load=async url=>{
-   target=url;await load(url);
-   if(recovering||tried||!this.automaticAllowed()||!this.vault.enabled(site))return;
+   if(purpose==='entry'&&!automaticEntrySite(site))throw Error('disabled');target=url;await load(url);
+   if(purpose==='entry'&&!automaticEntrySite(site)||recovering||tried||!this.automaticAllowed()||!this.vault.enabled(site))return;
    const state=await this.verifyPage(site,page);if(state!=='login_required')return;
    await recover();
   };

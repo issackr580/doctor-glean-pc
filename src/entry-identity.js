@@ -1,3 +1,5 @@
+import {automaticEntrySite} from './entry-support.js';
+import {validHmpCheckpoint,hmpSchema} from './hmp-policy.js';
 import {createHash} from 'node:crypto';
 import {readLectureIdentity} from '../vendor/identity/lecture-identity.js';
 export const ID_SITES=Object.freeze(['doctorville','keymedi','medigate','whodadoc','docple','hmp']);
@@ -37,14 +39,14 @@ export function duplicateIdentityKeys(jobs){
  const groups=new Map();for(const j of jobs){const id=canonicalIdentity(j);if(!id)continue;const key=j.date+'|'+id,rows=groups.get(key)??[];rows.push(j.key);groups.set(key,rows);}
  return new Set([...groups.values()].filter(a=>a.length>1).flat());
 }
-export function identityRunnable(job,jobs){return !!job&&job.entryAttempted===false&&!identityInvalid(job)&&!job.identityBlock&&!duplicateIdentityKeys(jobs).has(job.key);}
+export function identityRunnable(job,jobs){return !!job&&automaticEntrySite(job.site)&&validHmpCheckpoint(job)&&job.entryAttempted===false&&!identityInvalid(job)&&!job.identityBlock&&!duplicateIdentityKeys(jobs).has(job.key);}
 export function nextIdentityEntry(jobs,now,{date,readyOnly=false,selected,excludeKey}={}){
  const duplicates=duplicateIdentityKeys(jobs);
- return jobs.filter(j=>j.key!==excludeKey&&(!date||j.date===date)&&(!selected||selected.includes(j.site))&&j.status==='reserved'&&j.entryAttempted===false&&!identityInvalid(j)&&!j.identityBlock&&!duplicates.has(j.key)&&Number.isSafeInteger(j.deadline)&&now<=j.deadline&&(!readyOnly||now>=(j.nextAt??j.due))).sort((a,b)=>a.deadline-b.deadline)[0]??null;
+ return jobs.filter(j=>automaticEntrySite(j.site)&&validHmpCheckpoint(j)&&j.key!==excludeKey&&(!date||j.date===date)&&(!selected||selected.includes(j.site))&&j.status==='reserved'&&j.entryAttempted===false&&!identityInvalid(j)&&!j.identityBlock&&!duplicates.has(j.key)&&Number.isSafeInteger(j.deadline)&&now<=j.deadline&&(!readyOnly||now>=(j.nextAt??j.due))).sort((a,b)=>a.deadline-b.deadline)[0]??null;
 }
 export function sameWorker(expected,current){
  if(!expected||!current||!sameEntryTarget(expected,current))return false;
- return ['key','site','date','slot','time','start','due','deadline'].every(k=>expected[k]===current[k])&&(expected.entryOwner===undefined||expected.entryOwner===current.entryOwner);
+ return ['key','site','date','slot','time','start','due','deadline','scheduleRevision','hmpTiming'].every(k=>expected[k]===current[k])&&(expected.site!=='hmp'||hmpSchema(expected)===hmpSchema(current))&&(expected.entryOwner===undefined||expected.entryOwner===current.entryOwner);
 }
 export function sameReceiptOwner(expected,current){return !!expected&&!!current&&expected.key===current.key&&expected.site===current.site&&expected.date===current.date&&expected.time===current.time&&sameEntryTarget(expected,current);}
 // Metadata and aliases are saved in the original workflows transaction. No

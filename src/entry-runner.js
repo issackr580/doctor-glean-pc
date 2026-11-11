@@ -1,3 +1,6 @@
+import {resourceCount} from './resource-use.js';
+import {automaticEntrySite,hmpLedgerSlot,legacyHmpConsumed,legacyHmpOverlap} from './entry-support.js';
+import {validHmpCheckpoint,hmpHistory,nextHmpCheckpoint} from './hmp-policy.js';
 import {attachCheckpoints,nextCheckpoint} from './entry-checkpoints.js';
 import {siteById,allowedNavigation} from './security.js';
 import {entrySchedule,safeReason,doctorvilleDetailNavigation} from './automation-policy.js';
@@ -13,7 +16,7 @@ import {createEntryJob} from './entry-job.js';
 import {canonicalIdentity,identityRunnable,duplicateIdentityKeys,sameWorker,sameReceiptOwner,sameEntryTarget,priorIdentityKeys,rebookIdentity,nextIdentityEntry} from './entry-identity.js';
 const navigable=(site,raw)=>{try{const u=new URL(raw);return allowedNavigation(site,raw)&&!/(?:login|logout|regist|apply|enroll|payment|order|cart|token|auth|session|password|email|ticket|delete|withdraw)/i.test(decodeURIComponent(u.pathname+u.search));}catch{return false;}};
 export class EntryRunner{
- constructor({ledger,store,createPage,createInspectionPage,catalog=()=>({}),contextEpoch=()=>0,isManualOpen=()=>false,onChange=()=>{},onEvent=()=>{},now=Date.now,sleep=waitFor,traceEntry=()=>({}),observeEntry=()=>{},onSurvey=()=>{}}){Object.assign(this,{ledger,store,createPage,createInspectionPage,catalog,contextEpoch,isManualOpen,onChange,onEvent,now,sleep,traceEntry,observeEntry,onSurvey});this.active=null;this.revisions=new Map();this.revisionWaits=new Map();}
+ constructor({ledger,store,createPage,createInspectionPage,catalog=()=>({}),contextEpoch=()=>0,isManualOpen=()=>false,onChange=()=>{},onEvent=()=>{},now=Date.now,sleep=waitFor,traceEntry=()=>({}),observeEntry=()=>{},onSurvey=()=>{}}){Object.assign(this,{ledger,store,createPage,createInspectionPage,catalog,contextEpoch,isManualOpen,onChange,onEvent,now,sleep,traceEntry,observeEntry,onSurvey});this.active=null;this.revisions=new Map();this.revisionWaits=new Map();if('policyConsumed' in store)store.policyConsumed=job=>legacyHmpConsumed(ledger,job);store.migrateEntryPolicies?.();}
  #trace(job,kind){let trace;try{trace=this.traceEntry(job,kind);}catch{}return {event:(phase,detail)=>{try{trace?.event?.(phase,{...detail,identityMode:canonicalIdentity(job)?'official':'legacy'});}catch{}},finish:(...args)=>{try{trace?.finish?.(...args);}catch{}}};}
  #observe(job,phase,detail){try{this.observeEntry(job,phase,detail);}catch{}}
  async #catalogDetail(job,page,trace,signal,reference){
@@ -37,7 +40,7 @@ export class EntryRunner{
  manualOpened(site){if(this.active?.job.site===site)this.cancel();}
  #revision(job,results=this.catalog(job?.date)){
   if(!job||!identityRunnable(job.site==='doctorville'&&job.identityBlock==='identity_conflict'?{...job,identityBlock:undefined}:job,this.store.entries(job.date))||!this.store.features().entry||!this.store.entrySites().includes(job.site))return null;
-  const input={site:job.site,kind:'entry',date:job.date,target:job.key,slot:job.slot,dueAt:job.due,deadline:job.deadline};
+  const input={site:job.site,kind:'entry',date:job.date,target:job.key,slot:hmpLedgerSlot(job),dueAt:job.due,deadline:job.deadline};
   const proposal=this.ledger.consumed(input)?null:catalogScheduleRevision(job,results,this.now());return proposal?{...proposal,selectionEpoch:this.store.selectionEpoch,accountEpoch:this.contextEpoch(job.site),ledgerEpoch:this.ledger.snapshot().epoch}:null;
  }
  #currentRevision(proposal){
@@ -115,10 +118,18 @@ export class EntryRunner{
   }
  }
  reserveCatalog(date,results){
-  if(!this.store.features().entry||date!==kstDate(this.now()))return;
+  this.store.migrateEntryPolicies?.();if(!this.store.features().entry||date!==kstDate(this.now()))return;
   const selected=this.store.entrySites();
+  const hmp=results.hmp;
+  if(hmp?.stale===false&&hmp.pending!==true&&['ok','review'].includes(hmp.status)&&Number.isSafeInteger(hmp.checkedAt)&&hmp.checkedAt<=this.now()&&kstDate(hmp.checkedAt)===date){
+   for(const old of this.store.entries(date).filter(j=>j.site==='hmp'&&j.hmpRepeatSchema===2&&j.status==='reserved')){
+    const rows=hmp.events??[],matches=rows.filter(e=>sameEntryTarget(old,e)),eligible=rows.filter(e=>entrySchedule(e,kstInstant(date,'00:00'))&&e.time===old.time);
+    const gone=hmp.coverage===true&&!matches.length,changed=matches.some(e=>e.time!==old.time||e.lectureEnded===true||['not_registered','closed'].includes(e.registrationStatus)),ambiguous=new Set(eligible.map(e=>this.store.entryKey(e))).size>1;
+    if(gone||changed||ambiguous)this.store.updateEntry(old.key,{status:ambiguous?'ambiguous':changed&&matches.some(e=>e.lectureEnded)?'lecture_ended':'cancelled',nextAt:0,policyClosed:gone?'hmp_target_removed':ambiguous?'hmp_target_ambiguous':'hmp_target_changed'});
+   }
+  }
   for(const [site,result] of Object.entries(results)){
-   if(!selected.includes(site)||result.stale||result.pending||!['ok','review'].includes(result.status)||!Array.isArray(result.events))continue;
+   if(!automaticEntrySite(site)||!selected.includes(site)||result.stale||result.pending||!['ok','review'].includes(result.status)||!Array.isArray(result.events))continue;
    const targets=this.store.bindIdentities(site,date,result.events);
    const hmpGroups=new Map();for(const event of result.events)if(site==='hmp'&&entrySchedule(event,this.now())){const ids=hmpGroups.get(event.time)??new Set();ids.add(this.store.entryKey(event));hmpGroups.set(event.time,ids);}
    for(const target of targets){
@@ -142,6 +153,7 @@ export class EntryRunner{
   for(const job of this.store.entries())if(['attempting','running'].includes(job.status))this.#finish(job,{status:'unknown',reason:'unknown_result',attempted:job.entryAttempted===true});
  }
  due(now=this.now(),excludeKey){
+  this.store.migrateEntryPolicies?.();
   const all=this.store.entries(kstDate(now)),jobs=all.filter(job=>identityRunnable(job,all)&&this.store.entrySites().includes(job.site)&&job.status==='reserved');
   for(const job of jobs)if(now>job.deadline&&!this.revisions.has(job.key)&&!(this.active?.kind==='schedule'&&this.active.job.key===job.key)){this.#finish(job,{status:'expired',reason:'expired',attempted:false});}
   return nextIdentityEntry(this.store.entries(kstDate(now)),now,{date:kstDate(now),readyOnly:true,selected:this.store.entrySites(),excludeKey});
@@ -151,20 +163,21 @@ export class EntryRunner{
  }
  cancelJob(key,manual=false){const job=this.store.entries(kstDate(this.now())).find(row=>row.key===key);if(!job)return false;if(manual&&(this.#consumed(job)||job.entryAttempted!==false||['clicked','unknown','manual_clicked','cancelled'].includes(job.status)))return false;if(this.active?.job.key===key)this.cancel();this.store.updateEntry(key,{status:manual?'manual_clicked':'cancelled',...(manual?{entryAttempted:true}:{}),nextAt:0,receipt:cleanReceipt({status:manual?'manual_clicked':'cancelled',reason:manual?'manual_clicked':'cancelled'})});this.#observe(job,'state_observed',{status:manual?'manual_clicked':'cancelled'});this.onChange();return true;}
  manualCandidate(candidate){const keys=priorIdentityKeys(this.store.entries(candidate.date),candidate);if(keys.length!==1||!this.cancelJob(keys[0],true))return false;candidate.key=keys[0];return true;}
- #consumed(job){return this.ledger.consumed({site:job.site,kind:'entry',date:job.date,target:job.key,slot:job.slot,dueAt:job.due,deadline:job.deadline});}
+ #consumed(job){return this.ledger.consumed({site:job.site,kind:'entry',date:job.date,target:job.key,slot:hmpLedgerSlot(job),dueAt:job.due,deadline:job.deadline});}
  retryJob(key){
-  const job=this.store.entries(kstDate(this.now())).find(row=>row.key===key);if(!job||this.#consumed(job)||this.active?.job.key===key||job.entryAttempted!==false||!identityRunnable(job,this.store.entries(job.date))||['clicked','manual_clicked','lecture_ended'].includes(job.status)||this.now()>job.deadline)return false;
+  const job=this.store.entries(kstDate(this.now())).find(row=>row.key===key);if(!job||!automaticEntrySite(job.site)||!validHmpCheckpoint(job)||this.#consumed(job)||this.active?.job.key===key||job.entryAttempted!==false||!identityRunnable(job,this.store.entries(job.date))||['clicked','manual_clicked','lecture_ended'].includes(job.status)||this.now()>job.deadline)return false;
   if(job.status==='cancelled'){const row=this.catalog(job.date)[job.site];if(!row||row.stale||row.pending||!['ok','review'].includes(row.status))return false;const targets=(row.events??[]).filter(e=>e.date===job.date&&sameEntryTarget(job,e)&&e.time===job.time&&!e.historyOnly);if(targets.length!==1)return false;const candidate=rebookIdentity(job,targets[0],this.now());if(!candidate)return false;this.store.updateEntry(key,candidate);this.onChange();return true;}
   this.store.updateEntry(key,{status:'reserved',nextAt:Math.max(job.due,this.now()),retries:0});this.onChange();return true;
  }
  registrationConfirmed(target){
   const job=this.store.entries(target.date).find(row=>row.site===target.site&&row.date===target.date&&row.time===target.time&&sameEntryTarget(row,target));
   if(!job||job.date!==kstDate(this.now())||!this.store.features().entry||!this.store.entrySites().includes(job.site)||job.status!=='not_registered'||job.entryAttempted||this.now()>job.deadline)return false;
-  const input={site:job.site,kind:'entry',date:job.date,target:job.key,slot:job.slot,dueAt:job.due,deadline:job.deadline};if(this.ledger.consumed(input))return false;
+  const input={site:job.site,kind:'entry',date:job.date,target:job.key,slot:hmpLedgerSlot(job),dueAt:job.due,deadline:job.deadline};if(this.ledger.consumed(input))return false;
   return this.retryJob(job.key);
  }
  #finish(job,raw){
-  const current=this.store.entries(job.date).find(row=>row.key===job.key);if(!sameWorker(job,current)||!sameReceiptOwner(job,current)||current&&['cancelled','manual_clicked'].includes(current.status))return;
+  const current=this.store.entries(job.date).find(row=>row.key===job.key);if(!automaticEntrySite(job.site)||!sameWorker(job,current)||!sameReceiptOwner(job,current)||current&&['cancelled','manual_clicked'].includes(current.status))return;
+  if(job.site==='hmp'&&raw.attempted===false&&this.#consumed(job))raw={status:'unknown',reason:'unknown_result'};
   const now=this.now(),receipt=cleanReceipt({...raw,slot:job.slot,due:job.due},now),attempts=[...(job.attempts??[]),receipt].slice(-5);
   const next=nextCheckpoint(job,receipt,now);if(next){this.store.updateEntry(job.key,{...next,attempts,receipt,executionFinishedAt:now});this.onChange();return;}
   if(job.repeatSchema===1&&!['lecture_ended','manual_clicked','cancelled','blocked','login','ambiguous','not_registered'].includes(receipt.status)){
@@ -172,9 +185,11 @@ export class EntryRunner{
    while(first&&next<3&&first+next*600000+90000<now)next++;
    if(first&&next<3&&kstDate(first+next*600000)===job.date){const due=first+next*600000;this.store.updateEntry(job.key,{status:'reserved',slot:next,due,deadline:due+90000,nextAt:Math.max(due,now),repeatFirstEntryAt:first,attempts,receipt,executionFinishedAt:now,retries:0,entryAttempted:false});this.onChange();return;}
   }
-  if(job.site==='hmp'&&!['lecture_ended','manual_clicked','cancelled','blocked','login','ambiguous'].includes(receipt.status)){
-   let next=job.slot+1;while(next<5&&job.start+next*600000<now)next++;
-   if(next<5){const due=job.start+next*600000;this.store.updateEntry(job.key,{status:'reserved',slot:next,due,deadline:due+90000,nextAt:due,attempts,receipt,executionFinishedAt:receipt.checkedAt,retries:0,entryAttempted:false});this.onChange();return;}
+  if(job.site==='hmp'&&job.hmpRepeatSchema===2){
+   const history=hmpHistory(job,{...receipt,attempted:raw.attempted},now),continueAllowed=!this.ledger.snapshot().paused&&this.store.features().entry&&this.store.entrySites().includes('hmp')&&!this.isManualOpen('hmp')&&raw.reason!=='scope_changed';
+   const next=continueAllowed?nextHmpCheckpoint(job,{...receipt,status:raw.status??receipt.status},now,history):null;
+   if(next){this.store.updateEntry(job.key,{...next,attempts,receipt,executionFinishedAt:now});this.onChange();return;}
+   this.store.updateEntry(job.key,{hmpAttempts:history});
   }
   this.store.updateEntry(job.key,{status:receipt.status,receipt,attempts,executionFinishedAt:receipt.checkedAt,nextAt:0,entryAttempted:raw.attempted===true||job.entryAttempted===true});this.onChange();
  }
@@ -192,7 +207,7 @@ export class EntryRunner{
  }
  async preflight(key){
   const job=this.store.entries(kstDate(this.now())).find(row=>row.key===key);
-  if(!job||!this.createInspectionPage||this.active||this.isManualOpen(job.site))return {ok:false,reason:'busy'};
+  if(!job||!automaticEntrySite(job.site)||!validHmpCheckpoint(job)||!this.createInspectionPage||this.active||this.isManualOpen(job.site))return {ok:false,reason:'busy'};
   if(!canPreflightEntry(job))return {ok:false,reason:'duplicate_prevented'};
   const controller=new AbortController(),run={job,controller,page:null};this.active=run;
   const selectionEpoch=this.store.selectionEpoch,accountEpoch=this.contextEpoch(job.site),ledgerEpoch=this.ledger.snapshot().epoch;
@@ -239,15 +254,15 @@ export class EntryRunner{
   }
  }
  async run(job,{prepare=false}={}){
-  if(this.active)return false;
+  if(this.active||!automaticEntrySite(job?.site)||!validHmpCheckpoint(job))return false;
   const controller=new AbortController(),run={job,controller,page:null};this.active=run;const began=this.now(),runId=randomUUID().replace(/-/g,'');let ticket=null,dispatched=false,started=false,rescheduled=false,liveCatalogRead=false,receipt={status:'unknown',reason:'unknown_result'},adapter='auto-entry.js',trace;
   const emit=(phase,detail={})=>this.emit(phase,job,{runId,...detail});
   const ownerEpoch=this.ledger.snapshot().epoch,selectionEpoch=this.store.selectionEpoch,accountEpoch=this.contextEpoch(job.site);
   const allowed=()=>{
    const current=this.store.entries(job.date).find(j=>j.key===job.key),rows=this.store.entries(job.date),markers=current&&(current.entryAttempted===false||dispatched&&current.entryAttempted===true&&current.status==='attempting');
-   return !!markers&&sameWorker(job,current)&&!current.identityBlock&&!duplicateIdentityKeys(rows).has(job.key)&&!controller.signal.aborted&&!this.ledger.snapshot().paused&&this.ledger.snapshot().epoch===ownerEpoch&&this.store.selectionEpoch===selectionEpoch&&this.contextEpoch(job.site)===accountEpoch&&this.store.features().entry&&this.store.entrySites().includes(job.site)&&!['cancelled','manual_clicked','clicked','unknown'].includes(current.status)&&job.date===kstDate(this.now())&&!this.store.failed;
+   return automaticEntrySite(job.site)&&validHmpCheckpoint(job)&&!legacyHmpOverlap(this.ledger,job)&&!this.isManualOpen(job.site)&&!!markers&&sameWorker(job,current)&&!current.identityBlock&&!duplicateIdentityKeys(rows).has(job.key)&&!controller.signal.aborted&&!this.ledger.snapshot().paused&&this.ledger.snapshot().epoch===ownerEpoch&&this.store.selectionEpoch===selectionEpoch&&this.contextEpoch(job.site)===accountEpoch&&this.store.features().entry&&this.store.entrySites().includes(job.site)&&!['cancelled','manual_clicked','clicked','unknown'].includes(current.status)&&job.date===kstDate(this.now())&&!this.store.failed;
   };
-  const nativeJob=()=>({...job,due:prepare?job.prepAt:job.due,deadline:prepare?job.start-1:job.deadline,...(liveCatalogRead?{requireDoctorDetail:true}:{}),...(job.site==='hmp'?{hmpRepeatSchema:1,hmpSlot:job.slot}:job.repeatSchema===1?{repeatSlot:job.slot}:{})});
+  const nativeJob=()=>({...job,due:prepare&&job.site!=='hmp'?job.prepAt:job.due,deadline:prepare&&job.site!=='hmp'?job.start-1:job.deadline,...(liveCatalogRead?{requireDoctorDetail:true}:{}),...(job.site==='hmp'?{hmpRepeatSchema:2,hmpSlot:job.slot,...(prepare?{hmpPreparation:true}:{})}:job.repeatSchema===1?{repeatSlot:job.slot}:{})});
   try{
    if(!allowed())return false;
    started=true;
@@ -256,7 +271,7 @@ export class EntryRunner{
    emit('start',{startedAt:began,delayMs:Math.max(0,began-job.due),readOnly:prepare});
    if(this.isManualOpen(job.site)){receipt={status:'busy',reason:'manual_view_open'};return false;}
    if(!prepare)this.store.updateEntry(job.key,{status:'running'});
-   run.page=await this.createPage(job.site,controller.signal,{onDiagnostic:(phase,detail)=>{if(this.active===run&&!controller.signal.aborted)trace.event(phase,detail);}});const page=run.page;await page.load(siteById(job.site).url);let navigations=0,detailOpened=false,pcDetailRead=false,changeSignature='';
+   run.page=await this.createPage(job.site,controller.signal,{purpose:'entry',onDiagnostic:(phase,detail)=>{if(this.active===run&&!controller.signal.aborted)trace.event(phase,detail);}});const page=run.page;await page.load(siteById(job.site).url);let navigations=0,detailOpened=false,pcDetailRead=false,changeSignature='';
    // Keep the verified detail authoritative when the list still has an old
    // clock or omits the end time needed by a live recovery.
    if(job.site==='doctorville'&&!prepare&&job.scheduleIdentity){
@@ -328,11 +343,11 @@ export class EntryRunner{
      if(job.entryClosesAt&&(!Number.isSafeInteger(reply.endsAt)||reply.endsAt<=this.now())){receipt={status:'lecture_ended',reason:'lecture_ended'};break;}
      const documentBinding=page.entryBinding?.();
      if(!allowed()){receipt={status:'cancelled',reason:'scope_changed',attempted:false};break;}
-     const input={site:job.site,kind:'entry',date:job.date,target:job.key,slot:job.slot,dueAt:job.due,deadline:job.deadline};
+     const input={site:job.site,kind:'entry',date:job.date,target:job.key,slot:hmpLedgerSlot(job),dueAt:job.due,deadline:job.deadline};
      ticket=this.ledger.reserve(input,this.now());if(!ticket||!allowed()||!this.ledger.beginDispatch(ticket,this.now())){receipt={status:'unknown',reason:'duplicate_prevented'};break;}
      this.store.updateEntry(job.key,{status:'attempting',entryAttempted:true});page.allowPopups(true);const before=page.version,beforeUrl=page.url;dispatched=true;
      page.armEntryDispatch?.();
-     emit('dispatch',{attempted:true,targetMatched:true});
+     resourceCount('entryDispatches');emit('dispatch',{attempted:true,targetMatched:true});
      trace.event('click_requested',{attempted:true,targetMatched:true});
      const executed=await page.call(adapter,[nativeJob(),'click'],{navigation:true,expectedDocument:documentBinding,authorize:()=>allowed()&&this.ledger.snapshot().jobs[ticket.key]?.state==='attempting'&&this.ledger.snapshot().epoch===ticket.epoch});
      trace.event('click_response',executed);
@@ -349,7 +364,7 @@ export class EntryRunner{
      }
      if(job.site==='hmp'){
       receipt.playback='navigation_unconfirmed';
-      if(receipt.navigationObserved){const playback=await page.call('auto-entry.js',[nativeJob(),'playback_start']);receipt.playback=playback.status;await this.sleep(1200,controller.signal);receipt.playback=(await page.call('auto-entry.js',[nativeJob(),'playback_probe'])).status;trace.event('playback_observed',{playback:receipt.playback});}
+      if(receipt.navigationObserved&&allowed()){const playback=await page.call('auto-entry.js',[nativeJob(),'playback_start']);receipt.playback=playback.status;await this.sleep(1200,controller.signal);if(allowed()){receipt.playback=(await page.call('auto-entry.js',[nativeJob(),'playback_probe'])).status;trace.event('playback_observed',{playback:receipt.playback});}}
      }
      if(job.site==='doctorville'&&allowed()){try{this.onSurvey(page.url,await page.call('doctorville-survey.js',['']));}catch{}}
      break;

@@ -1,3 +1,4 @@
+import {automaticEntrySite} from './entry-support.js';
 import {validDocpleEvent} from './docple-policy.js';
 import {parseOfficialIdentity} from './entry-identity.js';
 import {readFileSync} from 'node:fs';
@@ -58,11 +59,11 @@ export function dailyDialog(task,message,attempted){
  return {accept:false,status:'unknown',reason:'manual_confirmation'};
 }
 export function entrySchedule(event,now=Date.now()){
- if(!event||!ENTRY_SITES.includes(event.site)||event.date!==kstDate(now)||typeof event.title!=='string'||!event.title.trim()||event.title.length>800||event.lectureEnded)return null;
+ if(!event||!automaticEntrySite(event.site)||event.date!==kstDate(now)||typeof event.title!=='string'||!event.title.trim()||event.title.length>800||event.lectureEnded)return null;
  try{
   if(event.site==='docple'&&(!validDocpleEvent(event)||event.registrationStatus!=='registered'))return null;
   const start=kstInstant(event.date,event.time),deadline=start+600000;
-  if(now>(event.site==='hmp'?start+4*600000+90000:deadline))return null;
+  if(now>(event.site==='hmp'?start+25*60000+90000:deadline))return null;
   if(event.site==='hmp'&&!(['registered'].includes(event.registrationStatus)||event.registrationStatus==='unknown'&&event.hmpWatchAvailable===true))return null;
   return {start,due:event.site==='doctorville'?start-3000000:event.site==='docple'?start-1800000:['hmp','whodadoc','dtalks'].includes(event.site)?start:start+30000,deadline:event.site==='hmp'?start+90000:deadline};
  }catch{return null;}

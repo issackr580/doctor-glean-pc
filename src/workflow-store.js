@@ -1,3 +1,5 @@
+import {automaticEntrySite} from './entry-support.js';
+import {migrateEntryPolicy} from './hmp-policy.js';
 import {docpleKey,validDocpleEvent} from './docple-policy.js';
 import {createHash} from 'node:crypto';
 import {legacyEntryKey,officialEntryKey,officialIdentity,identityInvalid,bindIdentityCatalog,priorIdentityKeys} from './entry-identity.js';
@@ -26,7 +28,7 @@ export function cleanEntryInspection(raw,now=Date.now()){
  return out;
 }
 function valid(data){
- if(!data||data.schemaVersion!==1||Object.keys(data).sort().join('|')!=='days|entries|entrySites|features|schemaVersion'||!Array.isArray(data.entrySites)||data.entrySites.length>9||data.entrySites.some(id=>!ENTRY_SITES.includes(id))||new Set(data.entrySites).size!==data.entrySites.length||!data.features||Object.keys(data.features).sort().join('|')!==Object.keys(DEFAULT_FEATURES).sort().join('|')||Object.values(data.features).some(value=>typeof value!=='boolean')||!data.days||Array.isArray(data.days)||!data.entries||Array.isArray(data.entries)||Object.keys(data.days).length>9||Object.keys(data.entries).length>400)return false;
+ if(!data||![1,2].includes(data.schemaVersion)||Object.keys(data).sort().join('|')!=='days|entries|entrySites|features|schemaVersion'||!Array.isArray(data.entrySites)||data.entrySites.length>9||data.entrySites.some(id=>!ENTRY_SITES.includes(id))||new Set(data.entrySites).size!==data.entrySites.length||!data.features||Object.keys(data.features).sort().join('|')!==Object.keys(DEFAULT_FEATURES).sort().join('|')||Object.values(data.features).some(value=>typeof value!=='boolean')||!data.days||Array.isArray(data.days)||!data.entries||Array.isArray(data.entries)||Object.keys(data.days).length>9||Object.keys(data.entries).length>400)return false;
  const receipt=row=>row&&typeof row==='object'&&!Array.isArray(row)&&number(row.checkedAt)&&JSON.stringify(cleanReceipt(row,row.checkedAt))===JSON.stringify(row);
  for(const [day,row] of Object.entries(data.days)){
   if(!validDate(day)||!row||typeof row!=='object'||!row.daily||Array.isArray(row.daily)||Object.keys(row).some(key=>!['daily','morning','lounge','quizAuto','survey'].includes(key))||Object.keys(row.daily).some(key=>!DAILY_TASKS.some(task=>task.key===key)))return false;
@@ -35,6 +37,7 @@ function valid(data){
  for(const [key,row] of Object.entries(data.entries))if(!/^[a-f0-9]{64}$/.test(key)||row?.key!==key||!ENTRY_SITES.includes(row.site)||!validDate(row.date)||typeof row.title!=='string'||row.title.length>800||!/^([01]\d|2[0-3]):[0-5]\d$/.test(row.time)||!number(row.start)||!number(row.due)||!number(row.deadline)||!STATUSES.has(row.status)||!number(row.nextAt)||!number(row.slot)||row.slot>4||!number(row.retries)||row.retries>4||typeof row.entryAttempted!=='boolean'||!Array.isArray(row.attempts)||row.attempts.length>5||row.attempts.some(item=>!receipt(item))||row.receipt!==undefined&&!receipt(row.receipt)||row.preflight!==undefined&&!receipt(row.preflight)||row.lastStartedAt!==undefined&&!number(row.lastStartedAt)||row.executionFinishedAt!==undefined&&!number(row.executionFinishedAt)||row.executionVersion!==undefined&&!/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(row.executionVersion)||row.sourceCommit!==undefined&&!/^[a-f0-9]{40}$/.test(row.sourceCommit))return false;
  for(const row of Object.values(data.entries))if(row.inspection!==undefined&&(!row.inspection||!number(row.inspection.checkedAt)||JSON.stringify(cleanEntryInspection(row.inspection,row.inspection.checkedAt))!==JSON.stringify(row.inspection)))return false;
  for(const row of Object.values(data.entries)){
+  if(row.site==='hmp'&&(row.hmpRepeatSchema!==undefined&&![1,2].includes(row.hmpRepeatSchema)||row.hmpRepeatSchema===2&&(row.hmpTiming!=='start_0_25_35'||row.slot>2||!Array.isArray(row.hmpAttempts)||row.hmpAttempts.length>8)))return false;
   if(row.site!=='hmp'&&row.repeatSchema!==1&&row.schedulePairSchema!==1&&row.slot!==0)return false;
   if(row.site==='docple'&&(!validDocpleEvent(row)||row.key!==docpleKey(row)))return false;
   if(row.schedulePairSchema!==undefined&&(row.schedulePairSchema!==1||row.site==='hmp'||row.repeatSchema||!Array.isArray(row.schedulePlan)||row.schedulePlan.length!==2||row.scheduleSlot!==row.slot||row.slot>1||!Array.isArray(row.scheduleConsumed)||row.scheduleConsumed.some(s=>![0,1].includes(s))||new Set(row.scheduleConsumed).size!==row.scheduleConsumed.length||row.schedulePlan.some((p,i)=>p.slot!==i||!/^([01]\d|2[0-3]):[0-5]\d$/.test(p.time)||!['start','due','deadline'].every(k=>number(p[k])))))return false;
@@ -47,7 +50,7 @@ function valid(data){
  return true;
 }
 export class WorkflowStore{
- constructor(file,{commit=atomicJson,snapshot=snapshotIdentityState,now=Date.now}={}){this.now=now;this.file=file;this.commit=commit;this.failed=false;this.selectionEpoch=0;this.data=readJson(file,{schemaVersion:1,features:{...DEFAULT_FEATURES},entrySites:ENTRY_SITES.filter(id=>!['docple','whodadoc','dtalks'].includes(id)),days:{},entries:{}},valid);snapshot(file);}
+ constructor(file,{commit=atomicJson,snapshot=snapshotIdentityState,now=Date.now,policyConsumed=()=>false}={}){this.now=now;this.policyConsumed=policyConsumed;this.file=file;this.commit=commit;this.failed=false;this.selectionEpoch=0;this.data=readJson(file,{schemaVersion:2,features:{...DEFAULT_FEATURES},entrySites:ENTRY_SITES.filter(id=>!['docple','whodadoc','dtalks'].includes(id)),days:{},entries:{}},valid);snapshot(file);snapshotIdentityState(file,'before-entry-policy-v156');this.migrateEntryPolicies();}
  #save(next){
   const today=kstDate(this.now()),first=kstDate(this.now()-7*86400000);
   for(const day of Object.keys(next.days))if(day<first||day>today)delete next.days[day];
@@ -55,6 +58,7 @@ export class WorkflowStore{
   if(!valid(next))throw Error('storage_error');
   try{this.commit(this.file,next);this.data=next;}catch{this.failed=true;throw Error('storage_error');}
  }
+ migrateEntryPolicies(){const next=clone(this.data);next.schemaVersion=2;for(const [key,row] of Object.entries(next.entries))next.entries[key]=migrateEntryPolicy(row,this.now(),this.policyConsumed(row));if(JSON.stringify(next)!==JSON.stringify(this.data))this.#save(next);}
  features(){return {...this.data.features};}
  recover(){
   const next=clone(this.data);let changed=false;
@@ -64,7 +68,7 @@ export class WorkflowStore{
  setFeature(key,value){if(!Object.hasOwn(DEFAULT_FEATURES,key)||typeof value!=='boolean')throw Error('invalid_setting');const next=clone(this.data);next.features[key]=value;this.#save(next);if(key==='entry')this.selectionEpoch++;}
  entrySites(){return [...this.data.entrySites];}
  setEntrySites(ids){if(!Array.isArray(ids)||ids.some(id=>!ENTRY_SITES.includes(id))||new Set(ids).size!==ids.length)throw Error('invalid_setting');const next=clone(this.data);next.entrySites=[...ids];this.#save(next);this.selectionEpoch++;}
- day(day=kstDate()){
+ day(day=kstDate(this.now())){
   const raw=this.data.days[day]??{daily:{}};const daily={};
   for(const task of DAILY_TASKS)if(raw.daily[task.key])daily[task.key]=cleanReceipt(raw.daily[task.key],raw.daily[task.key].checkedAt);
   const out={daily};for(const key of ['morning','lounge','quizAuto','survey'])if(raw[key])out[key]=cleanReceipt(raw[key],raw[key].checkedAt);
@@ -76,10 +80,10 @@ export class WorkflowStore{
   if(DAILY_TASKS.some(task=>task.key===key))next.days[day].daily[key]=row;else next.days[day][key]=row;
   this.#save(next);return row;
  }
- entries(day=kstDate()){return Object.values(this.data.entries).filter(row=>row.date===day).map(clone);}
+ entries(day=kstDate(this.now())){return Object.values(this.data.entries).filter(row=>row.date===day).map(clone);}
  entryKey(event){if(identityInvalid(event))throw Error('invalid_event');const keys=priorIdentityKeys(this.entries(event.date),event);if(keys.length===1)return keys[0];if(event.site==='docple')return docpleKey(event);return officialEntryKey(event)??legacyEntryKey(event);}
  bindIdentities(site,date,events){const bound=bindIdentityCatalog(this.entries(date),events,site,date),next=clone(this.data);for(const row of bound.rows)next.entries[row.key]=row;if(JSON.stringify(next)!==JSON.stringify(this.data))this.#save(next);return bound.targets;}
  putEntry(row){const next=clone(this.data);next.entries[row.key]=clone(row);this.#save(next);}
  updateEntry(key,change){const row=this.data.entries[key];if(!row)return false;const next=clone(this.data);next.entries[key]={...next.entries[key],...clone(change)};this.#save(next);return true;}
- diagnostics(){return {features:this.features(),entrySites:this.entrySites(),today:this.day(),entries:this.entries().map(({key,site,date,time,status,due,deadline,nextAt,slot,retries,attempts,receipt,preflight,inspection,lastStartedAt,executionFinishedAt,executionVersion,sourceCommit,scheduleChanges,entryClosesAt,repeatSchema,repeatFirstEntryAt,schedulePairSchema,schedulePlan,scheduleSlot,scheduleConsumed})=>({key,site,date,time,status,due,deadline,nextAt,slot,retries,attempts:attempts?.map(item=>cleanReceipt(item,item.checkedAt)),receipt:receipt?cleanReceipt(receipt,receipt.checkedAt):undefined,...(preflight?{preflight:cleanReceipt(preflight,preflight.checkedAt)}:{}),...(inspection?{inspection:cleanEntryInspection(inspection,inspection.checkedAt)}:{}),...(lastStartedAt!==undefined?{lastStartedAt,executionFinishedAt,executionVersion,...(sourceCommit?{sourceCommit}:{})}:{}),...(repeatSchema?{repeatSchema,repeatFirstEntryAt}:{}),...(schedulePairSchema?{schedulePairSchema,schedulePlan:clone(schedulePlan),scheduleSlot,scheduleConsumed:[...scheduleConsumed]}:{}),...(scheduleChanges?{scheduleChanges:clone(scheduleChanges)}:{}),...(entryClosesAt?{entryClosesAt}:{})})),storageUnavailable:this.failed};}
+ diagnostics(){return {features:this.features(),entrySites:this.entrySites(),automaticEntrySites:this.entrySites().filter(automaticEntrySite),today:this.day(),entries:this.entries().map(({key,site,date,time,status,due,deadline,nextAt,slot,retries,attempts,receipt,preflight,inspection,lastStartedAt,executionFinishedAt,executionVersion,sourceCommit,scheduleChanges,entryClosesAt,hmpRepeatSchema,hmpTiming,hmpAttempts,repeatSchema,repeatFirstEntryAt,schedulePairSchema,schedulePlan,scheduleSlot,scheduleConsumed})=>({key,site,date,time,status,due,deadline,nextAt,slot,retries,attempts:attempts?.map(item=>cleanReceipt(item,item.checkedAt)),receipt:receipt?cleanReceipt(receipt,receipt.checkedAt):undefined,...(preflight?{preflight:cleanReceipt(preflight,preflight.checkedAt)}:{}),...(inspection?{inspection:cleanEntryInspection(inspection,inspection.checkedAt)}:{}),...(lastStartedAt!==undefined?{lastStartedAt,executionFinishedAt,executionVersion,...(sourceCommit?{sourceCommit}:{})}:{}),...(hmpRepeatSchema?{hmpRepeatSchema,hmpTiming,hmpAttempts:hmpAttempts?.map(r=>({hmpRepeatSchema:r.hmpRepeatSchema,slot:r.slot,due:r.due,at:r.at,entryAttempted:typeof r.entryAttempted==='boolean'?r.entryAttempted:undefined,status:STATUSES.has(r.status)?r.status:'unknown',playback:r.playback}))}:{}),...(repeatSchema?{repeatSchema,repeatFirstEntryAt}:{}),...(schedulePairSchema?{schedulePairSchema,schedulePlan:clone(schedulePlan),scheduleSlot,scheduleConsumed:[...scheduleConsumed]}:{}),...(scheduleChanges?{scheduleChanges:clone(scheduleChanges)}:{}),...(entryClosesAt?{entryClosesAt}:{})})),storageUnavailable:this.failed};}
 }

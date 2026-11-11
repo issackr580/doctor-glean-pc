@@ -1,3 +1,4 @@
+import {browserHmpCheckpoint} from './hmp-policy.js';
 import {readLectureIdentity,entryIdentityScope,observedLectureUrl} from '../vendor/identity/lecture-identity.js';
 // Serialized with every actual PC entry/registration injection, never just
 // imported in Node. These functions confer target identity, not authorization.
@@ -20,5 +21,5 @@ export function bindEntryControl(job,mode,button){
  if(mode!=='click'){map.set(key,{button,root,fingerprint});if(map.size>16)map.delete(map.keys().next().value);return true;}
  const prior=map.get(key);return !!prior&&prior.button===button&&prior.root===root&&button.isConnected&&prior.fingerprint===fingerprint;
 }
-export function identityPrelude(){return `const readLectureIdentity=(${readLectureIdentity.toString()});const observedLectureUrl=(${observedLectureUrl.toString()});const entryIdentityScope=(${entryIdentityScope.toString()});const browserIdentityContext=(${browserIdentityContext.toString()});const bindEntryControl=(${bindEntryControl.toString()});`;}
+export function identityPrelude(){return `const browserHmpCheckpoint=(${browserHmpCheckpoint.toString()});const readLectureIdentity=(${readLectureIdentity.toString()});const observedLectureUrl=(${observedLectureUrl.toString()});const entryIdentityScope=(${entryIdentityScope.toString()});const browserIdentityContext=(${browserIdentityContext.toString()});const bindEntryControl=(${bindEntryControl.toString()});`;}
 export function withIdentity(fn){return `(function(){${identityPrelude()}return (${fn.toString()});})()`;}

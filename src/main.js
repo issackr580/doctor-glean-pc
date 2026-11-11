@@ -1,3 +1,5 @@
+import {NativeCatalogRead} from './native-catalog.js';
+import {resourceUse,trackPage} from './resource-use.js';
 import {app,BrowserWindow,Menu,Tray,nativeImage,ipcMain,session,dialog,clipboard,powerMonitor,safeStorage,net,shell,Notification} from 'electron';
 import {fileURLToPath} from 'node:url';
 import {join} from 'node:path';
@@ -88,7 +90,7 @@ const buildState=()=>({
 function diagnosticSnapshot(){
  const snapshot=state.snapshot();
  return {appName:EDITION.name,applicationId:EDITION.appId,edition:EDITION.id,appVersion:VERSION,build:BUILD_INFO,exportedAt:Date.now(),processStartedAt:PROCESS_STARTED_AT,date:kstDate(),automationPaused:snapshot.paused,
-  runtime:{platform:process.platform,arch:process.arch,electron:process.versions.electron,chromium:process.versions.chrome,osRelease:release()},runtimeFaults:runtimeFaults.snapshot(),
+  runtime:{platform:process.platform,arch:process.arch,electron:process.versions.electron,chromium:process.versions.chrome,osRelease:release()},runtimeFaults:runtimeFaults.snapshot(),resourceUse:resourceUse(),
   stage:'automation',automationAvailable:true,collection:collector.snapshot(),selectedCatalogSites:catalog.selected(),pendingQueries:catalogQueue?.snapshot()??[],sites:catalog.diagnostics(viewDate),automation:automation?.diagnostics(),
   siteSessions:SITES.map(({id})=>({site:id,open:[...manualOwners.values()].includes(id),...effectiveSession(id)})),credentials:credentials?.snapshot(),registration:registration?.store.snapshot(),browserEvents:[...browserEvents],developerDiagnostics:developerTools?.status(),
   attempts:Object.values(snapshot.jobs).map(({site,kind,date,slot,state,updatedAt})=>({site,kind,date,slot,state,updatedAt}))};
@@ -223,6 +225,8 @@ function showControl(){
   const window=control;
   window.loadURL(controlUrl).catch(error=>{if(!quitting&&control===window&&!window.isDestroyed())operationError(error,'control');});
 }
+const profileEpochs=new Map();
+app.on('web-contents-created',(_event,contents)=>trackPage(contents,'all'));
 function prepareSession(id){
   const preferences=remotePreferences(id,EDITION.id);
   const profile=session.fromPartition(preferences.partition);
@@ -230,6 +234,8 @@ function prepareSession(id){
     profile.setPermissionRequestHandler((_contents,_permission,callback)=>callback(false));
     profile.setPermissionCheckHandler(()=>false);
     profile.on('will-download',event=>event.preventDefault());
+    profile.on('cookie-changed',()=>profileEpochs.set(id,(profileEpochs.get(id)??0)+1));
+    profile.cookies.on('changed',()=>profileEpochs.set(id,(profileEpochs.get(id)??0)+1));
     configuredSessions.add(id);
   }
   return preferences;
@@ -413,7 +419,7 @@ else{
   app.on('quit',()=>runtimeFaults.close());
   app.whenReady().then(()=>{
     try{
-      snapshotIdentityState(join(app.getPath('userData'),'workflows-v1.json'));
+      snapshotIdentityState(join(app.getPath('userData'),'workflows-v1.json'));snapshotIdentityState(join(app.getPath('userData'),'workflows-v1.json'),'before-entry-policy-v156');
       state=new LocalState(join(app.getPath('userData'),'state-v1.json'));
       updater=new PcUpdater({context:{appPath:app.getAppPath(),executable:process.execPath,edition:EDITION.id,currentVersion:VERSION,electronVersion:process.versions.electron,platform:process.platform,arch:process.arch,channel:VERSION.includes('-preview.')?'preview':'stable'},
        fetch:(...args)=>net.fetch(...args),publicDownload:electronPatchDownload,privateDownload:(target,progress)=>downloadPrivateUpdate(target,progress,{parent:control}),
@@ -442,13 +448,14 @@ else{
         if(validation){const close=page.close.bind(page),profile=session.fromPartition(partition);let cleaned=false;page.close=()=>{close();if(!cleaned){cleaned=true;profile.clearStorageData().catch(()=>{});profile.clearCache().catch(()=>{});}};}
         return page;
        },onChange:()=>{notify();if(!credentials?.busy)queueMicrotask(()=>{catalogQueue?.pump();automation?.tick();});}});
+      const nativeCatalog=new NativeCatalogRead({sessionOwner:id=>session.fromPartition(prepareSession(id).partition),accountEpoch:id=>credentials.vault.epoch(id),profileEpoch:id=>profileEpochs.get(id)??0});
       collector=new CatalogRunner({store:catalog,createPage:(profile,signal)=>electronCatalogPage(profile,signal,prepareSession(profile.id)),
-        prepareCollection:(id,signal)=>credentials.prepareCollection(id,signal),
+        prepareCollection:async(id,signal)=>{const admission=await credentials.prepareCollection(id,signal);if(id==='ckd')nativeCatalog.admitCkd(admission);},nativeRead:(...args)=>nativeCatalog.read(...args),
         recoverLogin:async(id,signal)=>(await credentials.recover(id,{automatic:true,signal})).status==='authenticated',
         isManualOpen:id=>[...manualOwners.values()].includes(id)||credentials.active?.site===id,onChange:snapshot=>{developerTools.observe(snapshot);notify();if(!snapshot.running)queueMicrotask(()=>catalogQueue?.pump());}});
       catalogQueue=new CatalogQueue({start:async(date,ids)=>{await collector.start(date,ids);automation?.catalogFinished(date,ids,collector.snapshot());},busy:()=>updater.guarded||collector.snapshot().running||!!automation?.busy||credentials.busy,validDate:validQueryDate,onChange:notify});
       automation=new AutomationController({file:join(dataDirectory,'workflows-v1.json'),options:pcOptions,notifySurvey:key=>{if(Notification.isSupported()){const notice=new Notification({title:'닥터빌 설문 참여 안내',body:'설문 기한을 확인했어요. 앱에서 상세 화면을 열어 직접 참여해 주세요.'});notice.on('click',()=>showControl());notice.on('close',()=>surveyNotices.delete(key));surveyNotices.set(key,notice);notice.show();}},ledger:state,executionAllowed:()=>!updater.guarded,
-       entryContextEpoch:site=>credentials.vault.epoch(site),createPage:(site,signal,options)=>credentials.wrapPage(site,new AutomationPage(site,signal,prepareSession(site),{...options,externalEntryAllowed:(id,url)=>pcOptions.allowsEntry(id,url)})),
+       entryContextEpoch:site=>credentials.vault.epoch(site),createPage:(site,signal,options)=>credentials.wrapPage(site,new AutomationPage(site,signal,prepareSession(site),{...options,externalEntryAllowed:(id,url)=>pcOptions.allowsEntry(id,url)}),options),
        createInspectionPage:(site,signal,options)=>new AutomationPage(site,signal,prepareSession(site),{...options,externalEntryAllowed:(id,url)=>pcOptions.allowsEntry(id,url)}),onEvent:event=>developerTools.event(event),traceEntry:(job,kind)=>developerTools.traceEntry(job,kind),observeEntry:(...args)=>developerTools.observeEntry(...args),
        isManualOpen:id=>[...manualOwners.values()].includes(id)||credentials.active?.site===id,catalog:date=>catalog.view(date).results,catalogBusy:()=>collector.snapshot().running||credentials.busy,
        queueCatalog:date=>{viewDate=date;catalogQueue.request(date,catalog.selected());},

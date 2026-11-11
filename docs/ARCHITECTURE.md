@@ -1,3 +1,13 @@
+# preview.33 / D32 실행 정책과 읽기 경로
+
+[현재 구현·저장/이관·API·수용 경계](PORTING_DIRECTION_V156.md)가 아래 과거 구조의 한미5회/디톡스 자동입장/v1 workflow 호환 설명에 우선한다. entry-support가 알려진9사이트와 자동 허용8사이트를 분리한다. hmp-policy의 schema2/0·25·조건부35를 실제 EntryRunner/WorkflowStore/ledger/주입 번들에서 교차검증한다. hmp-browser는 기존 DOM 판독기를 보존하되 schema2를 먼저 검증하고 내부 렌더러 fuse 이름만 분리한다. 예약 key/공식 ID·실행/로그 참조는 유지한다.
+
+workflows-v1.json 파일명의 내부 schemaVersion은2다. v1→2 이관 전 identity-state-snapshots/before-entry-policy-v156에 불투명 로컬 스냅샷을 만들고 원자적으로 저장한다. 구 HMP slot0~4 원장은 유지하며 신규 정책은32~34를 사용한다. 구 앱의 v1 전용 reader는 schema2에서 저장 오류로 중단하므로 옛5회 정책으로 자동 재개하지 못한다. 자동 데이터 되돌리기 API는 없다. 이전 snapshot을 최신 소비/unknown/취소 원장 위에 덮지 않는다.
+
+CatalogRunner는 기존 전체/사이트 예산 안에서 NativeCatalogRead→단일 화면 경로를 소유한다. Node fetch는 브라우저 jar/Set-Cookie를 공유하지 않고 종근당은 인증된 당일 daily lease admission, 닥플은 정확한 normal partition의 토큰만 요청 메모리에서 사용한다. 계정/프로필/쿠키 세대 변경은 stale 폐기이며 로그인/부분/불명 결과는 화면 검토로 이어진다. main에서 실제 API 경로를 연결하며 외부 URL/코드/파일 IPC는 늘리지 않는다.
+
+hidden-resources는 실제 숨은 webContents별 GET media만 취소한다. dispatch 전 entry 역할로 전환하고 원래 플레이어/팝업/수동 창은 제한하지 않는다. 기존 debugger의 Network 이벤트는 URL/헤더/본문 저장 없이 제한된 자원 수치만 센다. resource-use는 현 프로세스 수치이며 사용자 오류보고 내보내기에만 포함된다. distribution에 개발자 journal/추가 preload/API/화면을 넣지 않는다.
+
 # preview.29 이식 계층
 
 모바일 v139의 판독 snapshot과 PC host/필수 저장/Windows UI를 구분한다. [기능별 증거](PORTING_V139.json)와 [구현 계약](PORTING_V139.md)에 baseline과 차이를 기록했다. docple-policy의 공개 ID, entry-checkpoints의 두 슬롯, ActionFuses의 날짜와 별개인 퀴즈 pending/종근당 daily lease, PcOptions의 사용자 선택, SurveyRunner의 읽기/실제 countdown과 보고 미리보기를 기존 조정기에 연결한다. 계정/시도 저장소와 updater/helper의 신뢰 경계를 유지한다.

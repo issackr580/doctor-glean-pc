@@ -1,11 +1,12 @@
+import {automaticEntrySite} from './entry-support.js';
 export function dailyEvidenceLabel(receipt){
  if(receipt?.status!=='complete')return '';
  if(receipt.submitted===true)return 'PC 제출 후 사이트 완료 상태 관찰';
  if(receipt.attempted===true)return 'PC 시도 이력 있음 · 사이트 완료 상태 확인';
  return receipt.attempted===false?'기존 완료 상태 확인 · PC 새 제출 없음':'사이트 완료 상태 확인 · PC 제출 여부 미기록';
 }
-export function canRegisterEntry(job){return !!job&&!['docple','whodadoc','dtalks'].includes(job.site)&&!job.entryAttempted&&['reserved','not_registered','login','busy','network','target_missing','button_missing','not_open','unknown','ambiguous','blocked'].includes(job.status);}
-export function canPreflightEntry(job){return !!job&&!job.entryAttempted&&!['clicked','manual_clicked','cancelled','expired','lecture_ended','attempting','running'].includes(job.status);}
+export function canRegisterEntry(job){return !!job&&automaticEntrySite(job.site)&&!['docple','whodadoc','dtalks'].includes(job.site)&&!job.entryAttempted&&['reserved','not_registered','login','busy','network','target_missing','button_missing','not_open','unknown','ambiguous','blocked'].includes(job.status);}
+export function canPreflightEntry(job){return !!job&&automaticEntrySite(job.site)&&!job.entryAttempted&&!['clicked','manual_clicked','cancelled','expired','lecture_ended','attempting','running'].includes(job.status);}
 export const registrationButtonLabel=row=>row?'신청 상태 확인':'신청하기';
 export function registrationReplyLabel(result){
  if(result?.ok){if(result.status==='confirmed')return '사이트에서 신청 완료 상태를 확인했어요. 열린 신청 창을 마치고 목록·자동 입장 예약을 확인해 주세요.';if(result.status==='requested')return '원래 신청 버튼을 실행했어요. 열린 사이트에서 최종 신청·동의를 마친 후 「신청 마침 · 상태 확인」을 눌러 주세요.';return '신청 완료를 확인하지 못했어요. 사이트에서 마무리한 뒤 신청 상태를 다시 확인해 주세요. 같은 신청은 자동으로 다시 보내지 않아요.';}
@@ -18,7 +19,7 @@ export function entrySummary(entries){
   const attempts=job.attempts?.length?job.attempts:job.receipt?[job.receipt]:[];
   const clicks=attempts.filter(row=>row.status==='clicked').length;
   summary.pcClicks+=clicks;if(clicks)summary.pcClickedJobs++;
-  if(job.status==='reserved')summary.waiting++;
+  if(job.status==='reserved'&&automaticEntrySite(job.site))summary.waiting++;
   if(job.status==='manual_clicked')summary.manual++;
   if(['login','unknown','blocked','ambiguous','network','target_missing','button_missing','not_registered','expired','not_open'].includes(job.status))summary.needsAttention++;
  }return summary;

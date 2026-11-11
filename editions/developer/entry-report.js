@@ -11,7 +11,7 @@ const version=value=>typeof value==='string'&&value.length<=80&&/^\d+\.\d+\.\d+(
 export function entryMeta(job,kind='entry'){
  if(!job||!SITES.has(job.site)||!['entry','prepare','preflight'].includes(kind)||typeof job.key!=='string'||!/^[a-f0-9]{64}$/.test(job.key)||typeof job.date!=='string'||!/^20\d{2}-\d{2}-\d{2}$/.test(job.date)||typeof job.time!=='string'||!/^([01]\d|2[0-3]):[0-5]\d$/.test(job.time)||!integer(job.slot,4))return null;
  const date=new Date(job.date+'T00:00:00Z');if(!Number.isFinite(+date)||date.toISOString().slice(0,10)!==job.date)return null;
- const out={reference:job.key,site:job.site,date:job.date,time:job.time,slot:job.slot,entryKind:kind};
+ const out={reference:job.key,site:job.site,date:job.date,time:job.time,slot:job.slot,entryKind:kind,...(job.site==='hmp'?{checkpoint:job.hmpRepeatSchema===2?'hmp:2:'+job.slot:'hmp:'+job.slot}:{}),...(job.site==='hmp'&&job.hmpRepeatSchema===2?{hmpRepeatSchema:2}:{} )};
  for(const k of ['due','deadline'])if(integer(job[k])&&job[k]>0)out[k]=job[k];return out;
 }
 export function cleanEntryEvent(input){
@@ -43,9 +43,9 @@ export function entryRecords(events){
  const records=new Map(),references=new Map();
  for(const raw of events){
   if(raw.area!=='entry')continue;const row=cleanEntryEvent(raw);if(!row)continue;
-  const {reference,owner,phase,executionId,site,date,time,slot,entryKind,due,deadline,at,...detail}=row;
+  const {reference,owner,phase,executionId,site,date,time,slot,entryKind,due,deadline,at,checkpoint,...detail}=row;
   let record=records.get(executionId);
-  if(!record){record={executionId,site,date,time,slot,kind:entryKind,observedAt:at,updatedAt:at,...(due?{due}:{}),...(deadline?{deadline}:{}),events:[]};records.set(executionId,record);references.set(executionId,reference);}
+  if(!record){record={executionId,site,date,time,slot,kind:entryKind,...(checkpoint?{checkpoint}:{}),observedAt:at,updatedAt:at,...(due?{due}:{}),...(deadline?{deadline}:{}),events:[]};records.set(executionId,record);references.set(executionId,reference);}
   if(references.get(executionId)!==reference)continue;
   if(record.site!==site||record.date!==date||record.time!==time||record.slot!==slot||record.kind!==entryKind)continue;
   const event={stage:phase,at,...detail};record.events.push(event);record.updatedAt=at;

@@ -95,7 +95,7 @@ export class DeveloperJournal{
  entry(job,kind,phase,detail={},now=Date.now()){
   if(!this.status(now).enabled)return;
   const meta=entryMeta(job,kind);if(!meta)return;
-  const old=this.#pruned(now).events.filter(row=>row.area==='entry'&&row.reference===meta.reference&&row.slot===meta.slot&&row.entryKind===kind&&row.date===meta.date);
+  const old=this.#pruned(now).events.filter(row=>row.area==='entry'&&row.reference===meta.reference&&row.slot===meta.slot&&(row.hmpRepeatSchema??1)===(meta.hmpRepeatSchema??1)&&row.entryKind===kind&&row.date===meta.date);
   const last=old.at(-1),executionId=last?.executionId??randomUUID();
   const attemptIndex=phase==='work_started'?Math.min(1000,(last?.attemptIndex??0)+1):last?.attemptIndex??0;
   const row=cleanEntryEvent({...detail,...meta,executionId,phase,attemptIndex,at:now});if(!row)return;

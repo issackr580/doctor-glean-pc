@@ -82,11 +82,11 @@ test('KST day and scheduling are independent of computer timezone', () => {
 
 test('Hanmi slots follow registered start time, never a hardcoded lunch slot', () => {
   const slots=hmpSlots('2026-10-26','18:00');
-  assert.equal(slots.length,5);
+  assert.equal(slots.length,2);
   assert.equal(slots[0].dueAt,kstInstant('2026-10-26','18:00'));
-  assert.equal(slots[4].dueAt,kstInstant('2026-10-26','18:40'));
-  assert.equal(hmpSlots('2026-10-26','13:10')[4].dueAt,kstInstant('2026-10-26','13:50'));
-  assert.equal(hmpSlots('2026-10-26','18:00',kstInstant('2026-10-26','18:25')).length,3);
+  assert.equal(slots[1].dueAt,kstInstant('2026-10-26','18:25'));
+  assert.equal(hmpSlots('2026-10-26','13:10')[1].dueAt,kstInstant('2026-10-26','13:35'));
+  assert.equal(hmpSlots('2026-10-26','18:00',kstInstant('2026-10-26','18:25')).length,1);
 });
 
 test('weekday lounge preparation skips passed preparation and weekends', () => {
