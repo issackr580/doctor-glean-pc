@@ -1,8 +1,8 @@
 # PC판 현재 상태와 다음 작업
 
-기준 공개 빌드: **0.1.0-preview.32**. 실행 소스 `ccfdbb4922d4c146468a7353c87c05ee883d027f` / `pc-source-v0.1.0-preview.32`. [배포용](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.32) 공개 prerelease·[개발자용](https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-d9c5dc40971182a3fc2e) 협업자 Draft(ID441412790)와 서명 피드를 확인했다. Node396·구문·Linux Electron45/Xvfb 합성 HTTPS 조회155·일일30·계정121·입장437·replay136·신청193·업데이트23, Electron 전체1095개·최종 Windows resources/app의 Linux 관리 창 개발자155/배포141·에디션 데이터 분리·깨끗한 소스240파일·의존성/Node396/구문 재현·같은 에디션20~31의 실제 ZIP runtime·전체 app 패치 교체24경우,12자산 재다운로드/서버 SHA/ZIP 전체·독립 웹 공개/404를 대조했다. 실제 Windows/회원 사이트 결과는 미확인이다.
+기준 공개 빌드: **0.1.0-preview.33**. 실행 소스 `1c762e6842091d08b7d55375fdbc113d9da87ed8` / `pc-source-v0.1.0-preview.33`. [배포용](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.33) 공개 prerelease·[개발자용](https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-f038b48c19817359e0f9) 협업자 Draft(ID441558216)와 서명 피드를 확인했다. Node444·구문·Linux Electron45/Xvfb 합성 HTTPS 조회155·일일30·계정121·입장461·replay136·신청193·업데이트23, Electron 전체1119개·최종 Windows resources/app의 Linux 관리 창 개발자155/배포141·에디션 데이터 분리·깨끗한 소스252파일·의존성/Node444/구문 재현·같은 에디션20~32의 실제 ZIP runtime·전체 app 패치 교체26경우,12서버 자산 전체 검증·독립 공개/404·서버 패치 서명/28선택을 대조했다. 입력 SHA `22a1d08ad9f6fdab81ed79f4bf218c0cf0536c776f84f8e7d7debcd36600d32d` 전후 일치. [PC-023 적용 범위](PORTING_DIRECTION_V156.md)와 D32가 과거 반복 정책보다 우선하며 실제 Windows/회원 결과·절감률은 미확인이다.
 
-## PC-023 — v156 자동입장 정책·읽기 API·숨은 미디어 제한 (검증 중)
+## PC-023 — v156 자동입장 정책·읽기 API·숨은 미디어 제한 (게시 완료)
 
 [현재 PC 조사/차이/API/수용 경계](PORTING_DIRECTION_V156.md)·D32·[v33 기록](releases/0.1.0-preview.33.md)을 따른다. 별도 작업본과 이관 전 로컬 스냅샷을 준비했다. 디톡스 자동입장은 모든 실행 경계에서 중단하고 조회/계정/수동·과거 기록과 저장 true는 보존한다. 한미는0/25분+명확한 새25분 실패에만35분, 각90초·schema2이며 안전한 미실행만 이관한다. 구 key/공식 ID/원장·취소/수동/unknown을 초기화하지 않는다. workflow 내부schema2와 신규 ledger32~34로 구 콜백/구 앱 재개를 막는다.
 

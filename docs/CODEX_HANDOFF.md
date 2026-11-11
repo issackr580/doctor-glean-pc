@@ -1,4 +1,25 @@
-# PC판 현재 인계 — preview.32
+# PC판 현재 인계 — preview.33
+
+| 항목 | 기준 |
+|---|---|
+| 소스 | `1c762e6842091d08b7d55375fdbc113d9da87ed8` / `pc-source-v0.1.0-preview.33` |
+| 배포용 | https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.33 |
+| 개발자용 | https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-f038b48c19817359e0f9 — 협업자 Draft ID441558216 |
+| 피드 | updates/preview.json, 기존 PC Ed25519 고정 공개키 |
+
+[PC-023 실제 조사/차이·이관/API·수용 경계](PORTING_DIRECTION_V156.md)·D32·[v33 기록](releases/0.1.0-preview.33.md)을 따른다. Android v156 문서는 방향/계약의 근거이며 현재 PC/실계정 성공의 증거가 아니다. main ef947fe/preview.32에서 별도 작업본으로 구현했다. 디톡스는 자동입장 전 경계 중단, 계정/조회/수동·저장 true/과거 이력 보존이다. 한미는 시작0/25분·엄격한 새25분 실패에만35분·각90초이며 구+10 slot1을 proof로 쓰지 않는다. 구 key/ID·전송/취소/수동/unknown·회차/receipt를 초기화하지 않는다.
+
+실제 시작 전 snapshot 후 workflows-v1.json 내부schema2로 이관하고 신규 HMP ledger32~34/worker schema를 대조한다. 구 앱은 새 파일을 저장 오류로 거절한다. 되돌릴 때 옛 snapshot으로 최신 소비/unknown/취소를 덮지 않고 자동 작업을 바로 재개하지 않는다. 실제 사용자 Windows APPDATA는 이 클라우드에 없어 여기서 백업 완료를 주장하지 않는다.
+
+종근당 월/일·닥플 LIVE 읽기는 실제 main·정확한 계정/normal 프로필·쿠키 세대·전체 페이지/ID/일정/상태·원래 예산을 공유한다. 실패는 원래 화면1회, stale은 폐기다. 원래 링크 없는 응답으로 URL을 만들지 않는다. 닥플 실제 회원 링크 필드·메디게이트 집계·키메디/기타 API는 검토다. 신규 상태 변경 API/heartbeat/보상 생성은 없다. 숨은 작업 media GET만 제한하고 이미지/캡차/API/POST/수동·입장 화면은 보존한다. 자원 수치의 OS 전체량·실제 재생시간은 null/미측정이다.
+
+Node444·구문·Linux Electron45/Xvfb 합성 HTTPS 조회155·일일30·계정121·입장461·replay136·신청193·업데이트23, Electron 전체1119개·최종 Windows resources/app의 Linux 관리 창 개발자155/배포141·에디션 데이터 분리·깨끗한 소스252파일·의존성/Node444/구문 재현·같은 에디션20~32의 실제 ZIP runtime·전체 app 패치 교체26경우. 고정 입력 SHA `22a1d08ad9f6fdab81ed79f4bf218c0cf0536c776f84f8e7d7debcd36600d32d` 전후 일치.12서버 자산 전체·독립 공개/404와 실제 서버 패치 서명/28선택을 확인했다. [수동 runner](https://github.com/issackr580/doctor-glean-pc/actions/runs/43006603342)는 고정 소스/로컬 파일 해시 대조 뒤 빈 Draft에만 업로드했고 배포용만 공개했다. 임시 workflow는 제거했다. 기존 서명/업데이터·에디션/프로필·선택/동의/중지·원장은 유지하며 모바일/vendor·과거 릴리스는 변경하지 않았다.
+
+실제 확인은 익명 종근당 월/일 JSON 계약까지다. Windows/DPAPI·회원 API/로그인/강의 입장/재생/출석/보상·버튼 설치와 같은 기간 OS 전송량/성공률은 별도 미확인이다. 합성 성공/창 생존을 실제 시청·절감률로 확대하지 않는다. 아래 인계는 과거 실행 기준이다.
+
+## 이전 v32 인계 (역사적 기준)
+
+# PC판 과거 인계 — preview.32
 
 | 항목 | 기준 |
 |---|---|
