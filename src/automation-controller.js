@@ -1,3 +1,4 @@
+import {automaticEntrySite} from './entry-support.js';
 import {dailyTicket} from './task-ticket.js';
 import {PcOptions} from './pc-options.js';
 import {SurveyRunner} from './survey-runner.js';
@@ -12,7 +13,7 @@ import {kstDate,kstInstant,nextLoungePreparation} from './schedule.js';
 function nextMorning(now){const today=kstDate(now),at=kstInstant(today,'08:10');return at>=now-1800000?at:kstInstant(kstDate(now+86400000),'08:10');}
 export class AutomationController{
  constructor({file,ledger,createPage,createInspectionPage,isManualOpen,catalog,catalogBusy,queueCatalog,yieldCatalog,onChange=()=>{},onEvent=()=>{},onError=()=>{},now=Date.now,traceEntry,observeEntry,entryContextEpoch=()=>0,executionAllowed=()=>true,options=new PcOptions(join(dirname(file),'pc-options-v1.json')),notifySurvey=()=>{}}){
-  Object.assign(this,{ledger,createPage,isManualOpen,catalog,catalogBusy,queueCatalog,yieldCatalog,onChange,onError,now,executionAllowed});this.store=new WorkflowStore(file);this.options=options;this.active=null;this.pendingDaily=[];this.followupReads=[];this.pendingReadOnly=true;this.closed=false;
+  Object.assign(this,{ledger,createPage,isManualOpen,catalog,catalogBusy,queueCatalog,yieldCatalog,onChange,onError,now,executionAllowed});this.store=new WorkflowStore(file,{now,policyConsumed:j=>Object.values(ledger.snapshot().jobs).some(r=>r.site==='hmp'&&r.target===j.key&&r.slot===j.slot&&r.dueAt===j.due)});this.options=options;this.active=null;this.pendingDaily=[];this.followupReads=[];this.pendingReadOnly=true;this.closed=false;
   this.store.recover();
   const common={ledger,store:this.store,createPage,createInspectionPage,isManualOpen,onChange:()=>{onChange();},onEvent,now};
   this.quiz=new DoctorvilleQuizRunner(common);
@@ -25,7 +26,7 @@ export class AutomationController{
  allowed(){return !this.closed&&this.executionAllowed()&&!this.ledger.snapshot().paused&&!this.store.failed&&!this.options.failed;}
  get busy(){return !!this.active||this.daily.busy||this.entry.busy||this.lounge.busy;}
  rearm(){this.boundary=this.now();this.morningAt=nextMorning(this.now());this.loungeAt=nextLoungePreparation(this.now());}
- snapshot(){return {features:this.store.features(),entrySites:this.store.entrySites(),today:this.store.day(),entries:this.store.entries(),surveys:this.survey.snapshot(),daily:this.daily.snapshot(),preflight:this.preflightProgress,active:this.active??'',queuedDaily:[...this.pendingDaily],nextMorning:this.store.features().morning?this.morningAt:0,nextLounge:this.store.features().lounge?this.loungeAt:0,storageUnavailable:this.store.failed||this.options.failed};}
+ snapshot(){return {features:this.store.features(),entrySites:this.store.entrySites(),automaticEntrySites:this.store.entrySites().filter(automaticEntrySite),today:this.store.day(),entries:this.store.entries(),surveys:this.survey.snapshot(),daily:this.daily.snapshot(),preflight:this.preflightProgress,active:this.active??'',queuedDaily:[...this.pendingDaily],nextMorning:this.store.features().morning?this.morningAt:0,nextLounge:this.store.features().lounge?this.loungeAt:0,storageUnavailable:this.store.failed||this.options.failed};}
  diagnostics(){return {...this.store.diagnostics(),storageUnavailable:this.store.failed||this.options.failed,surveys:this.survey.snapshot({diagnostics:true}),quizFuses:this.quiz.fuses.summary(),daily:this.daily.snapshot(),preflight:this.preflightProgress,active:this.active??'',queuedDaily:[...this.pendingDaily],nextMorning:this.morningAt,nextLounge:this.loungeAt};}
  setFeature(key,value){this.store.setFeature(key,value);if(!value){if(key==='entry')this.entry.cancel();if(key==='lounge')this.lounge.cancel();if(key==='survey')this.survey.cancel();if(['dailyClaim','quizAuto','brand'].includes(key))this.daily.cancel();}this.rearm();if(key==='entry'&&value)this.entry.reserveCatalog(kstDate(this.now()),this.catalog(kstDate(this.now())));this.onChange();this.tick();}
  setEntrySites(ids){this.store.setEntrySites(ids);this.onChange();this.tick();}
@@ -37,7 +38,7 @@ export class AutomationController{
  }
  async preflightUpcoming(){
   if(this.closed||this.busy||this.catalogBusy())return {ok:false,reason:'busy'};
-  const now=this.now(),date=kstDate(now),keys=this.store.entries(date).filter(job=>job.status==='reserved'&&job.start>now&&this.store.entrySites().includes(job.site)).sort((a,b)=>a.start-b.start).slice(0,40).map(job=>job.key);
+  const now=this.now(),date=kstDate(now),keys=this.store.entries(date).filter(job=>automaticEntrySite(job.site)&&job.status==='reserved'&&job.start>now&&this.store.entrySites().includes(job.site)).sort((a,b)=>a.start-b.start).slice(0,40).map(job=>job.key);
   const controller=new AbortController();this.preflightBatch=controller;this.active='preflight';
   const timer=setTimeout(()=>{controller.abort();this.entry.cancel();},120000);timer.unref?.();
   const progress={running:true,total:keys.length,completed:0,skipped:0,ready:0,waiting:0,login:0,unresolved:0,reason:'running'};this.preflightProgress=progress;this.onChange();

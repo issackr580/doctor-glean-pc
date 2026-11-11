@@ -57,7 +57,7 @@ test('restart before catalog blocks duplicate old keys regardless of consumed pe
 test('native PC legacy keys remain JSON hashes; adapter DTO exposes its projection explicitly',async()=>{
  const e=event({url:'',id:'901'}),j=createEntryJob(e,at('18:00')),native=createHash('sha256').update(JSON.stringify([e.site,e.date,'',e.title])).digest('hex');assert.equal(j.key,native);assert.equal(officialIdentity(j),null);
  const dto=(await evaluate({operation:'job',event:e,now:at('18:00')})).job;assert.equal(dto.pcKey,native);assert.notEqual(dto.key,native);
- for(const site of ['intermd','bluepharm','dtalks']){const x=createEntryJob(event({site,url:'https://example.invalid?id=901'}),at('18:00'));assert.equal(officialIdentity(x),null);assert.equal(x.key,legacyEntryKey(x));}
+ for(const site of ['intermd','bluepharm']){const x=createEntryJob(event({site,url:'https://example.invalid?id=901'}),at('18:00'));assert.equal(officialIdentity(x),null);assert.equal(x.key,legacyEntryKey(x));}
 });
 test('raw fake IDs, malformed URL, contradictory metadata and nonboolean attempt markers never authorize',t=>{
  const s=setup(t),j=seed(s);for(const marker of [undefined,null,'false'])assert.equal(nextIdentityEntry([{...j,entryAttempted:marker}],s.now(),{date}),null);
@@ -96,7 +96,7 @@ test('identity alone cannot select an unselected provider or enable a feature, i
  const s=setup(t);s.store.setFeature('entry',false);s.runner.reserveCatalog(date,{docple:{status:'ok',events:[event({site:'docple',url:'https://docple-plus.com/webinar/901',id:'901',registrationStatus:'registered'})]}});assert.equal(s.store.entries().length,0);s.store.setFeature('entry',true);s.runner.reserveCatalog(date,{docple:{status:'ok',events:[event({site:'docple',url:'https://docple-plus.com/webinar/901',id:'901',registrationStatus:'registered'})]}});assert.equal(s.store.entries().length,0);assert.equal(new WorkflowStore(s.file).entrySites().includes('docple'),false);
 });
 test('snapshot outputs and diagnostics contain no raw official IDs, URLs, page bindings or snapshot contents',t=>{
- const s=setup(t);seed(s);assert.doesNotMatch(JSON.stringify(s.store.diagnostics()),/https:|symposium:901|lectureIdentity|__pcEntry|SYNTHETIC_DPAPI/);assert.deepEqual(readdirSync(join(s.root,'identity-state-snapshots')),['before-official-id-v1']);
+ const s=setup(t);seed(s);assert.doesNotMatch(JSON.stringify(s.store.diagnostics()),/https:|symposium:901|lectureIdentity|__pcEntry|SYNTHETIC_DPAPI/);assert.deepEqual(readdirSync(join(s.root,'identity-state-snapshots')),['before-entry-policy-v156','before-official-id-v1']);
 });
 
 test('a fresh ID matching multiple legacy keys quarantines them without attaching multiple aliases',t=>{

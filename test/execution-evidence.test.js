@@ -32,7 +32,7 @@ test('completed provider observations never imply that mobile or the current PC 
 });
 test('five Hanmi clicks remain one lecture and never become confirmed playback or credit',()=>{
  const attempts=Array.from({length:5},()=>({status:'clicked',attempted:true,navigationObserved:true,playback:'inaccessible'})),job={status:'clicked',attempts,receipt:attempts.at(-1)};
- const summary=entrySummary([job,{status:'button_missing'},{status:'reserved'}]);
+ const summary=entrySummary([job,{status:'button_missing'},{site:'hmp',status:'reserved'}]);
  assert.deepEqual(summary,{reservations:3,waiting:1,pcClickedJobs:1,pcClicks:5,needsAttention:1,manual:0});
  assert.match(entryEvidenceLabel(job),/PC 클릭 확인.*이동 확인/);
  assert.match(entryEvidenceLabel(job),/관찰 불가.*출석·적립 미확인/);

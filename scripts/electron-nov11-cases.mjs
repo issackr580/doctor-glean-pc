@@ -68,18 +68,18 @@ export async function nov11Cases({root,date,title,clock,check,inspect,job,detail
   if(validDate){await runner.run(store.entries()[0]);check('Nov11 completed Medigate host never resends on repeated invocation',posts===1&&Object.keys(ledger.snapshot().jobs).length===1);}
  }
  for(const [message,status] of [['로그인이 필요합니다.','login'],['수강 신청 후 입장해주세요.','not_registered']]){
-  await inspect('dtalks','<main><h1>합성 안내</h1></main>',{url:'https://www.dtalks.kr/websim/vodList.do',work:async page=>{
+  await inspect('whodadoc','<main><h1>합성 안내</h1></main>',{url:'https://hcp.whodadoc.com/hcp/main',work:async page=>{
    await page.current.webContents.executeJavaScript(`setTimeout(()=>alert(${JSON.stringify(message)}),0);void 0`);
    for(let i=0;i<30&&!page.entryObstacle();i++)await new Promise(resolve=>setTimeout(resolve,20));
    check('Nov11 site alert classifies '+status+' without accepting a confirmation',page.entryObstacle()?.status===status);
-   const result=await page.call('auto-entry.js',[{...job('dtalks'),repeatSchema:1,repeatSlot:0},'inspect']);
+   const result=await page.call('auto-entry.js',[{...job('whodadoc'),repeatSchema:1,repeatSlot:0},'inspect']);
    check('Nov11 '+status+' obstacle crosses the existing recovery wrapper boundary',result.status===status);
    check('Nov11 stored alert observation excludes raw text',!JSON.stringify(page.lastEntryDialog).includes(message));
-   await page.load('https://www.dtalks.kr/websim/vodList.do');
+   await page.load('https://hcp.whodadoc.com/hcp/main');
    check('Nov11 old '+status+' alert cannot affect a replacement document',page.entryObstacle()===null);
   }});
  }
- await inspect('dtalks',`<iframe srcdoc="<script>setTimeout(()=>alert('로그인이 필요합니다.'),10)</script>"></iframe>`,{url:'https://www.dtalks.kr/websim/vodList.do',work:async page=>{
+ await inspect('whodadoc',`<iframe srcdoc="<script>setTimeout(()=>alert('로그인이 필요합니다.'),10)</script>"></iframe>`,{url:'https://hcp.whodadoc.com/hcp/main',work:async page=>{
   for(let i=0;i<30&&!page.lastEntryDialog;i++)await new Promise(resolve=>setTimeout(resolve,20));
   check('Nov11 an embedded document alert cannot request site account recovery',page.lastEntryDialog?.reason==='manual_confirmation'&&page.entryObstacle()===null);
  }});

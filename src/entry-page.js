@@ -18,7 +18,7 @@ export function pcEntryPage(job,mode='preflight',manualTarget=null){
  if(job.site==='doctorville'&&here.pathname==='/seminar/seminarDetail'&&!doctorDetail)return out('blocked','policy_rejected');
  if(scheduleRead&&!doctorDetail)return out('blocked','policy_rejected');
  if(mode!=='preflight'&&mode!=='manual_click'&&!scheduleRead&&(Date.now()<job.due||Date.now()>job.deadline))return out('not_open','outside_window');
- if(job.site==='hmp'&&!registration&&mode!=='preflight'&&(job.hmpRepeatSchema!==1||!Number.isInteger(job.hmpSlot)||job.hmpSlot<0||job.hmpSlot>4||job.slot!==job.hmpSlot))return out('blocked','policy_rejected');
+ if(job.site==='hmp'&&!registration&&mode!=='preflight'&&(!browserHmpCheckpoint(job)))return out('blocked','policy_rejected');
  const visible=e=>{
   if(!e?.getClientRects().length||e.closest('[hidden],[aria-hidden="true"],[inert]'))return false;
   for(let p=e;p;p=p.parentElement){const s=getComputedStyle(p);if(s.display==='none'||s.opacity==='0'||['hidden','collapse'].includes(s.visibility))return false;}return true;
@@ -382,7 +382,7 @@ export function pcEntryPage(job,mode='preflight',manualTarget=null){
  if(!bindEntryControl(job,mode,button))return out('blocked','page_changed');
  if(mode!=='click')return out('ready','entry_ready');
  if(!['doctorville','medigate','keymedi','hmp','bluepharm'].includes(job.site))return out('blocked','policy_rejected');
- const attemptKey=job.key+(job.site==='hmp'?':'+job.hmpSlot:'');
+ const attemptKey=job.key+(job.site==='hmp'?':2:'+job.hmpSlot:'');
  if(window.__doctorGleanPcEntryAttempt===attemptKey)return out('already_attempted','click_already_sent');
  window.__doctorGleanPcEntryAttempt=attemptKey;button.click();return out('clicked','entry_clicked');
 }

@@ -11,6 +11,7 @@ import {parseOfficialIdentity} from '../src/entry-identity.js';
 import {id148Cases} from './electron-id148-cases.mjs';
 import {nov11Cases} from './electron-nov11-cases.mjs';
 import {nov06Cases} from './electron-nov06-cases.mjs';
+import {v156Cases} from './electron-v156-cases.mjs';
 import {AutomationPage} from '../src/automation-page.js';
 import {EntryRunner} from '../src/entry-runner.js';
 import {WorkflowStore} from '../src/workflow-store.js';
@@ -25,14 +26,14 @@ app.on('window-all-closed',()=>{});
 const root=mkdtempSync(join(tmpdir(),'pc-entry-electron-'));app.setPath('userData',root);app.setPath('sessionData',join(root,'browser'));
 const date=kstDate(),checks=[],check=(name,value)=>{assert.ok(value,name);checks.push(name);},shell=body=>'<!doctype html><html><meta charset="utf-8"><body>'+body+'</body></html>';
 const title='합성 입장 검증',key='a'.repeat(64),clock=new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Seoul',hour:'2-digit',minute:'2-digit',hour12:false}).format(Date.now());
-const job=site=>({key,site,date,time:clock,title,due:Date.now()-1000,deadline:Date.now()+600000,slot:0,hmpRepeatSchema:1,hmpSlot:0});
+const job=site=>({key,site,date,time:clock,title,due:Date.now()-1000,deadline:Date.now()+600000,slot:0,...(site==='hmp'?{start:kstInstant(date,clock),due:kstInstant(date,clock),deadline:kstInstant(date,clock)+90000,hmpRepeatSchema:2,hmpTiming:'start_0_25_35',hmpAttempts:[],hmpSlot:0}:{})});
 async function inspect(site,body,options={}){
  const partition='pc-entry-'+randomUUID(),prefs={...remotePreferences(site),partition};let posts=0;
  await session.fromPartition(partition).protocol.handle('https',request=>{
   if(request.method!=='GET'){posts++;return new Response('{}',{headers:{'content-type':'application/json'}});}
   return new Response(shell(body),{headers:{'content-type':'text/html; charset=utf-8'}});
  });
- const controller=new AbortController(),page=new AutomationPage(site,controller.signal,prefs),urls={doctorville:'https://www.doctorville.co.kr/seminar/main',medigate:'https://new.medigate.net/symposium',keymedi:'https://www.keymedi.com/meditv/live',hmp:'https://www.hmp.co.kr/symposium/schedulerequest/scheduleList.hm',intermd:'https://www.intermd.co.kr/webinar/list.do',bluepharm:'https://bluepharmkorea.co.kr/'};
+ const controller=new AbortController(),page=site==='hmp'?syntheticEntryClock(new AutomationPage(site,controller.signal,prefs),()=>kstInstant(date,clock)+1000):new AutomationPage(site,controller.signal,prefs),urls={doctorville:'https://www.doctorville.co.kr/seminar/main',medigate:'https://new.medigate.net/symposium',keymedi:'https://www.keymedi.com/meditv/live',hmp:'https://www.hmp.co.kr/symposium/schedulerequest/scheduleList.hm',intermd:'https://www.intermd.co.kr/webinar/list.do',bluepharm:'https://bluepharmkorea.co.kr/'};
  await page.load(options.url??urls[site]);
  try{if(options.work)return await options.work(page,()=>posts);return await page.call('pc-entry.js',[{...job(site),...options.job},options.mode??'preflight']);}
  finally{page.close();}
@@ -227,12 +228,12 @@ async function run(){
  const hmpDirectory=join(root,'hmp-host'),hmpPartition='entry-hmp-host-'+randomUUID(),hmpPrefs={...remotePreferences('hmp'),partition:hmpPartition};let hmpPosts=0,hmpReserved=false;
  const hmpLedger=new LocalState(join(hmpDirectory,'state.json'));hmpLedger.setPaused(false);const hmpStore=new WorkflowStore(join(hmpDirectory,'workflows.json'));hmpStore.setFeature('entry',true);
  await session.fromPartition(hmpPartition).protocol.handle('https',request=>{
-  if(request.method==='POST'){hmpPosts++;hmpReserved=Object.values(JSON.parse(readFileSync(join(hmpDirectory,'state.json'))).jobs).some(row=>row.state==='attempting'&&row.slot===0);return new Response('{}',{headers:{'content-type':'application/json'}});}
+  if(request.method==='POST'){hmpPosts++;hmpReserved=Object.values(JSON.parse(readFileSync(join(hmpDirectory,'state.json'))).jobs).some(row=>['attempting','unknown'].includes(row.state)&&row.slot===32);return new Response('{}',{headers:{'content-type':'application/json'}});}
   return new Response(shell(plainGrouped),{headers:{'content-type':'text/html; charset=utf-8'}});
  });
- const hmpRunner=new EntryRunner({ledger:hmpLedger,store:hmpStore,createPage:async(_site,signal)=>new AutomationPage('hmp',signal,hmpPrefs)}),hmpEntry={...entry,...job('hmp')};hmpStore.putEntry(hmpEntry);
+ let hmpNow=kstInstant(date,clock)+1000;const hmpRunner=new EntryRunner({ledger:hmpLedger,store:hmpStore,now:()=>hmpNow,sleep:async ms=>{hmpNow+=ms;await new Promise(r=>setTimeout(r,0));},createPage:async(_site,signal)=>syntheticEntryClock(new AutomationPage('hmp',signal,hmpPrefs),()=>hmpNow)}),hmpEntry={...entry,...job('hmp')};hmpStore.putEntry(hmpEntry);
  await hmpRunner.run(hmpEntry);const hmpResult=hmpStore.entries()[0];
- check('native Hanmi supplemental click preserves its slot lease and five-slot schedule',hmpPosts===1&&hmpReserved&&hmpResult.receipt.status==='clicked'&&hmpResult.slot===1&&hmpResult.status==='reserved');
+ check('native Hanmi supplemental click preserves schema2 checkpoint lease and the +25 schedule',hmpPosts===1&&hmpReserved&&hmpResult.receipt.status==='clicked'&&hmpResult.slot===1&&hmpResult.status==='reserved');
  const blueDir=join(root,'blue-host'),bluePartition='entry-blue-'+randomUUID(),blueLedger=new LocalState(join(blueDir,'state.json')),blueStore=new WorkflowStore(join(blueDir,'workflows.json'));let bluePosts=0,blueLease=false;
  blueLedger.setPaused(false);blueStore.setFeature('entry',true);
  const blueBody=blue(`${date} ${clock} ~ ${tomorrow} 23:59`).replace('<h3>','<span class="date">신청기간 2020-01-01</span><h3>');
@@ -368,6 +369,7 @@ async function run(){
  }});
  await nov11Cases({root,date,title,clock,check,inspect,job,detailHeader});
  await nov06Cases({root,date,title,clock,check,inspect,job,detailHeader});
+ await v156Cases({root,date,check});
  await portingCases(check);
  check('all inspection and entry windows are released',BrowserWindow.getAllWindows().length===0);
  mkdirSync(new URL('../verification/',import.meta.url),{recursive:true});writeFileSync(new URL('../verification/electron-entry.json',import.meta.url),JSON.stringify({runtime:{platform:process.platform,electron:process.versions.electron,chromium:process.versions.chrome},environment:'Linux Electron45; synthetic HTTPS; PC exact entry and read-only preflight',checks:checks.length,passed:checks,actualProviderVerified:false,windowsVerified:false},null,2)+'\n');

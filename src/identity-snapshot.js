@@ -5,8 +5,9 @@ const sha=b=>createHash('sha256').update(b).digest('hex');
 const FILES=['state-v1.json','workflows-v1.json','catalog-v1.json','credentials-v1.json','credential-attempts-v1.json','pc-options-v1.json','quiz-action-fuses-v1.json','credential-action-fuses-v1.json','registration-attempts-v1.json','surveys-v1.json'];
 // Local opaque backup only. Never exported, decrypted or automatically restored.
 // Restoring an old action ledger over newer attempts would permit a replay.
-export function snapshotIdentityState(file){
- const directory=dirname(file),target=join(directory,'identity-state-snapshots','before-official-id-v1');
+export function snapshotIdentityState(file,marker='before-official-id-v1'){
+ if(!['before-official-id-v1','before-entry-policy-v156'].includes(marker))throw Error('storage_error');
+ const directory=dirname(file),target=join(directory,'identity-state-snapshots',marker);
  if(existsSync(target)){
   if(!lstatSync(target).isDirectory()||lstatSync(target).isSymbolicLink()||lstatSync(join(target,'SNAPSHOT.json')).isSymbolicLink())throw Error('storage_error');
   const meta=JSON.parse(readFileSync(join(target,'SNAPSHOT.json'),'utf8'));if(meta.schemaVersion!==1||!meta.files||Array.isArray(meta.files)||typeof meta.files!=='object')throw Error('storage_error');

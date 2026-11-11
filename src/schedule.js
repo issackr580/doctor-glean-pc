@@ -12,7 +12,7 @@ export function kstInstant(date,time){
 export function hmpSlots(date,start,endedAt=Infinity){
   const first=kstInstant(date,start);
   if(endedAt!==Infinity&&!Number.isSafeInteger(endedAt))throw Error('invalid_time');
-  return Array.from({length:5},(_,slot)=>({slot,dueAt:first+slot*600_000})).filter(row=>row.dueAt<endedAt);
+  return [0,25].map((minute,slot)=>({slot,dueAt:first+minute*60_000})).filter(row=>row.dueAt<endedAt);
 }
 export function nextLoungePreparation(now){
   const first=kstDate(now);

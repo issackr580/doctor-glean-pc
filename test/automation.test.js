@@ -92,7 +92,7 @@ test('claim confirmations and receipts stay scoped to the original task',()=>{
  assert.equal(dailyDialog(docple,'출석 완료',true).accept,false);
  assert.equal(actionAllowed(doctor,'https://www.doctorville.co.kr/payment',{...claim}),false);
 });
-test('Hanmi repeats from the actual lecture start for five separate slots only',async t=>{
+test('Hanmi uses independent start and +25 checkpoints without an unproved +35',async t=>{
  const {clock,ledger,store}=setup(t,'13:10');store.setFeature('entry',true);const sent=[];
  const event={site:'hmp',date,time:'13:10',title:'한미 테스트 강의',registrationStatus:'registered'};
  const make=()=>page(async(_name,[job,mode])=>{
@@ -101,14 +101,14 @@ test('Hanmi repeats from the actual lecture start for five separate slots only',
   return {status:'no_video'};
  });
  const runner=new EntryRunner({ledger,store,createPage:async()=>make(),now:clock.now,sleep:clock.sleep});runner.reserveCatalog(date,{hmp:{status:'review',stale:false,events:[event]}});
- for(let slot=0;slot<5;slot++){clock.set(at('13:10')+slot*600000);const job=runner.due();assert.equal(job.slot,slot);await runner.run(job);}
- assert.deepEqual(sent,[0,1,2,3,4]);assert.equal(runner.due(),null);assert.equal(store.entries()[0].attempts.length,5);
+ for(let slot=0;slot<2;slot++){clock.set(at('13:10')+[0,25][slot]*60000);const job=runner.due();assert.equal(job.slot,slot);await runner.run(job);}
+ assert.deepEqual(sent,[0,1]);assert.equal(runner.due(),null);assert.equal(store.entries()[0].attempts.length,2);
 });
 test('Hanmi end evidence stops remaining slots and missed slots are not backfilled',async t=>{
  const {clock,ledger,store}=setup(t,'13:35');store.setFeature('entry',true);
  const runner=new EntryRunner({ledger,store,createPage:async()=>page(async()=>({status:'lecture_ended',reason:'hmp_ended'})),now:clock.now,sleep:clock.sleep});
  runner.reserveCatalog(date,{hmp:{status:'review',events:[{site:'hmp',date,time:'13:10',title:'한미 테스트',registrationStatus:'registered'}]}});
- assert.equal(store.entries()[0].slot,3);clock.set(at('13:40'));await runner.run(runner.due());assert.equal(store.entries()[0].status,'lecture_ended');clock.set(at('13:50'));assert.equal(runner.due(),null);
+ assert.equal(store.entries()[0].slot,1);clock.set(at('13:35'));await runner.run(runner.due());assert.equal(store.entries()[0].status,'lecture_ended');clock.set(at('13:50'));assert.equal(runner.due(),null);
 });
 test('unknown entry dispatch is not retried while unexecuted failures keep a bounded retry',async t=>{
  const {clock,ledger,store}=setup(t,'18:00:30');store.setFeature('entry',true);let sent=0;
@@ -156,8 +156,8 @@ test('a lounge GET begun before opening cannot become fresh just by finishing af
 });
 test('a blocked entry load is terminal before dispatch, but uncertain dispatch remains consumed',async t=>{
  for(const dispatch of [false,true]){
-  const {clock,ledger,store}=setup(t);store.setFeature('entry',true);store.setEntrySites(['dtalks']);
-  const entry={key:'a'.repeat(64),site:'dtalks',date,time:'12:00',title:'합성 입장',due:clock.now()-1000,deadline:clock.now()+600000,start:clock.now(),status:'reserved',slot:0,nextAt:clock.now()-1,retries:0,attempts:[],entryAttempted:false};store.putEntry(entry);let clicks=0;
+  const {clock,ledger,store}=setup(t);store.setFeature('entry',true);store.setEntrySites(['whodadoc']);
+  const entry={key:'a'.repeat(64),site:'whodadoc',date,time:'12:00',title:'합성 입장',due:clock.now()-1000,deadline:clock.now()+600000,start:clock.now(),status:'reserved',slot:0,nextAt:clock.now()-1,retries:0,attempts:[],entryAttempted:false};store.putEntry(entry);let clicks=0;
   const p=page(async(_name,[_job,mode])=>{if(mode==='click'){clicks++;throw Object.assign(Error('policy_rejected'),{code:'policy_rejected'});}return {status:'ready',targetMatched:true,matchedTargets:1,entryControls:1};});
   if(!dispatch)p.load=async()=>{throw Object.assign(Error('policy_rejected'),{code:'policy_rejected'});};
   const runner=new EntryRunner({ledger,store,now:clock.now,sleep:clock.sleep,createPage:async()=>p});await runner.run(entry);
