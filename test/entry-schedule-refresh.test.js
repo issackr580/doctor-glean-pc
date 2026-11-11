@@ -27,6 +27,21 @@ function setup(t,{oldTime='12:20',now='11:00'}={}){
  return {root,file,store,ledger,clock,page,runner,key,loads,calls,traces,options,catalog,propose,get results(){return results;},set results(v){results=v;},get actionPages(){return actionPages;},failStorage(){fail=true;}};
 }
 const flush=async()=>{for(let i=0;i<30;i++)await new Promise(resolve=>setImmediate(resolve));};
+test('unchanged failed detail reads wait across catalog refreshes, then recover without consuming or resetting history',async t=>{
+ const s=setup(t,{now:'12:40'}),ledger=readFileSync(join(s.root,'state.json'),'utf8');s.propose();
+ const original=s.page.call;s.page.call=async function(...args){await original.apply(this,args);return {status:'target_missing',reason:'schedule_unmatched',targetMatched:false};};
+ await s.runner.reviseSchedule(s.key);assert.ok(s.calls.length>=3&&s.calls.length<10);assert.equal(s.runner.revisionDue(),null);
+ const row=s.store.entries()[0];assert.equal(row.entryAttempted,false);assert.equal(row.retries,0);assert.equal(s.propose(),null);
+ s.clock.set(s.clock.now()+60001);s.results=s.catalog('12:45');s.runner.reserveCatalog(date,s.results);assert.ok(s.runner.revisionDue(s.key));
+ s.page.call=original;assert.equal((await s.runner.reviseSchedule(s.key)).ok,true);assert.equal(s.store.entries()[0].time,'12:45');assert.equal(s.actionPages,0);
+ assert.equal(readFileSync(join(s.root,'state.json'),'utf8'),ledger);
+});
+test('fresh changed clock bypasses failed preparation wait; cancellation removes queued recovery',async t=>{
+ const s=setup(t),original=s.page.call;s.propose();s.page.call=async()=>({status:'target_missing',reason:'schedule_unmatched'});await s.runner.reviseSchedule(s.key);
+ assert.equal(s.propose(),null);assert.ok(s.propose('12:50'));s.page.call=original;assert.equal((await s.runner.reviseSchedule(s.key)).ok,true);
+ s.propose('12:55');s.page.call=async()=>({status:'target_missing',reason:'title_unmatched'});await s.runner.reviseSchedule(s.key);s.runner.cancelJob(s.key);
+ s.clock.set(s.clock.now()+300001);assert.equal(s.runner.revisionDue(),null);assert.equal(s.store.entries()[0].status,'cancelled');assert.equal(s.actionPages,0);
+});
 test('changed catalog alone is a proposal; two fresh detail reads atomically update all timing without an attempt',async t=>{
  const s=setup(t),before=s.store.entries()[0],ledger=readFileSync(join(s.root,'state.json'),'utf8');assert.ok(s.propose());assert.deepEqual(s.store.entries()[0],before);
  assert.equal((await s.runner.reviseSchedule(s.key)).ok,true);const row=new WorkflowStore(s.file).entries()[0];

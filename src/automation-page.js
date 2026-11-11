@@ -1,4 +1,5 @@
 import {BrowserWindow} from 'electron';
+import {entryDialogObstacle} from './entry-dialog.js';
 import {readFileSync} from 'node:fs';
 import {allowedNavigation,allowedPopup} from './security.js';
 import {pageRole} from './page-role.js';
@@ -56,7 +57,9 @@ export class AutomationPage{
     else if(method==='Network.loadingFailed'&&requests.has(params.requestId)){this.runtime.credentialNetworkFailures=Math.min(1000,this.runtime.credentialNetworkFailures+1);requests.delete(params.requestId);}
    }
    if(method!=='Page.javascriptDialogOpening')return;
-   this.#diagnostic('dialog_observed');
+   const obstacle=params.url===contents.getURL()&&allowedNavigation(this.site,params.url)?entryDialogObstacle(params.message):{status:'blocked',reason:'manual_confirmation'};
+   this.lastEntryDialog={...obstacle,generation:this.generation};
+   this.#diagnostic('dialog_observed',obstacle);
    this.dialogs++;let decision={accept:false,status:'unknown',reason:'manual_confirmation'};
    if(!this.closed&&!this.signal.aborted&&this.dialogs<=5&&allowedNavigation(this.site,contents.getURL()))try{
     decision=this.credentialDialog?{accept:false,status:/비밀번호.*(?:틀|오류|일치하지)|아이디.*(?:틀|오류|일치하지)|invalid.*(?:password|credential)/i.test(params.message)?'rejected':/captcha|보안문자|인증번호|추가인증/i.test(params.message)?'challenge':'manual',reason:'site_dialog'}:this.onDialog(params.message,params.type)??decision;
@@ -69,6 +72,7 @@ export class AutomationPage{
  get route(){return pageRole(this.url);}
  get version(){return this.generation;}
  diagnostics(){return {...this.runtime};}
+ entryObstacle(){const d=this.lastEntryDialog;return !this.entryDispatchArmed&&d?.generation===this.generation&&['login','not_registered'].includes(d.status)?{status:d.status,reason:d.reason}:null;}
  async enableCredentialDiagnostics(){
   this.credentialNetwork=true;
   await Promise.all(this.windows.map(async window=>{try{await bounded(window.webContents.debugger.sendCommand('Network.enable',{maxPostDataSize:0}),this.signal,5000);this.runtime.credentialNetworkEnabled=true;}catch{this.runtime.credentialNetworkEnabled=false;}}));
@@ -154,7 +158,10 @@ export class AutomationPage{
   if(typeof encoded!=='string'||encoded.length>500000)throw failure('invalid_response');
   let value;try{value=JSON.parse(encoded);}catch{throw failure('invalid_response');}
   if(entry){if(typeof value.tag==='string'&&/^[a-f0-9]{32}$/.test(value.tag))this.lastEntryBinding={url,version,tag:value.tag};else this.lastEntryBinding=undefined;value=value.value;}
-  if(!value||typeof value!=='object'||Array.isArray(value))throw failure('invalid_response');return value;
+  if(!value||typeof value!=='object'||Array.isArray(value))throw failure('invalid_response');
+  // Feed a fresh explicit login obstacle through the existing saved-account
+  // recovery wrapper. A dialog alone never authenticates or authorizes a click.
+  return entry&&args?.[1]==='inspect'?(this.entryObstacle()??value):value;
  }
  async flushSession(){
   this.#alive();const profile=this.current.webContents.session;

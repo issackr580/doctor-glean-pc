@@ -13,8 +13,8 @@ import {createEntryJob} from './entry-job.js';
 import {canonicalIdentity,identityRunnable,duplicateIdentityKeys,sameWorker,sameReceiptOwner,sameEntryTarget,priorIdentityKeys,rebookIdentity,nextIdentityEntry} from './entry-identity.js';
 const navigable=(site,raw)=>{try{const u=new URL(raw);return allowedNavigation(site,raw)&&!/(?:login|logout|regist|apply|enroll|payment|order|cart|token|auth|session|password|email|ticket|delete|withdraw)/i.test(decodeURIComponent(u.pathname+u.search));}catch{return false;}};
 export class EntryRunner{
- constructor({ledger,store,createPage,createInspectionPage,catalog=()=>({}),contextEpoch=()=>0,isManualOpen=()=>false,onChange=()=>{},onEvent=()=>{},now=Date.now,sleep=waitFor,traceEntry=()=>({}),observeEntry=()=>{},onSurvey=()=>{}}){Object.assign(this,{ledger,store,createPage,createInspectionPage,catalog,contextEpoch,isManualOpen,onChange,onEvent,now,sleep,traceEntry,observeEntry,onSurvey});this.active=null;this.revisions=new Map();}
- #trace(job,kind){let trace;try{trace=this.traceEntry(job,kind);}catch{}return {event:(...args)=>{try{trace?.event?.(...args);}catch{}},finish:(...args)=>{try{trace?.finish?.(...args);}catch{}}};}
+ constructor({ledger,store,createPage,createInspectionPage,catalog=()=>({}),contextEpoch=()=>0,isManualOpen=()=>false,onChange=()=>{},onEvent=()=>{},now=Date.now,sleep=waitFor,traceEntry=()=>({}),observeEntry=()=>{},onSurvey=()=>{}}){Object.assign(this,{ledger,store,createPage,createInspectionPage,catalog,contextEpoch,isManualOpen,onChange,onEvent,now,sleep,traceEntry,observeEntry,onSurvey});this.active=null;this.revisions=new Map();this.revisionWaits=new Map();}
+ #trace(job,kind){let trace;try{trace=this.traceEntry(job,kind);}catch{}return {event:(phase,detail)=>{try{trace?.event?.(phase,{...detail,identityMode:canonicalIdentity(job)?'official':'legacy'});}catch{}},finish:(...args)=>{try{trace?.finish?.(...args);}catch{}}};}
  #observe(job,phase,detail){try{this.observeEntry(job,phase,detail);}catch{}}
  async #catalogDetail(job,page,trace,signal,reference){
   const ref=reference??catalogEntryReference(job,this.catalog(job.date));
@@ -51,11 +51,13 @@ export class EntryRunner{
   const pending=[];
   for(const [id,proposal] of this.revisions){
    const current=this.#currentRevision(proposal);if(!current){this.revisions.delete(id);continue;}
-   if((!key||id===key)&&!this.isManualOpen(current.job.site))pending.push(current);
+   const wait=this.revisionWaits.get(id),same=wait?.signature===this.#revisionSignature(current);
+   if((!same||wait.until<=this.now())&&(!key||id===key)&&!this.isManualOpen(current.job.site))pending.push(current);
   }
   const now=this.now();pending.sort((a,b)=>{const started=a.job.start<=now,other=b.job.start<=now;return started!==other?(started?-1:1):started?b.job.start-a.job.start:a.job.start-b.job.start;});
   return pending[0]??null;
  }
+ #revisionSignature(proposal){return JSON.stringify([proposal.identity,proposal.reference.url,proposal.job.date,proposal.job.time,proposal.selectionEpoch,proposal.accountEpoch,proposal.ledgerEpoch]);}
  async reviseSchedule(key){
   if(this.active)return {ok:false,reason:'busy'};
   const proposal=this.revisionDue(key);if(!proposal)return {ok:false,reason:'scope_changed'};
@@ -94,12 +96,20 @@ export class EntryRunner{
      updated=true;if(changed)trace.event('schedule_updated',{status:'reserved',reason:'scope_changed',readOnly:true,oldTime:original.time,confirmedTime:job.time});return {ok:true,changed};
     }
     if(['login','blocked','ambiguous','not_registered','lecture_ended'].includes(reply.status))break;
+    if(stable>=3&&this.now()-observedAt>=1600&&reply.status==='target_missing')break;
     await this.sleep(400,controller.signal);
    }return {ok:false,reason:safeReason(reply.reason)};
   }catch(error){result={status:controller.signal.aborted?'cancelled':this.store.failed?'blocked':'network',reason:controller.signal.aborted?'cancelled':this.store.failed?'storage_error':'network_error',attempted:false};if(this.store.failed)throw error;return {ok:false,reason:result.reason};}
   finally{
    if(!updated&&result.status==='unknown')result={...reply,status:reply.status??'unknown',reason:safeReason(reply.reason??'scope_changed'),attempted:false};
    trace.finish({...result,readOnly:true});
+   // Failed reads do not consume an entry attempt. Recheck later without
+   // letting a catalog timestamp refresh create a tight preparation loop.
+   // A changed observed detail/time/account/selection bypasses this wait.
+   if(!updated&&!controller.signal.aborted&&!this.store.failed&&['target_missing','button_missing','not_open','network'].includes(result.status)){
+    const current=this.#currentRevision(proposal);
+    if(current){this.revisions.set(key,current);this.revisionWaits.set(key,{signature:this.#revisionSignature(current),until:this.now()+(current.job.start-this.now()>600000?300000:60000)});if(this.revisionWaits.size>40)this.revisionWaits.delete(this.revisionWaits.keys().next().value);}
+   }else this.revisionWaits.delete(key);
    if(controller.signal.aborted&&!this.revisions.has(key)&&JSON.stringify(this.store.entries().find(job=>job.key===key))===proposal.before)this.revisions.set(key,proposal);
    run.page?.close();this.active=null;this.emit('result',original,{...cleanReceipt(result,this.now()),readOnly:true});this.onChange();
   }
@@ -260,6 +270,7 @@ export class EntryRunner{
    while(allowed()&&this.now()-began<45000&&(prepare?this.now()<job.start:this.now()<=job.deadline)){
     if(['login','provider'].includes(page.route)){receipt={status:'login',reason:'login_required'};break;}
     let reply=await page.call(pcDetailRead?'pc-entry.js':'auto-entry.js',[{...nativeJob(),detailOpened},'inspect']);if(!allowed()){receipt={status:'cancelled',reason:'scope_changed'};break;}adapter=pcDetailRead?'pc-entry.js':'auto-entry.js';
+    const obstacle=page.entryObstacle?.();if(obstacle)reply=obstacle;
     // Doctorville's original reader can find an old clock in a title or end
     // time. Every result, including ready, must cross the strict PC reader.
     if(!pcDetailRead&&(job.site==='doctorville'||['medigate','keymedi','hmp','bluepharm'].includes(job.site)&&['target_missing','button_missing','ambiguous'].includes(reply.status))){
