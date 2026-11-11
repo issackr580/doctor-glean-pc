@@ -141,3 +141,7 @@ node scripts/build-app-patch.mjs --from=/old/artifact/developer --to=/new/artifa
 ## preview.32 게시 확인
 
 [소유자 수동 runner](https://github.com/issackr580/doctor-glean-pc/actions/runs/42987803216)에서 고정 소스 `ccfdbb4922d4c146468a7353c87c05ee883d027f`를 검증본과 대조해 새 빈 Draft에만 업로드했다.12자산을 재다운로드해 서버 SHA/크기/체크섬/ZIP 전체를 확인한 뒤 배포용만 공개했고 개발자용은 협업자 Draft다. Node396·구문·Linux Electron45/Xvfb 합성 HTTPS 조회155·일일30·계정121·입장437·replay136·신청193·업데이트23, Electron 전체1095개. 최종 Windows resources/app의 Linux 관리 창 개발자155/배포141·에디션 데이터 분리·깨끗한 소스240파일·의존성/Node396/구문 재현. 같은 에디션20~31의 실제 ZIP runtime·전체 app 패치 교체24경우. 실제 서버 패치만 기존 외부 키로 서명하고 고정 공개키/26버전 선택과 패치 전체를 확인했다. 완료 후 일회성 workflow는 제거하며 개인 키·원문·자동 게시·공개 개발자 바이너리 artifact를 남기지 않는다. 실제 Windows/회원 결과는 별도다.
+
+## preview.33 게시 확인
+
+[소유자 수동 runner](https://github.com/issackr580/doctor-glean-pc/actions/runs/43006603342)는 고정 소스 `1c762e6842091d08b7d55375fdbc113d9da87ed8`·검증본 전체 파일 해시·기존 v32 자산 SHA를 확인해 빈 Draft에만 업로드했다.12자산 재다운로드/서버 SHA·체크섬/ZIP 전체와 독립 공개·404를 확인한 뒤 배포용만 공개했다. 개발자용은 Draft다. 같은 에디션20~32의26직접 패치 경로와 실제 서버 패치 서명/피드28선택을 확인했다. 임시 workflow는 제거했다. 모바일/vendor·과거 자산·서명키/updater는 유지한다. [D32 저장 형식 변경과 검증 한계](PORTING_DIRECTION_V156.md)를 따른다.

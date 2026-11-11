@@ -2,7 +2,7 @@
 
 # 의사 이삭 줍기 PC
 
-Windows PC를 켜두고 사용하는 독립형 상주 프로그램. 기준 공개판은 **0.1.0-preview.32**다. 운영 서버·유료 API·모바일 동기화·자체 원격 조작·절전 해제를 사용하지 않는다.
+Windows PC를 켜두고 사용하는 독립형 상주 프로그램. 기준 공개판은 **0.1.0-preview.33**다. 운영 서버·유료 API·모바일 동기화·자체 원격 조작·절전 해제를 사용하지 않는다.
 
 ## 공동 개발 시작
 
@@ -13,7 +13,7 @@ PC 전용 [공개 소스 저장소](https://github.com/issackr580/doctor-glean-p
 3. [구조](docs/ARCHITECTURE.md): 모듈·신뢰 경계·저장 형식·엔진 동기화
 4. [개발 방침](docs/DEVELOPMENT_POLICY.md)과 [결정 기록](docs/DECISIONS.md): 확정 범위
 5. [개발자 로그 수집](docs/DIAGNOSTICS.md): 재현 전 기록 켜기·JSON 내보내기·공유 기준
-6. [배포 절차](docs/RELEASE_PROCESS.md)와 [이번 기록](docs/releases/0.1.0-preview.32.md): 소스 기준점·검증·릴리스
+6. [배포 절차](docs/RELEASE_PROCESS.md)와 [이번 기록](docs/releases/0.1.0-preview.33.md): 소스 기준점·검증·릴리스
 
 ```sh
 npm ci
@@ -31,7 +31,7 @@ Node24/npm11을 사용한다. Windows에서는 Electron 검사를 그대로 실�
 - 출석·캡슐, 닥터빌 퀴즈 하루1회 제출, 인터엠디 퀴즈 상태 확인, 키메디 브랜드관 최대2회.
 - 한 사이트 재조회·저장 계정 로그인, 예정 예약 일괄 사전 검사, 이번 실행/이전 클릭 구분.
 - 준비 대기·문서 교체를 구분하는 읽기 전용 사전 검사, PC 실행·이동·영상·사이트 완료 구분, 상태만 새로 확인.
-- 9사이트 자동 입장, 한미 시작10분 전 준비·시작부터10분 간격 최대5회·종료 중단.
+- 8사이트 자동 입장, 한미 시작10분 전 읽기 준비·시작0/25분·명확한 실패에만35분. 디톡스는 조회/계정/수동 이용만 유지.
 - 오전08:10과 평일00:01:03 닥터라운지. PC·프로그램이 실행 중인 조건에서 정해진 기한만 처리.
 - 별도 후보 검증 후 Windows DPAPI 계정 저장·동의한 만료 복구, 시도 전 기록·불확실 재전송 제한.
 - 개발자/배포용의 저장소·코드 분리, 수동 전체/작은 패치, 자동 전송 없는 최소 진단.
@@ -40,7 +40,7 @@ Node24/npm11을 사용한다. Windows에서는 Electron 검사를 그대로 실�
 
 ## 실행과 업데이트
 
-[Windows 안내](docs/WINDOWS_PREVIEW.md)를 따른다. 배포용 실행물은 이 저장소의 [공개 검증판](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.32), 개발자용 실행물은 지정 collaborator가 GitHub 로그인 후 같은 [Releases 목록](https://github.com/issackr580/doctor-glean-pc/releases)의 **preview.32 협업자 전용 Draft**에서 받는다. 접근 권한은 [배포·협업 권한 기준](docs/ACCESS.md)을 따른다. 개발자용 실행파일을 공개 릴리스에 첨부하지 않는다.
+[Windows 안내](docs/WINDOWS_PREVIEW.md)를 따른다. 배포용 실행물은 이 저장소의 [공개 검증판](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.33), 개발자용 실행물은 지정 collaborator가 GitHub 로그인 후 같은 [Releases 목록](https://github.com/issackr580/doctor-glean-pc/releases)의 **preview.33 협업자 전용 Draft**에서 받는다. 접근 권한은 [배포·협업 권한 기준](docs/ACCESS.md)을 따른다. 개발자용 실행파일을 공개 릴리스에 첨부하지 않는다.
 
 작은 패치는 최신 resources/app 전체를 담는다. 릴리스에서 호환 검증한 같은 에디션의 이전 버전은 중간 패치를 거치지 않고 한 번에 올릴 수 있다. 완전 종료 → 기존 resources/app 백업 → 패치 app 전체 교체 → 하단 버전 확인 순서다. X는 트레이 숨김이다. 로그인·계정·시도는 별도 데이터 폴더에 유지된다. 첫 설치·호환 미확인 버전·runtime 변경은 전체 ZIP이다.
 
@@ -70,4 +70,6 @@ preview.30은 닥터빌의 현재 목록/상세 재확인, 디톡스의 고정 H
 
 preview.31은 관측된6사이트의 공식 강의 ID를 수집부터 입장 직전까지 연결한다. 같은 ID의 제목 변경을 허용하며 기존 예약 key·시도/취소/회차·계정/선택을 보존한다. 인터엠디·블루팜·디톡스는 legacy다. [지원 화면/기존 PC 조사](docs/PORTING_ID_V148.md)와 [수용표](docs/PORTING_ID_V148_ACCEPTANCE.json)를 읽는다. v28~30은 PC 업데이트 확인 버튼을 쓰며, 실제 Windows/회원 입장·시청·보상 성공은 합성 결과와 별도다.
 
-preview.32는 닥터빌 상세 제목/일정 판독·메디게이트 원래 상세 이동·일정 재확인 간격·원문 없는 경고 분류를 개선했다. [평일 보고 분석](docs/NOV11_ENTRY_REVIEW.md)과 [v32 검증/게시 기록](docs/releases/0.1.0-preview.32.md)을 읽는다. 실제 Windows 회원 입장/시청/보상은 별도 확인이다.
+preview.33는 닥터빌 상세 제목/일정 판독·메디게이트 원래 상세 이동·일정 재확인 간격·원문 없는 경고 분류를 개선했다. [평일 보고 분석](docs/NOV11_ENTRY_REVIEW.md)과 [v32 검증/게시 기록](docs/releases/0.1.0-preview.33.md)을 읽는다. 실제 Windows 회원 입장/시청/보상은 별도 확인이다.
+
+preview.33은 [v156 적용/저장 이관/API·측정 범위](docs/PORTING_DIRECTION_V156.md)와 D32를 따릅니다. 한미의 구10분 회차 기록은 보존하고 옛 스냅샷을 최신 시도 원장 위에 덮지 않습니다. 종근당/닥플의 검증된 읽기만 화면을 생략하고 나머지 API·Windows 실계정 결과·절감률은 미확인입니다. v28~32는 앱 버튼, 같은 에디션20~32는 중간판 없이 작은 패치를 사용할 수 있습니다.
