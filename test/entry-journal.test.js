@@ -8,6 +8,13 @@ import {entryEvidence,focusReport,entryRecords,entryMeta} from '../editions/deve
 import {createDeveloperTools} from '../editions/developer/developer-tools.js';
 const now=Date.parse('2026-10-28T18:00:00+09:00'),job={key:'a'.repeat(64),site:'medigate',date:'2026-10-28',time:'18:00',slot:0,due:now-1000,deadline:now+90000};
 function fixture(t,options){const dir=mkdtempSync(join(tmpdir(),'pc-entry-journal-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));return {dir,journal:new DeveloperJournal(join(dir,'journal.json'),options)};}
+test('detail diagnostics retain bounded counts and identity mode without page text or invalid values',t=>{
+ const {journal}=fixture(t);journal.setEnabled(true,now);
+ journal.entry(job,'entry','inspect',{status:'target_missing',reason:'schedule_unmatched',identityMode:'official',detailHeadingCount:1,detailDateValues:0,detailStartValues:0,detailBoundaryMissing:1,detailDateMismatch:-1,detailInvalidFields:1001,pageText:'synthetic-private-page'},now+1);
+ const record=journal.export(now+2).entryJournal.records[0],event=record.events.at(-1);
+ assert.equal(event.identityMode,'official');assert.equal(event.detailHeadingCount,1);assert.equal(event.detailDateValues,0);assert.equal(event.detailBoundaryMissing,1);
+ assert.equal(event.detailDateMismatch,undefined);assert.equal(event.detailInvalidFields,undefined);assert.doesNotMatch(JSON.stringify(record),/synthetic-private-page/);
+});
 test('a reservation observation cannot backfill a work start or historical build',t=>{
  const {journal}=fixture(t);journal.setEnabled(true,now);journal.entry(job,'entry','reservation_observed',{status:'reserved'},now+1);
  const record=journal.export(now+2).entryJournal.records[0];assert.equal(record.events.length,1);assert.equal(record.events[0].stage,'reservation_observed');assert.equal(record.events[0].appVersion,undefined);assert.equal(entryEvidence(record).attemptRecorded,false);

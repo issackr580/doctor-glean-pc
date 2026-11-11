@@ -23,6 +23,8 @@ export function cleanEntryEvent(input){
  if(input.reason!==undefined)out.reason=REASONS.has(input.reason)?input.reason:'unknown';
  if(input.playback!==undefined)out.playback=PLAYBACK.has(input.playback)?input.playback:'not_checked';
  if(['pc','original'].includes(input.reader))out.reader=input.reader;
+ if(['official','legacy'].includes(input.identityMode))out.identityMode=input.identityMode;
+ for(const k of ['detailHeadingCount','detailDateValues','detailStartValues','detailBoundaryMissing','detailInvalidFields','detailDateMismatch'])if(integer(input[k],1000))out[k]=input[k];
  if(['catalog','live_catalog'].includes(input.targetSource))out.targetSource=input.targetSource;
  if(['insecure','unapproved_https','other_scheme','invalid'].includes(input.destinationKind))out.destinationKind=input.destinationKind;
  if(['dns','timeout','tls','connection','other'].includes(input.networkKind))out.networkKind=input.networkKind;

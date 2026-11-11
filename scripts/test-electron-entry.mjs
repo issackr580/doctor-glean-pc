@@ -9,6 +9,7 @@ import {syntheticEntryClock} from './electron-entry-clock.mjs';
 import {portingCases} from './electron-porting-cases.mjs';
 import {parseOfficialIdentity} from '../src/entry-identity.js';
 import {id148Cases} from './electron-id148-cases.mjs';
+import {nov11Cases} from './electron-nov11-cases.mjs';
 import {nov06Cases} from './electron-nov06-cases.mjs';
 import {AutomationPage} from '../src/automation-page.js';
 import {EntryRunner} from '../src/entry-runner.js';
@@ -365,6 +366,7 @@ async function run(){
   const r=await page.call('pc-entry.js',[{...job('doctorville'),date:'2020-01-01',time:'12:45',entryClosesAt:Date.now()+600000},'click']);
   check('a recovered entry still rejects a freshly ended detail before the original click',r.status==='lecture_ended');
  }});
+ await nov11Cases({root,date,title,clock,check,inspect,job,detailHeader});
  await nov06Cases({root,date,title,clock,check,inspect,job,detailHeader});
  await portingCases(check);
  check('all inspection and entry windows are released',BrowserWindow.getAllWindows().length===0);

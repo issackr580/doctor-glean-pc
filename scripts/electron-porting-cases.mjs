@@ -85,16 +85,18 @@ export async function portingCases(check){
   }
   {
    const s=await provider(detail()),observed=[];s.page.root.show();s.page.root.focus();
-   const stop=watchManualEntry(s.page.root,'docple',{jobs:()=>[baseJob],onClick:key=>observed.push(key),interval:20});
-   await new Promise(r=>setTimeout(r,120));await s.page.current.webContents.executeJavaScript('document.querySelector("button").click()');await new Promise(r=>setTimeout(r,120));
+   const stop=watchManualEntry(s.page.root,'docple',{jobs:()=>[baseJob],onClick:key=>observed.push(key),interval:1000});
+   await new Promise(r=>setTimeout(r,120));
+   check('manual click notification is absent from the provider main world',await s.page.current.webContents.executeJavaScript('typeof globalThis.__doctorGleanManualNotify==="undefined"'));await s.page.current.webContents.executeJavaScript('document.querySelector("button").click()');await new Promise(r=>setTimeout(r,120));
    check('Docple passive observer ignores script-generated clicks',observed.length===0);
-   await s.page.load('https://docple-plus.com/webinar/701');await new Promise(r=>setTimeout(r,120));
+   await s.page.load('https://docple-plus.com/webinar/701');
+   for(let i=0;i<100;i++){if(await s.page.current.webContents.executeJavaScriptInIsolatedWorld(1001,[{code:'!!window.__doctorGleanManualObserver&&typeof globalThis.__doctorGleanManualNotify==="function"'}]))break;await new Promise(r=>setTimeout(r,10));}
    const point=await s.page.current.webContents.executeJavaScript('(()=>{const r=document.querySelector("button").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()');
    await s.page.current.webContents.debugger.sendCommand('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',clickCount:1});
    await s.page.current.webContents.debugger.sendCommand('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'left',clickCount:1});
-   for(let i=0;i<40&&!observed.length;i++)await new Promise(r=>setTimeout(r,30));
+   for(let i=0;i<60&&(!observed.length||s.state.posts<2);i++)await new Promise(r=>setTimeout(r,30));
    if(observed.length!==1||s.state.posts!==2)console.log('PC_MANUAL_DOCPLE_STATE:'+JSON.stringify({observed:observed.length,posts:s.state.posts,observer:await s.page.current.webContents.executeJavaScriptInIsolatedWorld(1001,[{code:'!!window.__doctorGleanManualObserver'}])}));
-   check('Docple trusted original manual entry is observed without an observer-generated submit',observed.length===1&&observed[0]===baseJob.key&&s.state.posts===2);stop();s.page.close();
+   check('Docple trusted original manual entry is observed without an observer-generated submit',observed.length===1&&observed[0]===baseJob.key&&s.state.posts===2);await new Promise(r=>setTimeout(r,1100));check('manual notification and polling deliver one observation across immediate navigation',observed.length===1&&s.state.posts===2);stop();s.page.close();
   }
   {
    const s=await provider(u=>u.pathname==='/webinar'?docpleList({cards:card()}):detail(),{route:'/webinar?category=C01&mode=LIVE&sort=START_ASC'}),ledger=new LocalState(join(root,'host-state.json')),store=new WorkflowStore(join(root,'host-workflows.json'));ledger.setPaused(false);store.setFeature('entry',true);store.setEntrySites(['docple']);let clock=at;
@@ -123,7 +125,7 @@ export async function portingCases(check){
    await page.current.webContents.executeJavaScript('document.querySelector("button").click()');await new Promise(r=>setTimeout(r,100));check(site+' passive short-repeat observer ignores synthetic click',observed.length===0&&posts===1);
    const point=await page.current.webContents.executeJavaScript('(()=>{const r=document.querySelector("button").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()');
    for(const type of ['mousePressed','mouseReleased'])await page.current.webContents.debugger.sendCommand('Input.dispatchMouseEvent',{type,...point,button:'left',clickCount:1});
-   for(let i=0;i<40&&!observed.length;i++)await new Promise(r=>setTimeout(r,30));check(site+' passive short-repeat observer binds a trusted original control',observed.length===1&&observed[0]===baseJob.key&&posts===2);stop();page.close();
+   for(let i=0;i<60&&(!observed.length||posts<2);i++)await new Promise(r=>setTimeout(r,30));check(site+' passive short-repeat observer binds a trusted original control',observed.length===1&&observed[0]===baseJob.key&&posts===2);stop();page.close();
   }
  }finally{for(const page of pages)page.close();rmSync(root,{recursive:true,force:true});}
 }

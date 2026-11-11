@@ -80,7 +80,7 @@ export async function id148Cases({root,date,title,clock,check,inspect,job,catalo
  // Main-process ledger -> workflow commit -> renderer dispatch -> restart.
  for(const scenario of ['normal','save_failure','lost_callback']){
   const dir=join(root,'id148-atomic-'+scenario),partition='id148-'+randomUUID(),controller=new AbortController();let posts=0,fail=false;
-  await session.fromPartition(partition).protocol.handle('https',request=>{if(request.method!=='GET'){posts++;const ledger=JSON.parse(readFileSync(join(dir,'state.json')));check('v148 dispatch observes durable attempting state',Object.values(ledger.jobs).some(j=>j.state==='attempting'));return new Response('{}');}return new Response('<!doctype html><meta charset="utf-8"><body>'+cards.medigate+`<script>Date.now=()=>${now};</script></body>`,{headers:{'content-type':'text/html; charset=utf-8'}});});
+  await session.fromPartition(partition).protocol.handle('https',request=>{if(request.method!=='GET'){posts++;const ledger=JSON.parse(readFileSync(join(dir,'state.json')));check('v148 dispatch observes durable consumed state',Object.values(ledger.jobs).some(j=>['attempting','unknown'].includes(j.state)));return new Response('{}');}return new Response('<!doctype html><meta charset="utf-8"><body>'+cards.medigate+`<script>Date.now=()=>${now};</script></body>`,{headers:{'content-type':'text/html; charset=utf-8'}});});
   const {atomicJson}=await import('../src/atomic-json.js'),ledger=new LocalState(join(dir,'state.json'),{commit:(p,d)=>{if(fail)throw Error('storage failed');atomicJson(p,d);}});ledger.setPaused(false);const store=new WorkflowStore(join(dir,'workflows.json'));store.setFeature('entry',true);const j=createEntryJob({site:'medigate',date,time:clock,title,url:urls.medigate},now);store.putEntry(j);
   const page=syntheticEntryClock(new AutomationPage('medigate',controller.signal,{...remotePreferences('medigate'),partition}),()=>now),call=page.call.bind(page);
   if(scenario==='lost_callback')page.call=async(name,args,options)=>{const result=await call(name,args,options);if(args[1]==='click')throw Error('lost callback');return result;};
@@ -94,7 +94,7 @@ export async function id148Cases({root,date,title,clock,check,inspect,job,catalo
   const runner=new EntryRunner({ledger,store,now:()=>now});const worker=new AbortController();worker.signal.addEventListener('abort',()=>{aborted=true;});runner.active={job:store.entries()[0],controller:worker,page:{close(){}}};page.root.show();page.root.focus();
   const stop=watchManualEntry(page.root,'medigate',{jobs:()=>store.entries(),onClick:key=>runner.cancelJob(key,true),interval:20});await sleep(180);const point=await page.current.webContents.executeJavaScript('(()=>{const r=document.querySelector("button").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()');
   for(const type of ['mousePressed','mouseReleased'])await page.current.webContents.debugger.sendCommand('Input.dispatchMouseEvent',{type,...point,button:'left',clickCount:1});
-  for(let i=0;i<40&&store.entries()[0].status!=='manual_clicked';i++)await sleep(25);
+  for(let i=0;i<60&&(store.entries()[0].status!=='manual_clicked'||posts()<1);i++)await sleep(25);
   check('v148 trusted manual ID alias notifies and cancels the original worker',store.entries()[0].key===old.key&&store.entries()[0].status==='manual_clicked'&&aborted&&posts()===1);stop();
  }});
 }

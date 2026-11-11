@@ -91,13 +91,26 @@ export function pcEntryPage(job,mode='preflight',manualTarget=null){
   return {kind:'missing'};
  };
  const doctorEnded=value=>/^(?:종료된세미나(?:입니다)?[.!。]?|세미나종료|강의종료|방송종료)$/.test(norm(value));
+ const doctorTitles=root=>{
+  const nodes=all(titleSelector,root).filter(e=>headingMatches(e)&&!e.closest('nav,footer,aside,[role="dialog"],[aria-modal="true"],button,[role="button"]')),leaves=nodes.filter(e=>!nodes.some(other=>other!==e&&e.contains(other)));
+  const exact=leaves.filter(e=>sameTitle(text(e)));if(exact.length||!identity)return exact;
+  // The same official detail ID can rename its title. Bold categories,
+  // presenters and attendance counts are not additional lecture headings.
+  // Anchor only before the first independent full-date field; all dates and
+  // clocks in that bounded header still pass the separate schedule policy.
+  const fullDate=/^(?:(?:일시|일정|날짜|강의일|방송일)\s*[:：]?\s*)?20\d{2}\s*[.\-/년]\s*\d{1,2}\s*[.\-/월]\s*\d{1,2}(?!\d)/;
+  const dates=all('time,p,span,div,li,dd,dt,em,strong,small,b',root).filter(e=>!e.closest('nav,footer,aside,[role="dialog"],a,button')&&text(e).length<=140&&fullDate.test(text(e)));
+  const first=dates.find(e=>!dates.some(other=>other!==e&&other.contains(e)));if(!first)return [];
+  const before=leaves.filter(e=>/[A-Za-z가-힣]{2}/.test(text(e))&&!fullDate.test(text(e))&&!e.contains(first)&&!!(e.compareDocumentPosition(first)&Node.DOCUMENT_POSITION_FOLLOWING));
+  return before.length?[before[before.length-1]]:[];
+ };
  const doctorDetailSchedule=root=>{
-  const titles=all(titleSelector,root).filter(headingMatches),forbidden='nav,footer,aside,[role="dialog"],[aria-modal="true"],button,a,[role="button"],input,textarea,select,script,style,template,noscript';
-  const leaves=titles.filter(e=>!titles.some(other=>other!==e&&e.contains(other)));if(leaves.length!==1)return false;
+  const titles=doctorTitles(root),forbidden='nav,footer,aside,[role="dialog"],[aria-modal="true"],button,a,[role="button"],input,textarea,select,script,style,template,noscript';
+  const leaves=titles.filter(e=>!titles.some(other=>other!==e&&e.contains(other)));diag.detailHeadingCount=Math.max(diag.detailHeadingCount??0,leaves.length);if(leaves.length!==1)return false;
   const heading=leaves[0],afterTitle=node=>!heading.contains(node)&&!!(heading.compareDocumentPosition(node)&Node.DOCUMENT_POSITION_FOLLOWING);
   const actions=all('a,button,[role="button"],input[type="button"],input[type="submit"]',root).filter(e=>afterTitle(e)&&(controls(root).includes(e)||/^(?:신청하기|사전신청(?:하기)?|수강신청(?:하기)?|강의신청(?:하기)?|세미나신청(?:하기)?|등록하기|신청취소)$/.test(label(e)||norm(e.value))));
   const markers=actions.length?actions:all('span,p,div,em,small,strong',root).filter(e=>afterTitle(e)&&(doctorEnded(text(e))||/^(?:신청완료|등록완료)$/.test(norm(text(e)))));
-  const boundary=markers[0];if(!boundary)return false;
+  const boundary=markers[0];if(!boundary){diag.detailBoundaryMissing=1;return false;}
   const between=node=>afterTitle(node)&&!node.contains(boundary)&&!!(node.compareDocumentPosition(boundary)&Node.DOCUMENT_POSITION_FOLLOWING);
   const clock=value=>{
    const m=value.match(/^(?:(오전|오후)\s*)?([01]?\d|2[0-3]):([0-5]\d)(?:\s*[~～∼–—-]\s*(?:(오전|오후)\s*)?([01]?\d|2[0-3]):([0-5]\d))?$/);if(!m)return null;
@@ -122,6 +135,8 @@ export function pcEntryPage(job,mode='preflight',manualTarget=null){
   // A full range owns its nested end clock; it is never another start field.
   const fields=records.filter(row=>!records.some(other=>other!==row&&other.time&&other.element!==row.element&&other.element.contains(row.element)));
   const dates=new Set(fields.map(row=>row.date).filter(Boolean)),times=new Set(fields.map(row=>row.time).filter(Boolean));
+  diag.detailDateValues=Math.max(diag.detailDateValues??0,dates.size);diag.detailStartValues=Math.max(diag.detailStartValues??0,times.size);
+  if(fields.some(row=>row.invalid))diag.detailInvalidFields=1;if(dates.size===1&&!dates.has(job.date))diag.detailDateMismatch=1;
   if(fields.some(row=>row.invalid)||dates.size!==1||!dates.has(job.date))return false;diag.dateMatches++;
   if(times.size!==1)return false;
   const ends=new Set(fields.map(row=>row.endTime).filter(Boolean));
@@ -278,6 +293,7 @@ export function pcEntryPage(job,mode='preflight',manualTarget=null){
    if(text(p).length>6000||all(selectors[job.site],p).length>1)break;
    if(doctorDetail){
     if(p.closest('nav,footer,aside,[role="dialog"],[aria-modal="true"]')||text(p).length>2000||p.querySelectorAll('*').length>200)break;
+    if(!doctorTitles(p).includes(heading))continue;
     if(!controls(p).length&&!all('a,button,[role="button"],span,p,div,em,small',p).some(e=>doctorEnded(text(e))||/^(?:입장하기|신청하기|사전신청(?:하기)?|수강신청(?:하기)?|신청취소|신청완료|등록완료)$/.test(norm(text(e)))))continue;
    }
    if((!identity||identity.root(p))&&schedule(p)){roots.push(p);break;}
@@ -318,6 +334,17 @@ export function pcEntryPage(job,mode='preflight',manualTarget=null){
  diag.scheduleMatches=unique.length;diag.matchedTargets=unique.length;diag.targetMatched=unique.length===1;
  if(unique.length!==1)return out(unique.length?'ambiguous':'target_missing',unique.length?'duplicate_target':doctorStartMismatch?'scope_changed':diag.titleMatches?'schedule_unmatched':'title_unmatched');
  const root=unique[0];
+ if(job.site==='medigate'&&mode==='inspect'&&/^\/symposium\/?$/.test(here.pathname)&&!here.search&&!here.hash&&root.matches('article')&&!controls(root).length){
+  const state=norm(text(root));
+  if(/신청완료|등록완료/.test(state)&&!/미신청|신청하기|등록하기|강의종료|방송종료|다시보기/.test(state)){
+   // Utility/bookmark links do not make a single observed official detail
+   // ambiguous. Never assemble its address from an ID or follow a player URL.
+   const links=[...new Set(all('a[href]',root).map(a=>safeLink(a.getAttribute('href'))).filter(raw=>{
+    const found=readLectureIdentity('medigate',raw);return found&&(!identity||found.id===identity.expected.id&&found.kind===identity.expected.kind);
+   }))];
+   if(links.length===1)return {...out('navigate','read_only'),url:links[0]};
+  }
+ }
  if(job.site==='doctorville'&&!doctorDetail&&job.requireDoctorDetail===true&&mode==='inspect'){
   try{const target=new URL(safeLink(root.getAttribute('href')));if(target.origin===here.origin&&target.pathname==='/seminar/seminarDetail'&&readLectureIdentity('doctorville',target.href))return {...out('navigate','read_only'),url:target.href};}catch{}
   return out('blocked','policy_rejected');
