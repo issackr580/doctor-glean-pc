@@ -137,3 +137,7 @@ node scripts/build-app-patch.mjs --from=/old/artifact/developer --to=/new/artifa
 ## preview.31 게시 검증
 
 고정 실행 소스 `8678d498b62abeb750c1166c43ad081742b8ea72`의 Node393·구문·Linux Electron45/Xvfb 합성 HTTPS 조회115·일일30·계정121·입장402·replay136·신청193·업데이트23, Electron 전체1020개·최종 Windows resources/app의 Linux 관리 창 개발자115/배포101·에디션 데이터 분리·깨끗한 소스234파일·의존성/Node393/구문 재현·같은 에디션20~30의 실제 ZIP runtime·전체 app 패치 교체22경우를 확인했다. [소유자 수동 runner](https://github.com/issackr580/doctor-glean-pc/actions/runs/42269812067)는 고정 소스·전체 파일 해시·v30 실제 자산을 대조한 후 기존 두 Draft에만 업로드했다.12자산을 재다운로드해 서버 SHA/체크섬/ZIP 전체를 확인한 뒤 distribution만 공개했다. developer Draft와 독립 공개/404를 확인했다. 실제 서버 두 패치의 이름/URL/SHA/크기/소스/호환 목록으로 Ed25519 피드를 서명하고 공개키/실제 ZIP을 검증해 별도 PR로 반영한다. 완료한 임시 workflow는 제거한다. 개인 자료/키·모바일·이전 자산은 변경하지 않았다. 실제 Windows/회원 성공과 합성 검사를 구분한다.
+
+## preview.32 게시 확인
+
+[소유자 수동 runner](https://github.com/issackr580/doctor-glean-pc/actions/runs/42987803216)에서 고정 소스 `ccfdbb4922d4c146468a7353c87c05ee883d027f`를 검증본과 대조해 새 빈 Draft에만 업로드했다.12자산을 재다운로드해 서버 SHA/크기/체크섬/ZIP 전체를 확인한 뒤 배포용만 공개했고 개발자용은 협업자 Draft다. Node396·구문·Linux Electron45/Xvfb 합성 HTTPS 조회155·일일30·계정121·입장437·replay136·신청193·업데이트23, Electron 전체1095개. 최종 Windows resources/app의 Linux 관리 창 개발자155/배포141·에디션 데이터 분리·깨끗한 소스240파일·의존성/Node396/구문 재현. 같은 에디션20~31의 실제 ZIP runtime·전체 app 패치 교체24경우. 실제 서버 패치만 기존 외부 키로 서명하고 고정 공개키/26버전 선택과 패치 전체를 확인했다. 완료 후 일회성 workflow는 제거하며 개인 키·원문·자동 게시·공개 개발자 바이너리 artifact를 남기지 않는다. 실제 Windows/회원 결과는 별도다.

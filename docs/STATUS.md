@@ -1,12 +1,12 @@
 # PC판 현재 상태와 다음 작업
 
-기준 공개 빌드: **0.1.0-preview.31**. 실행 소스 `8678d498b62abeb750c1166c43ad081742b8ea72` / `pc-source-v0.1.0-preview.31`. [배포용](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.31) 공개 prerelease·[개발자용](https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-a27ff258b377eab34f98) 협업자 Draft(ID436838597)와 서명 피드를 확인했다. Node393·구문·Linux Electron45/Xvfb 합성 HTTPS 조회115·일일30·계정121·입장402·replay136·신청193·업데이트23, Electron 전체1020개·최종 Windows resources/app의 Linux 관리 창 개발자115/배포101·에디션 데이터 분리·깨끗한 소스234파일·의존성/Node393/구문 재현·같은 에디션20~30의 실제 ZIP runtime·전체 app 패치 교체22경우,12자산 재다운로드/서버 SHA/ZIP 전체·독립 웹 공개/404를 대조했다. 실제 Windows/회원 사이트 결과는 미확인이다.
+기준 공개 빌드: **0.1.0-preview.32**. 실행 소스 `ccfdbb4922d4c146468a7353c87c05ee883d027f` / `pc-source-v0.1.0-preview.32`. [배포용](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.32) 공개 prerelease·[개발자용](https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-d9c5dc40971182a3fc2e) 협업자 Draft(ID441412790)와 서명 피드를 확인했다. Node396·구문·Linux Electron45/Xvfb 합성 HTTPS 조회155·일일30·계정121·입장437·replay136·신청193·업데이트23, Electron 전체1095개·최종 Windows resources/app의 Linux 관리 창 개발자155/배포141·에디션 데이터 분리·깨끗한 소스240파일·의존성/Node396/구문 재현·같은 에디션20~31의 실제 ZIP runtime·전체 app 패치 교체24경우,12자산 재다운로드/서버 SHA/ZIP 전체·독립 웹 공개/404를 대조했다. 실제 Windows/회원 사이트 결과는 미확인이다.
 
-## PC-022 — 평일 입장 실패 판독 개선 (preview.32 후보)
+## PC-022 — 평일 입장 실패 판독 개선 (게시 완료)
 
 [11월 11일 보고 분석](NOV11_ENTRY_REVIEW.md)·[v32 기록](releases/0.1.0-preview.32.md)을 따른다. 현재 Windows v31에는 닥터빌의 제목1/날짜0 반복 중단·메디게이트의 대상 일치 후 버튼 누락·디톡스 상세 뒤 제목 누락이 있다. 런타임/진단 저장 실패는0이며 다른 사이트의 클릭/문서 이동을 실제 시청/보상으로 확대하지 않는다.
 
-합성 반례에서 닥터빌 ID 상세의 분류·강연자 굵은 글씨가 복수 제목으로 취급되는 실패와, 메디게이트 유틸리티 링크가 단일 공식 상세 선택을 막는 실패를 재현해 PC 보완 경로를 수정했다. 날짜/시작·다른 ID/중복·원래 버튼·원자적 저장/재전송 방지는 유지한다. 같은 일정 읽기 실패는 제한된 간격으로 재확인하되 정시 입장을 막지 않고 새 시각/상세는 즉시 확인한다. 원문 없는 경고 분류와 제한된 상세 카운터를 진단에 추가한다. 사용자 회원 DOM의 정확한 원인과 실제 수정판 입장은 별도 확인이다. 최종 검사·게시 증거는 v32 기록으로 확정한다.
+합성 반례에서 닥터빌 ID 상세의 분류·강연자 굵은 글씨가 복수 제목으로 취급되는 실패와, 메디게이트 유틸리티 링크가 단일 공식 상세 선택을 막는 실패를 재현해 PC 보완 경로를 수정했다. 날짜/시작·다른 ID/중복·원래 버튼·원자적 저장/재전송 방지는 유지한다. 같은 일정 읽기 실패는 제한된 간격으로 재확인하되 정시 입장을 막지 않고 새 시각/상세는 즉시 확인한다. 원문 없는 경고 분류와 제한된 상세 카운터를 진단에 추가한다. 사용자 회원 DOM의 정확한 원인과 실제 수정판 입장은 별도 확인이다. 최종 검사·게시 증거는 v32 기록에 남겼다. 실제 회원 결과는 다음 실행에서 확인한다.
 
 ## PC-021 — v31 주말 사전 점검 (검사·문서만)
 

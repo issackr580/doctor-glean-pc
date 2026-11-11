@@ -1,3 +1,18 @@
+# PC판 현재 인계 — preview.32
+
+| 항목 | 기준 |
+|---|---|
+| 소스 | `ccfdbb4922d4c146468a7353c87c05ee883d027f` / `pc-source-v0.1.0-preview.32` |
+| 배포용 | https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.32 |
+| 개발자용 | https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-d9c5dc40971182a3fc2e — 협업자 Draft ID441412790 |
+| 피드 | updates/preview.json, 기존 PC Ed25519 고정 공개키 |
+
+[PC-022](NOV11_ENTRY_REVIEW.md)·D31·[v32 기록](releases/0.1.0-preview.32.md)을 따른다. 사용자 Windows v31 평일 실패와 합성 반례는 별개다. 닥터빌의 굵은 분류/강연자와 제목을 분리하고, 메디게이트 신청완료 카드의 관측된 단일 공식 상세를 다시 읽는다. 같은 일정 실패의 준비 간격은 먼 미래5분/시작10분 안1분이며 새 일정은 즉시 확인한다. 정시 실행·기존 소비/취소/unknown·D26 복구는 유지한다. 경고는 원문 없이 같은 문서의 명시적 장애만 기존 계정 복구로 전달하고 내장 프레임·문서 교체·dispatch 이후에는 재사용하지 않는다. 제한된 추가 카운터는 개발자 journal에만 남는다.
+
+Node396·구문·Linux Electron45/Xvfb 합성 HTTPS 조회155·일일30·계정121·입장437·replay136·신청193·업데이트23, Electron 전체1095개. 최종 Windows resources/app의 Linux 관리 창 개발자155/배포141·에디션 데이터 분리·깨끗한 소스240파일·의존성/Node396/구문 재현. 같은 에디션20~31의 실제 ZIP runtime·전체 app 패치 교체24경우. 입력 SHA `64c8fd53226faf5ac0a1d5328491caedef22db5176b5552bf508cab0937a1775` 전후 일치.12서버 자산 전체 검증·독립 공개/404와 실제 서버 패치 서명/26선택을 확인했고 임시 수동 workflow는 제거했다. 기존 서명/업데이트·설정·계정·저장 형식·예약 key/실행/회차는 유지한다. 모바일/vendor·이전 릴리스는 변경하지 않았다. 디톡스 실제 상세 누락 원인, Windows/DPAPI·실계정 입장/시청/보상·버튼 설치는 별도 확인이다.
+
+## 이전 v31 인계 (역사적 기준)
+
 # PC판 현재 인계 — preview.31
 
 | 항목 | 기준 |

@@ -4,14 +4,14 @@
     "schemaVersion": 1,
     "repository": "issackr580/doctor-glean-pc",
     "channel": "preview",
-    "issuedAt": 1793989485388,
+    "issuedAt": 1794386128906,
     "targets": [
       {
         "edition": "developer",
-        "version": "0.1.0-preview.31",
+        "version": "0.1.0-preview.32",
         "electronVersion": "45.0.0",
-        "sourceCommit": "8678d498b62abeb750c1166c43ad081742b8ea72",
-        "page": "https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-a27ff258b377eab34f98",
+        "sourceCommit": "ccfdbb4922d4c146468a7353c87c05ee883d027f",
+        "page": "https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-d9c5dc40971182a3fc2e",
         "compatibleVersions": [
           "0.1.0-preview.20",
           "0.1.0-preview.21",
@@ -23,21 +23,22 @@
           "0.1.0-preview.27",
           "0.1.0-preview.28",
           "0.1.0-preview.29",
-          "0.1.0-preview.30"
+          "0.1.0-preview.30",
+          "0.1.0-preview.31"
         ],
         "patch": {
-          "name": "doctor-glean-pc-developer-patch-v0.1.0-preview.30-to-v0.1.0-preview.31-windows-x64.zip",
-          "sha256": "ca5bcfaa16c385758dff32fead4d3ab4230eddc9429acad61ded13ec3deda67b",
-          "size": 472334,
-          "url": "https://github.com/issackr580/doctor-glean-pc/releases/download/untagged-a27ff258b377eab34f98/doctor-glean-pc-developer-patch-v0.1.0-preview.30-to-v0.1.0-preview.31-windows-x64.zip"
+          "name": "doctor-glean-pc-developer-patch-v0.1.0-preview.31-to-v0.1.0-preview.32-windows-x64.zip",
+          "sha256": "748edc82d4948d1a12334010f785647cc7a9cf1904a031a4fb0817884ab722dc",
+          "size": 475713,
+          "url": "https://github.com/issackr580/doctor-glean-pc/releases/download/untagged-d9c5dc40971182a3fc2e/doctor-glean-pc-developer-patch-v0.1.0-preview.31-to-v0.1.0-preview.32-windows-x64.zip"
         }
       },
       {
         "edition": "distribution",
-        "version": "0.1.0-preview.31",
+        "version": "0.1.0-preview.32",
         "electronVersion": "45.0.0",
-        "sourceCommit": "8678d498b62abeb750c1166c43ad081742b8ea72",
-        "page": "https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.31",
+        "sourceCommit": "ccfdbb4922d4c146468a7353c87c05ee883d027f",
+        "page": "https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.32",
         "compatibleVersions": [
           "0.1.0-preview.20",
           "0.1.0-preview.21",
@@ -49,16 +50,17 @@
           "0.1.0-preview.27",
           "0.1.0-preview.28",
           "0.1.0-preview.29",
-          "0.1.0-preview.30"
+          "0.1.0-preview.30",
+          "0.1.0-preview.31"
         ],
         "patch": {
-          "name": "doctor-glean-pc-patch-v0.1.0-preview.30-to-v0.1.0-preview.31-windows-x64.zip",
-          "sha256": "0e52b436a306c9bb33a22fd0d53d192c1221e92cb8686d25d388d6cd6f32d168",
-          "size": 455342,
-          "url": "https://github.com/issackr580/doctor-glean-pc/releases/download/pc-v0.1.0-preview.31/doctor-glean-pc-patch-v0.1.0-preview.30-to-v0.1.0-preview.31-windows-x64.zip"
+          "name": "doctor-glean-pc-patch-v0.1.0-preview.31-to-v0.1.0-preview.32-windows-x64.zip",
+          "sha256": "e7a5c733ffb621a53ee1b02e4ebb75b1daa4fbba96523d460af9847d2e7ba105",
+          "size": 458617,
+          "url": "https://github.com/issackr580/doctor-glean-pc/releases/download/pc-v0.1.0-preview.32/doctor-glean-pc-patch-v0.1.0-preview.31-to-v0.1.0-preview.32-windows-x64.zip"
         }
       }
     ]
   },
-  "signature": "YLSfJl9hZnkONPYqqXpOdNnPlmTvP5dhLuDnpLXnl3pTsUtY49gr6K92lr7LwuopaqJzT87m9WGU4nFVvtnRDg=="
+  "signature": "C4KtvuqhnHRDKjjeSLBQa+XnRlVu/fTaPH5uPeqS9Tl70auQxwAjUhzrh675YZD2DNmUXmJaXIE1ZOUJ3NeyBw=="
 }
