@@ -37,7 +37,7 @@ async function refresh(){
   const date=document.getElementById('query-date');date.min=state.today;date.max=state.maxDate;date.value=state.date;
   document.getElementById('collect').disabled=state.collection.running;
   document.getElementById('cancel').disabled=!state.collection.running;
-  document.getElementById('automation-state').textContent=state.paused?'자동 실행을 중지한 상태예요.':'자동 실행을 허용한 상태예요.';
+  document.getElementById('automation-state').textContent=state.siteWaitUntrusted?'PC 시계 또는 사이트 대기 기록을 확인할 수 없어 자동 요청을 보류했어요.':state.paused?'자동 실행을 중지한 상태예요.':'자동 실행을 허용한 상태예요.';
   const rows=state.sites.map(site=>{
    const row=node('div',undefined,'site'),info=node('div',undefined,'site-info'),label=node('label',undefined,'site-name');
    if(site.catalog){
