@@ -35,3 +35,6 @@ doctor-glean-pc-developer-diagnostics*.json
 **/credential-action-fuses-v1.json
 **/surveys-v1.json
 **/identity-state-snapshots/
+**/site-wait-v1.json*
+**/usage-v1.json
+**/morning-schedule-v1.json

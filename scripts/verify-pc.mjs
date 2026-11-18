@@ -20,6 +20,7 @@ function run(name,script,marker){
  console.log('PASS '+name+' '+checks);return log;
 }
 try{
+ run('inputs',['scripts/v161-inputs.mjs'],/^Verified inputs (\d+)$/gm);
  const node=run('node',['--test','--test-reporter=tap',...readdirSync(join(root,'test')).filter(n=>n.endsWith('.test.js')).sort().map(n=>'test/'+n)],/^# pass (\d+)$/gm);
  if(!/^# fail 0$/m.test(node)||!/^# cancelled 0$/m.test(node)||!/^# skipped 0$/m.test(node)||!/^# todo 0$/m.test(node))throw Error('node partial or ignored checks');
  run('syntax',['scripts/check.mjs'],/JavaScript syntax checks passed\.()/gm);

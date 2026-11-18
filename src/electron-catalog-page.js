@@ -10,9 +10,9 @@ const bounded=(promise,signal,ms)=>boundedWork(promise,signal,ms,(code,error)=>O
  ...(code==='network_error'?{failure:loadFailure(error?.errno)}:{}),
 }));
 
-export function electronCatalogPage(profile,signal,preferences){
+export function electronCatalogPage(profile,signal,preferences,traffic){
  const window=new BrowserWindow({show:false,width:1100,height:1800,autoHideMenuBar:true,webPreferences:{...preferences,backgroundThrottling:false}});
- const contents=window.webContents;const resources=hiddenResources(contents);try{contents.debugger.attach('1.3');observeResourceBytes(contents);}catch{}window.once('closed',resources.close);let version=0,lastFailure='';
+ const contents=window.webContents;const resources=hiddenResources(contents,traffic);try{contents.debugger.attach('1.3');observeResourceBytes(contents);}catch{}window.once('closed',resources.close);let version=0,lastFailure='';
  contents.on('did-fail-load',(_event,code,_description,_url,main)=>{if(main!==false&&code!==-3)lastFailure=loadFailure(code);});
  contents.on('did-start-navigation',(event,_url,isInPlace,isMainFrame)=>{if((isMainFrame??event.isMainFrame)&&!(isInPlace??event.isInPlace))version++;});
  const navigation=(event,url)=>{if(!allowedNavigation(profile.id,typeof url==='string'?url:event.url))event.preventDefault();};
@@ -25,6 +25,7 @@ export function electronCatalogPage(profile,signal,preferences){
  return new CatalogPage(profile,{
   snapshot:()=>({url:contents.isDestroyed()?'':contents.getURL(),version,loading:!contents.isDestroyed()&&contents.isLoadingMainFrame(),failure:lastFailure}),
   load:async url=>{
+   if(traffic&&!traffic.allowed())throw Error('site_wait');
    if(!allowedNavigation(profile.id,url))throw Object.assign(Error(),{code:'navigation_changed'});
    lastFailure='';
    // A site's client redirect may abort the initial navigation. Wait for its
@@ -42,7 +43,7 @@ export function electronCatalogPage(profile,signal,preferences){
    });
    await bounded(load,signal,45_000);
   },
-  evaluate:script=>bounded(contents.executeJavaScript(script,false),signal,10_000),
+  evaluate:script=>{if(traffic&&!traffic.allowed())throw Error('site_wait');return bounded(contents.executeJavaScript(script,false),signal,10_000);},
   close,
  },signal);
 }

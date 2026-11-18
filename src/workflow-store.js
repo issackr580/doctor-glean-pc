@@ -16,6 +16,12 @@ export function cleanReceipt(raw,now=Date.now()){
  const out={status:STATUSES.has(raw?.status)?raw.status:'unknown',reason:safeReason(raw?.reason),checkedAt:now};
  for(const key of ['attempted','confirmationAttempted','submitted','targetMatched','navigationObserved','dailyChecked','catalogChecked','playerObserved','watchObserved'])if(typeof raw?.[key]==='boolean')out[key]=raw[key];
  for(const key of ['slot','due','retryCount','reads','elapsedMs','navigations','candidateCards','titleMatches','scheduleMatches','matchedTargets','entryControls','attemptMask','sentMask','successMask','providerComplete','startedAt','opensAt','firstPageReadyAt','firstMissionReadAt','firstEligibleAt','firstClaimAt','lastClaimAt','finishedAt','alarmDelayMs','observedAt','missionTotal','missionMask'])if(number(raw?.[key]))out[key]=raw[key];
+ const observed=raw?.providerObservation;
+ if(observed?.status==='observed'&&number(observed.requestAt)&&number(observed.responseAt)&&observed.responseAt>=observed.requestAt){
+  const filtered={status:'observed',requestAt:observed.requestAt,responseAt:observed.responseAt};
+  for(const key of ['providerUpdatedAt','providerPeriodAt'])if(typeof observed[key]==='string'&&/^20\d\d-\d\d-\d\d \d\d:\d\d:\d\d$/.test(observed[key]))filtered[key]=observed[key];
+  if(filtered.providerUpdatedAt)out.providerObservation=filtered;
+ }
  if(['not_checked','no_video','requested','playing_observed','gesture_required','play_failed','inaccessible','not_ready','navigation_unconfirmed'].includes(raw?.playback))out.playback=raw.playback;
  return out;
 }

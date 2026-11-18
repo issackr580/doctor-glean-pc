@@ -1,10 +1,11 @@
+import {resourceCount} from './resource-use.js';
 import {readFileSync} from 'node:fs';
 import {allowedNavigation,siteById} from './security.js';
 import {pageRole} from './page-role.js';
 import {ID_SITES,officialIdentity} from './entry-identity.js';
 
 const ASSETS=new Map();
-function asset(name,site){const family=ID_SITES.includes(site)?'identity':'engine',key=family+'/'+name;if(!ASSETS.has(key))ASSETS.set(key,readFileSync(new URL('../vendor/'+key,import.meta.url),'utf8'));return ASSETS.get(key);}
+function asset(name,site){const family=site==='bluepharm'?'direction161':ID_SITES.includes(site)?'identity':'engine',key=family+'/'+name;if(!ASSETS.has(key))ASSETS.set(key,readFileSync(new URL('../vendor/'+key,import.meta.url),'utf8'));return ASSETS.get(key);}
 const readerName=profile=>profile.id==='dtalks'?'reader-additional.js':profile.id==='ckd'?'reader-ckd.js':profile.id==='keymedi'?'reader-keymedi.js':['additional-catalog-v1','docple-live-v1'].includes(profile.crawler)?'reader-additional.js':'reader-catalog.js';
 const fail=code=>Object.assign(Error(code),{code});
 export function safeCatalogNavigation(profile,action,state){
@@ -52,7 +53,7 @@ export class CatalogPage{
   if(!site.hosts.includes(new URL(before.url).hostname)||/\/login(?:\/|\.|$)|\/auth\/login|\/sign.?in/i.test(new URL(before.url).pathname))return {site:site.id,status:'login',done:true,events:[],coverage:false};
   const source=`(()=>{if(document.readyState!=='complete')return JSON.stringify({status:'loading',done:false,events:[]});const read=${asset(readerName(this.profile),this.profile.id)};const result=read(${JSON.stringify(this.profile)},${JSON.stringify(date)},${JSON.stringify(previous)});return JSON.stringify(result);})()`;
   let encoded;
-  try{encoded=await this.#evaluate(source);}catch(error){
+  try{resourceCount('domReads');encoded=await this.#evaluate(source);}catch(error){
    const after=this.#current();
    if(error.code==='navigation_changed'&&this.documentChanges++<12&&allowedNavigation(this.profile.id,after.url)&&this.transport.snapshot().loading!==undefined)return {status:'loading',done:false,events:[]};
    throw error;

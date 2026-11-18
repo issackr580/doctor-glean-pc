@@ -10,11 +10,11 @@ import {EntryRunner} from './entry-runner.js';
 import {LoungeRunner} from './lounge-runner.js';
 import {DAILY_TASKS} from './automation-policy.js';
 import {kstDate,kstInstant,nextLoungePreparation} from './schedule.js';
-function nextMorning(now){const today=kstDate(now),at=kstInstant(today,'08:10');return at>=now-1800000?at:kstInstant(kstDate(now+86400000),'08:10');}
+import {MorningSchedule} from './morning-schedule.js';
 export class AutomationController{
  constructor({file,ledger,createPage,createInspectionPage,isManualOpen,catalog,catalogBusy,queueCatalog,yieldCatalog,onChange=()=>{},onEvent=()=>{},onError=()=>{},now=Date.now,traceEntry,observeEntry,entryContextEpoch=()=>0,executionAllowed=()=>true,options=new PcOptions(join(dirname(file),'pc-options-v1.json')),notifySurvey=()=>{}}){
   Object.assign(this,{ledger,createPage,isManualOpen,catalog,catalogBusy,queueCatalog,yieldCatalog,onChange,onError,now,executionAllowed});this.store=new WorkflowStore(file,{now,policyConsumed:j=>Object.values(ledger.snapshot().jobs).some(r=>r.site==='hmp'&&r.target===j.key&&r.slot===j.slot&&r.dueAt===j.due)});this.options=options;this.active=null;this.pendingDaily=[];this.followupReads=[];this.pendingReadOnly=true;this.closed=false;
-  this.store.recover();
+  this.morning=new MorningSchedule(join(dirname(file),'morning-schedule-v1.json'));this.store.recover();
   const common={ledger,store:this.store,createPage,createInspectionPage,isManualOpen,onChange:()=>{onChange();},onEvent,now};
   this.quiz=new DoctorvilleQuizRunner(common);
   this.daily=new DailyRunner({...common,quiz:this.quiz,shouldYield:()=>this.allowed()&&!!(this.entry.due(this.now())||this.entry.revisionDue())});
@@ -25,7 +25,7 @@ export class AutomationController{
  }
  allowed(){return !this.closed&&this.executionAllowed()&&!this.ledger.snapshot().paused&&!this.store.failed&&!this.options.failed;}
  get busy(){return !!this.active||this.daily.busy||this.entry.busy||this.lounge.busy;}
- rearm(){this.boundary=this.now();this.morningAt=nextMorning(this.now());this.loungeAt=nextLoungePreparation(this.now());}
+ rearm(){this.boundary=this.now();this.morningAt=this.morning.next(this.now());this.loungeAt=nextLoungePreparation(this.now());}
  snapshot(){return {features:this.store.features(),entrySites:this.store.entrySites(),automaticEntrySites:this.store.entrySites().filter(automaticEntrySite),today:this.store.day(),entries:this.store.entries(),surveys:this.survey.snapshot(),daily:this.daily.snapshot(),preflight:this.preflightProgress,active:this.active??'',queuedDaily:[...this.pendingDaily],nextMorning:this.store.features().morning?this.morningAt:0,nextLounge:this.store.features().lounge?this.loungeAt:0,storageUnavailable:this.store.failed||this.options.failed};}
  diagnostics(){return {...this.store.diagnostics(),storageUnavailable:this.store.failed||this.options.failed,surveys:this.survey.snapshot({diagnostics:true}),quizFuses:this.quiz.fuses.summary(),daily:this.daily.snapshot(),preflight:this.preflightProgress,active:this.active??'',queuedDaily:[...this.pendingDaily],nextMorning:this.morningAt,nextLounge:this.loungeAt};}
  setFeature(key,value){this.store.setFeature(key,value);if(!value){if(key==='entry')this.entry.cancel();if(key==='lounge')this.lounge.cancel();if(key==='survey')this.survey.cancel();if(['dailyClaim','quizAuto','brand'].includes(key))this.daily.cancel();}this.rearm();if(key==='entry'&&value)this.entry.reserveCatalog(kstDate(this.now()),this.catalog(kstDate(this.now())));this.onChange();this.tick();}
@@ -107,8 +107,8 @@ export class AutomationController{
    }
    if(loungeDue){const at=this.loungeAt;this.loungeAt=nextLoungePreparation(now+1000);this.#work('lounge',()=>this.lounge.run(kstDate(at),at),{priority:true});return;}
    if(features.lounge&&now>this.loungeAt+80000)this.loungeAt=nextLoungePreparation(now);
-   if(this.allowed()&&features.morning&&now>=this.morningAt){
-    const date=kstDate(this.morningAt),missed=now>this.morningAt+1800000;this.morningAt=nextMorning(now+1800001);
+   if(this.allowed()&&features.morning&&this.morningAt&&now>=this.morningAt){
+    const date=kstDate(this.morningAt),missed=now>=kstInstant(date,'08:40');this.morningAt=this.morning.next(Math.max(now,kstInstant(date,'08:40')));
     if(!this.store.day(date).morning){this.store.record(date,'morning',{status:missed?'missed':'running',reason:missed?'missed':'scheduled'});if(!missed)this.quick();}
    }
    const quizAt=kstInstant(kstDate(now),'08:00'),quiz=this.store.day().daily['intermd:quiz'];

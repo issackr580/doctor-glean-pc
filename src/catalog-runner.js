@@ -3,7 +3,7 @@ import {initialSettings} from '../vendor/engine/core.js';
 import {kstDate,kstInstant} from './schedule.js';
 
 const PROFILES=initialSettings().profiles;
-const REASONS=new Set(['network_error','time_limit','cancelled','invalid_response','date_mismatch','navigation_changed','action_rejected','storage_error','suspended','entry_priority']);
+const REASONS=new Set(['network_error','time_limit','cancelled','invalid_response','date_mismatch','navigation_changed','action_rejected','storage_error','suspended','entry_priority','site_wait']);
 const boundCatalog=(promise,signal,ms)=>boundedWork(promise,signal,ms,(code,error)=>{
  const safe=code==='network_error'&&REASONS.has(error?.code)?error.code:code;
  return Object.assign(Error(safe),{code:safe,...(['dns_error','offline','time_limit','certificate_error','load_failed','navigation_cancelled'].includes(error?.failure)?{failure:error.failure}:{})});
@@ -17,8 +17,8 @@ function wait(ms,signal){return new Promise(resolve=>{
 
 /** Host-owned bounded collection. No page result may schedule a submit task. */
 export class CatalogRunner{
- constructor({store,createPage,isManualOpen=()=>false,recoverLogin=async()=>false,prepareCollection=async()=>{},nativeRead=async()=>null,onChange=()=>{},now=Date.now,sleep=wait,elapsed=()=>performance.now()}){
-  Object.assign(this,{store,createPage,isManualOpen,recoverLogin,prepareCollection,nativeRead,onChange,now,sleep,elapsed});this.active=null;this.last={running:false,date:kstDate(now()),site:'',reason:'idle'};
+ constructor({gate,store,createPage,isManualOpen=()=>false,recoverLogin=async()=>false,prepareCollection=async()=>{},nativeRead=async()=>null,onChange=()=>{},now=Date.now,sleep=wait,elapsed=()=>performance.now()}){
+  Object.assign(this,{gate,store,createPage,isManualOpen,recoverLogin,prepareCollection,nativeRead,onChange,now,sleep,elapsed});this.active=null;this.last={running:false,date:kstDate(now()),site:'',reason:'idle'};
  }
  snapshot(){return structuredClone(this.last);}
  #publish(run,extra={}){
@@ -57,9 +57,11 @@ export class CatalogRunner{
     const siteController=new AbortController(),abortSite=()=>siteController.abort(),siteTimer=setTimeout(()=>{timedOut=true;siteController.abort();},Math.max(1,remaining()));
     siteTimer.unref?.();run.controller.signal.addEventListener('abort',abortSite,{once:true});
     try{
-     await boundCatalog(this.prepareCollection(id,siteController.signal),siteController.signal,remaining());if(!this.#owns(run))return;
-     const native=await this.nativeRead(profile,date,siteController.signal,{remainingMs:remaining(),current:()=>this.#owns(run)&&kstDate(this.now())===today&&!this.isManualOpen(id)});
+     const checkWait=()=>{if(this.gate&&!this.gate.allowed(id))throw Object.assign(Error(),{code:'site_wait'});};
+     checkWait();await boundCatalog(this.prepareCollection(id,siteController.signal),siteController.signal,remaining());if(!this.#owns(run))return;
+     checkWait();const native=await this.nativeRead(profile,date,siteController.signal,{remainingMs:remaining(),current:()=>this.#owns(run)&&kstDate(this.now())===today&&!this.isManualOpen(id)});
      if(!this.#owns(run))return;
+     checkWait();if(native?.restricted)throw Object.assign(Error(),{code:'site_wait'});
      if(native?.abandoned)throw Object.assign(Error(),{code:'cancelled'});
      if(kstDate(this.now())!==today)throw Object.assign(Error(),{code:'date_mismatch'});
      if(this.isManualOpen(id))throw Object.assign(Error(),{code:'cancelled'});
@@ -72,12 +74,12 @@ export class CatalogRunner{
       if(kstDate(this.now())!==today)throw Object.assign(Error(),{code:'date_mismatch'});
       if(this.elapsed()-run.began>720_000||this.elapsed()-began>({keymedi:240_000,hmp:180_000}[id]??150_000))throw Object.assign(Error(),{code:'time_limit'});
       if(this.isManualOpen(id))throw Object.assign(Error(),{code:'cancelled'});
-      const reply=await run.page.read(date,previous);
+      checkWait();const reply=await run.page.read(date,previous);
       if(!this.#owns(run))return;
       if(kstDate(this.now())!==today){this.cancel('date_mismatch');return;}
       if(this.elapsed()-run.began>720_000||this.elapsed()-began>({keymedi:240_000,hmp:180_000}[id]??150_000))throw Object.assign(Error(),{code:'time_limit'});
       if(!reply||typeof reply!=='object'||!Array.isArray(reply.events))throw Object.assign(Error(),{code:'invalid_response'});
-      if(reply.status==='login'&&!recoveryAttempted){
+      checkWait();if(reply.status==='login'&&!recoveryAttempted){
        recoveryAttempted=true;run.page.close();run.page=null;
        const recovered=await boundCatalog(this.recoverLogin(id,siteController.signal),siteController.signal,remaining());
        if(!this.#owns(run))return;

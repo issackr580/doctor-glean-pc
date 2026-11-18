@@ -1,5 +1,6 @@
+import {SiteWait,workerWait} from './site-wait.js';
 import {NativeCatalogRead} from './native-catalog.js';
-import {resourceUse,trackPage} from './resource-use.js';
+import {configureUsage,changeUsage,flushUsage,resourceUse,trackPage} from './resource-use.js';
 import {app,BrowserWindow,Menu,Tray,nativeImage,ipcMain,session,dialog,clipboard,powerMonitor,safeStorage,net,shell,Notification} from 'electron';
 import {fileURLToPath} from 'node:url';
 import {join} from 'node:path';
@@ -80,17 +81,17 @@ function notify(){if(control&&!control.isDestroyed())control.webContents.send('p
 const buildState=()=>({
   version:VERSION,processStartedAt:PROCESS_STARTED_AT,appName:EDITION.name,applicationId:EDITION.appId,edition:EDITION.id,date:validQueryDate(viewDate)?viewDate:(viewDate=kstDate()),today:kstDate(),
   maxDate:kstDate(kstInstant(kstDate(),'00:00')+7*86_400_000),paused:state.snapshot().paused,
-  sites:SITES.map(({id,name,loginUrl})=>({id,name,open:[...manualOwners.values()].includes(id),loginEntry:!!loginUrl,session:effectiveSession(id),catalog:true,selected:catalog.selected().includes(id)})),
+  sites:SITES.map(({id,name,loginUrl})=>({id,name,serverWait:siteWait?.status(id),open:[...manualOwners.values()].includes(id),loginEntry:!!loginUrl,session:effectiveSession(id),catalog:true,selected:catalog.selected().includes(id)})),
   collection:collector.snapshot(),results:catalog.view(validQueryDate(viewDate)?viewDate:kstDate()).results,
   pendingQueries:catalogQueue?.snapshot()??[],
-  options:pcOptions?.snapshot(),credentials:credentials?.snapshot(),update:updater?.snapshot(),
+  siteWaitUntrusted:!!siteWait&&!siteWait.clockTrusted(Date.now()),usage:resourceUse(),options:pcOptions?.snapshot(),credentials:credentials?.snapshot(),update:updater?.snapshot(),
   automationAvailable:true,automation:automation?.snapshot(),registration:registrationState(),dailyTasks:DAILY_TASKS.map(({key,label,site})=>({key,label,site})),
 });
 
 function diagnosticSnapshot(){
  const snapshot=state.snapshot();
  return {appName:EDITION.name,applicationId:EDITION.appId,edition:EDITION.id,appVersion:VERSION,build:BUILD_INFO,exportedAt:Date.now(),processStartedAt:PROCESS_STARTED_AT,date:kstDate(),automationPaused:snapshot.paused,
-  runtime:{platform:process.platform,arch:process.arch,electron:process.versions.electron,chromium:process.versions.chrome,osRelease:release()},runtimeFaults:runtimeFaults.snapshot(),resourceUse:resourceUse(),
+  runtime:{platform:process.platform,arch:process.arch,electron:process.versions.electron,chromium:process.versions.chrome,osRelease:release()},runtimeFaults:runtimeFaults.snapshot(),siteWaitUntrusted:!!siteWait&&!siteWait.clockTrusted(Date.now()),resourceUse:resourceUse(),
   stage:'automation',automationAvailable:true,collection:collector.snapshot(),selectedCatalogSites:catalog.selected(),pendingQueries:catalogQueue?.snapshot()??[],sites:catalog.diagnostics(viewDate),automation:automation?.diagnostics(),
   siteSessions:SITES.map(({id})=>({site:id,open:[...manualOwners.values()].includes(id),...effectiveSession(id)})),credentials:credentials?.snapshot(),registration:registration?.store.snapshot(),browserEvents:[...browserEvents],developerDiagnostics:developerTools?.status(),
   attempts:Object.values(snapshot.jobs).map(({site,kind,date,slot,state,updatedAt})=>({site,kind,date,slot,state,updatedAt}))};
@@ -225,6 +226,8 @@ function showControl(){
   const window=control;
   window.loadURL(controlUrl).catch(error=>{if(!quitting&&control===window&&!window.isDestroyed())operationError(error,'control');});
 }
+let siteWait;
+function workerTraffic(id,signal){return workerWait(siteWait,id,signal,()=>credentials?.vault.epoch(id)??0);}
 const profileEpochs=new Map();
 app.on('web-contents-created',(_event,contents)=>trackPage(contents,'all'));
 function prepareSession(id){
@@ -342,13 +345,15 @@ function ipc(){
     catalogQueue.request(viewDate,catalog.selected());
     return {ok:true};
   });
+  registerIPC('pc:usage',action=>({ok:changeUsage(action)}));
+  registerIPC('pc:confirm-site-wait',(id,at,revision)=>{const ok=siteWait.acknowledge(id,at,revision);notify();return {ok};});
   registerIPC('pc:collect-site',id=>{
     if(!SITES.some(site=>site.id===id))return {ok:false,reason:'invalid_site'};
     if(!validQueryDate(viewDate))return {ok:false,reason:'invalid_date'};
     catalogQueue.request(viewDate,[id]);return {ok:true};
   });
   registerIPC('pc:cancel-collection',()=>{catalogQueue.clear();collector.cancel();return {ok:true};});
-  registerIPC('pc:daily-selection',keys=>{automation.daily.cancel();pcOptions.selectDaily(keys);notify();return {ok:true};});
+  registerIPC('pc:daily-selection',keys=>{catalogQueue.invalidateAutomatic();automation.daily.cancel();pcOptions.selectDaily(keys);notify();return {ok:true};});
   registerIPC('pc:memo',(date,text)=>{if(!validQueryDate(date))return {ok:false};pcOptions.memo(date,text);notify();return {ok:true};});
   registerIPC('pc:entry-hosts',rows=>{if(automation.busy||remoteWindows.size||credentials.busy||collector.snapshot().running)return {ok:false,reason:'busy'};pcOptions.hosts(rows);notify();return {ok:true};});
   registerIPC('pc:survey-exclude',(key,value)=>{pcOptions.excludeSurvey(key,value);if(value){surveyNotices.get(key)?.close();surveyNotices.delete(key);}automation.survey.cancel();notify();return {ok:true};});
@@ -358,7 +363,7 @@ function ipc(){
     if(typeof value!=='boolean')return {ok:false,reason:'invalid_setting'};
     if(value){catalogQueue.clear();collector.cancel();automation?.cancel();credentials?.cancel();registration?.cancel();}state.setPaused(value);if(!value)automation?.resumed();updateTray();notify();return {ok:true,state:buildState()};
   });
-  registerIPC('pc:set-feature',(key,value)=>{automation.setFeature(key,value);if(key==='survey'&&!value){for(const notice of surveyNotices.values())notice.close();surveyNotices.clear();}return {ok:true,state:buildState()};});
+  registerIPC('pc:set-feature',(key,value)=>{automation.setFeature(key,value);if(!value&&['morning','dailyClaim'].includes(key))catalogQueue.invalidateAutomatic();if(key==='survey'&&!value){for(const notice of surveyNotices.values())notice.close();surveyNotices.clear();}return {ok:true,state:buildState()};});
   registerIPC('pc:set-entry-sites',ids=>{automation.setEntrySites(ids);return {ok:true,state:buildState()};});
   registerIPC('pc:daily',readOnly=>{if(typeof readOnly!=='boolean')return {ok:false,reason:'invalid_setting'};return automation.requestDaily({readOnly});});
   registerIPC('pc:quick-run',()=>automation.quick());
@@ -414,12 +419,13 @@ function ipc(){
 if(!app.requestSingleInstanceLock())app.quit();
 else{
   app.on('second-instance',()=>{if(state)showControl();});
-  app.on('before-quit',()=>{quitting=true;try{developerTools?.event({area:'process',phase:'quit',site:''});registration?.cancel();catalogQueue?.close();automation?.close();credentials?.cancel();collector?.cancel();developerTools?.close();}catch{}});
+  app.on('before-quit',()=>{quitting=true;try{flushUsage();developerTools?.event({area:'process',phase:'quit',site:''});registration?.cancel();catalogQueue?.close();automation?.close();credentials?.cancel();collector?.cancel();developerTools?.close();}catch{}});
   app.on('window-all-closed',()=>{});
   app.on('quit',()=>runtimeFaults.close());
   app.whenReady().then(()=>{
     try{
       snapshotIdentityState(join(app.getPath('userData'),'workflows-v1.json'));snapshotIdentityState(join(app.getPath('userData'),'workflows-v1.json'),'before-entry-policy-v156');
+      configureUsage(join(dataDirectory,'usage-v1.json'));siteWait=new SiteWait(join(dataDirectory,'site-wait-v1.json'));
       state=new LocalState(join(app.getPath('userData'),'state-v1.json'));
       updater=new PcUpdater({context:{appPath:app.getAppPath(),executable:process.execPath,edition:EDITION.id,currentVersion:VERSION,electronVersion:process.versions.electron,platform:process.platform,arch:process.arch,channel:VERSION.includes('-preview.')?'preview':'stable'},
        fetch:(...args)=>net.fetch(...args),publicDownload:electronPatchDownload,privateDownload:(target,progress)=>downloadPrivateUpdate(target,progress,{parent:control}),
@@ -440,25 +446,25 @@ else{
       preload=fileURLToPath(new URL('./'+developerTools.preloadName,import.meta.url));
       credentials=new CredentialManager({directory:dataDirectory,applicationId:EDITION.appId,developer:EDITION.developer,
        protect:{available:()=>process.platform==='win32'&&safeStorage.isEncryptionAvailable(),encrypt:text=>safeStorage.encryptString(text),decrypt:bytes=>safeStorage.decryptString(bytes)},
-       automaticAllowed:()=>!state.snapshot().paused&&!updater.guarded,isManualOpen:id=>[...manualOwners.values()].includes(id),
+       automaticAllowed:id=>(!id||siteWait.allowed(id))&&!state.snapshot().paused&&!updater.guarded,isManualOpen:id=>[...manualOwners.values()].includes(id),
        createPage:async(id,signal,{validation,partition}={})=>{
         const prefs=validation?{...remotePreferences(id,EDITION.id),partition}:prepareSession(id);
         if(validation){const profile=session.fromPartition(partition);profile.setPermissionRequestHandler((_c,_p,callback)=>callback(false));profile.setPermissionCheckHandler(()=>false);profile.on('will-download',event=>event.preventDefault());}
-        const page=new AutomationPage(id,signal,prefs);
+        const page=new AutomationPage(id,signal,prefs,{traffic:workerTraffic(id,signal)});
         if(validation){const close=page.close.bind(page),profile=session.fromPartition(partition);let cleaned=false;page.close=()=>{close();if(!cleaned){cleaned=true;profile.clearStorageData().catch(()=>{});profile.clearCache().catch(()=>{});}};}
         return page;
        },onChange:()=>{notify();if(!credentials?.busy)queueMicrotask(()=>{catalogQueue?.pump();automation?.tick();});}});
-      const nativeCatalog=new NativeCatalogRead({sessionOwner:id=>session.fromPartition(prepareSession(id).partition),accountEpoch:id=>credentials.vault.epoch(id),profileEpoch:id=>profileEpochs.get(id)??0});
-      collector=new CatalogRunner({store:catalog,createPage:(profile,signal)=>electronCatalogPage(profile,signal,prepareSession(profile.id)),
+      const nativeCatalog=new NativeCatalogRead({gate:siteWait,sessionOwner:id=>session.fromPartition(prepareSession(id).partition),accountEpoch:id=>credentials.vault.epoch(id),profileEpoch:id=>profileEpochs.get(id)??0});
+      collector=new CatalogRunner({gate:siteWait,store:catalog,createPage:(profile,signal)=>electronCatalogPage(profile,signal,prepareSession(profile.id),workerTraffic(profile.id,signal)),
         prepareCollection:async(id,signal)=>{const admission=await credentials.prepareCollection(id,signal);if(id==='ckd')nativeCatalog.admitCkd(admission);},nativeRead:(...args)=>nativeCatalog.read(...args),
         recoverLogin:async(id,signal)=>(await credentials.recover(id,{automatic:true,signal})).status==='authenticated',
         isManualOpen:id=>[...manualOwners.values()].includes(id)||credentials.active?.site===id,onChange:snapshot=>{developerTools.observe(snapshot);notify();if(!snapshot.running)queueMicrotask(()=>catalogQueue?.pump());}});
       catalogQueue=new CatalogQueue({start:async(date,ids)=>{await collector.start(date,ids);automation?.catalogFinished(date,ids,collector.snapshot());},busy:()=>updater.guarded||collector.snapshot().running||!!automation?.busy||credentials.busy,validDate:validQueryDate,onChange:notify});
       automation=new AutomationController({file:join(dataDirectory,'workflows-v1.json'),options:pcOptions,notifySurvey:key=>{if(Notification.isSupported()){const notice=new Notification({title:'닥터빌 설문 참여 안내',body:'설문 기한을 확인했어요. 앱에서 상세 화면을 열어 직접 참여해 주세요.'});notice.on('click',()=>showControl());notice.on('close',()=>surveyNotices.delete(key));surveyNotices.set(key,notice);notice.show();}},ledger:state,executionAllowed:()=>!updater.guarded,
-       entryContextEpoch:site=>credentials.vault.epoch(site),createPage:(site,signal,options)=>credentials.wrapPage(site,new AutomationPage(site,signal,prepareSession(site),{...options,externalEntryAllowed:(id,url)=>pcOptions.allowsEntry(id,url)}),options),
-       createInspectionPage:(site,signal,options)=>new AutomationPage(site,signal,prepareSession(site),{...options,externalEntryAllowed:(id,url)=>pcOptions.allowsEntry(id,url)}),onEvent:event=>developerTools.event(event),traceEntry:(job,kind)=>developerTools.traceEntry(job,kind),observeEntry:(...args)=>developerTools.observeEntry(...args),
+       entryContextEpoch:site=>credentials.vault.epoch(site),createPage:(site,signal,options)=>credentials.wrapPage(site,new AutomationPage(site,signal,prepareSession(site),{...options,traffic:workerTraffic(site,signal),externalEntryAllowed:(id,url)=>pcOptions.allowsEntry(id,url)}),options),
+       createInspectionPage:(site,signal,options)=>new AutomationPage(site,signal,prepareSession(site),{...options,traffic:workerTraffic(site,signal),externalEntryAllowed:(id,url)=>pcOptions.allowsEntry(id,url)}),onEvent:event=>developerTools.event(event),traceEntry:(job,kind)=>developerTools.traceEntry(job,kind),observeEntry:(...args)=>developerTools.observeEntry(...args),
        isManualOpen:id=>[...manualOwners.values()].includes(id)||credentials.active?.site===id,catalog:date=>catalog.view(date).results,catalogBusy:()=>collector.snapshot().running||credentials.busy,
-       queueCatalog:date=>{viewDate=date;catalogQueue.request(date,catalog.selected());},
+       queueCatalog:date=>{viewDate=date;catalogQueue.request(date,catalog.selected(),{automatic:true});},
        yieldCatalog:()=>{const current=collector.snapshot();if(current.running){catalogQueue.request(current.date,catalog.selected());collector.cancel('entry_priority');}},
        onChange:()=>{notify();if(!automation?.busy)queueMicrotask(()=>catalogQueue?.pump());},onError:operationError});
       registration=new RegistrationController({store:new RegistrationStore(join(dataDirectory,'registration-attempts-v1.json')),
@@ -467,7 +473,7 @@ else{
         const rows=Object.values(catalog.view(viewDate).results).filter(row=>!row.stale&&['ok','review'].includes(row.status)).flatMap(row=>row.events).filter(event=>event.site==='hmp'&&registrationKey(event)===key&&event.registrationStatus==='not_registered');return rows.length===1?rows[0]:null;
        },createPage:createRegistrationPage,
        createInspectionPage:(job,signal)=>{
-        const page=new AutomationPage(job.site,signal,prepareSession(job.site));return {get url(){return page.url;},get version(){return page.version;},load:url=>page.load(url),ready:()=>page.ready(),call:(target,mode)=>{if(mode!=='inspect')throw Error('policy_rejected');return page.call('pc-registration.js',[target,'inspect']);},close:()=>page.close()};
+        const page=new AutomationPage(job.site,signal,prepareSession(job.site),{traffic:workerTraffic(job.site,signal)});return {get url(){return page.url;},get version(){return page.version;},load:url=>page.load(url),ready:()=>page.ready(),call:(target,mode)=>{if(mode!=='inspect')throw Error('policy_rejected');return page.call('pc-registration.js',[target,'inspect']);},close:()=>page.close()};
        },isBusy:()=>automation.busy||credentials.busy||collector.snapshot().running,
        onConfirmed:target=>{const key=registrationKey(target);if([...manualOwners.values()].includes(target.site))registrationConfirmed.set(key,target);else registrationFinished(target);},onChange:notify});
     }
