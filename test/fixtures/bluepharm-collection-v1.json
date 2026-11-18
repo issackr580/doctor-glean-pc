@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 1,
+  "id": "bluepharm-collection-v1",
+  "site": "bluepharm",
+  "operation": "collection",
+  "use": "development_verification_only",
+  "provenance": "synthetic_only",
+  "context": {
+    "targetDate": "2026-11-09",
+    "clockUtc": "2026-11-09T00:10:00Z",
+    "timezone": "Asia/Seoul"
+  },
+  "semantics": {
+    "dateModel": "start_date_only",
+    "scope": [
+      "ongoing",
+      "recruiting"
+    ],
+    "fullDayCoverage": false,
+    "offlineOnlyExcluded": true,
+    "selectedDayNeedsClock": true,
+    "ambiguousScheduleIsIncomplete": true,
+    "allowedActions": [
+      "original_status_filter",
+      "original_list_page"
+    ],
+    "claimEnrollmentOrPlaybackAllowed": false
+  },
+  "trafficPolicy": {
+    "providerCapacityKnown": false,
+    "verifiedRequestsPerSecond": null,
+    "verifiedRequestsPerDay": null,
+    "serverAllowanceEvidence": "not_available",
+    "clientLimitsAreServerPermission": false,
+    "retryAfterMustBeRespected": true,
+    "blockedOrChallengeMustNotBeBypassed": true,
+    "ordinaryReadDispersion": {
+      "scope": "existing_morning_quick_check_only",
+      "nominalStartKst": "08:10",
+      "existingEndKst": "08:40",
+      "maxOffsetMs": 120000,
+      "seed": "private_install_random_not_exported",
+      "sameDayOffsetStable": true,
+      "manualOrEntryOrLoungeScheduleChanged": false,
+      "sources": [
+        "app/src/main/java/kr/webinar/planner/MorningQuickCheck.java",
+        "app/src/main/java/kr/webinar/planner/MorningQuickCheckPolicy.java"
+      ]
+    },
+    "timeCriticalEntryAndLounge": "preserve_normal_schedule_stop_when_restricted",
+    "verificationProviderRequests": 0,
+    "clientRestrictionPolicy": {
+      "statuses": [
+        403,
+        429,
+        503
+      ],
+      "fallbackWaitMsWhenRetryAfterMissingOrInvalid": {
+        "429": 300000,
+        "503": 60000
+      },
+      "manualRequiredFor403": true,
+      "existingFutureWaitNotShortened": true,
+      "persistedAcrossRunsAndRestart": true,
+      "newRetryTimers": false,
+      "sources": [
+        "app/src/main/java/kr/webinar/planner/SiteTrafficPolicy.java",
+        "app/src/main/java/kr/webinar/planner/SiteTrafficStore.java",
+        "app/src/main/java/kr/webinar/planner/SiteTrafficGate.java"
+      ]
+    },
+    "trafficPolicyExecutionVerifiedByThisDomRunner": false
+  },
+  "verification": {
+    "reader": "app/src/main/assets/reader-additional.js",
+    "action": "app/src/main/assets/additional-action.js",
+    "existingFixtureHelper": "engine/tests/fixtures/bluepharm-filters.js",
+    "domBoundary": "linkedom_with_existing_document_order_adapter",
+    "parserOrDecisionReplica": false,
+    "realDeviceTested": false,
+    "authenticatedProviderTested": false
+  },
+  "cases": [
+    {
+      "id": "off_target_clockless_period",
+      "fixture": "earlier_period_then_selected_recruiting",
+      "goal": "선택일과 시작일이 다른 날짜 전용 기간형을 일일 강의로 만들지 않고 모집중 조회를 이어간다.",
+      "expected": {
+        "terminal": "scoped_complete",
+        "events": [
+          {
+            "date": "2026-11-09",
+            "time": "13:00",
+            "title": "SYNTHETIC_RECRUITING"
+          }
+        ],
+        "filters": 2,
+        "pages": 0,
+        "completedScopes": [
+          "ongoing",
+          "recruiting"
+        ]
+      }
+    },
+    {
+      "id": "selected_start_without_clock",
+      "fixture": "selected_period_without_clock",
+      "goal": "선택일 강의의 시각이 없으면 완료로 승격하거나 임의 시각을 만들지 않는다.",
+      "expected": {
+        "terminal": "incomplete",
+        "reason": "status_schedule_unconfirmed",
+        "events": [],
+        "filters": 1,
+        "pages": 0,
+        "completedScopes": []
+      }
+    },
+    {
+      "id": "ambiguous_schedule",
+      "fixture": "two_independent_schedules",
+      "goal": "서로 다른 두 일정을 한 기간으로 추정하지 않고 미완료로 남긴다.",
+      "expected": {
+        "terminal": "incomplete",
+        "reason": "status_schedule_unconfirmed",
+        "events": [],
+        "filters": 1,
+        "pages": 0,
+        "completedScopes": []
+      }
+    },
+    {
+      "id": "scoped_empty_is_not_all_day_absence",
+      "fixture": "empty_active_scopes",
+      "goal": "진행중·모집중이 비어 있어도 종료 강의를 포함한 당일 전체 부재로 주장하지 않는다.",
+      "expected": {
+        "terminal": "scoped_complete",
+        "events": [],
+        "filters": 2,
+        "pages": 0,
+        "completedScopes": [
+          "ongoing",
+          "recruiting"
+        ]
+      }
+    },
+    {
+      "id": "offline_only_is_excluded",
+      "fixture": "offline_ongoing_and_online_recruiting",
+      "goal": "오프라인 전용 카드는 제외하고 같은 선택일의 온라인 모집 강의만 유지한다.",
+      "expected": {
+        "terminal": "scoped_complete",
+        "events": [
+          {
+            "date": "2026-11-09",
+            "time": "13:00",
+            "title": "SYNTHETIC_ONLINE"
+          }
+        ],
+        "filters": 2,
+        "pages": 0,
+        "completedScopes": [
+          "ongoing",
+          "recruiting"
+        ]
+      }
+    }
+  ]
+}

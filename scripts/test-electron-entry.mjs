@@ -370,6 +370,7 @@ async function run(){
  await nov11Cases({root,date,title,clock,check,inspect,job,detailHeader});
  await nov06Cases({root,date,title,clock,check,inspect,job,detailHeader});
  await v156Cases({root,date,check});
+ await (await import("./electron-v161-cases.mjs")).v161Cases(check);
  await portingCases(check);
  check('all inspection and entry windows are released',BrowserWindow.getAllWindows().length===0);
  mkdirSync(new URL('../verification/',import.meta.url),{recursive:true});writeFileSync(new URL('../verification/electron-entry.json',import.meta.url),JSON.stringify({runtime:{platform:process.platform,electron:process.versions.electron,chromium:process.versions.chrome},environment:'Linux Electron45; synthetic HTTPS; PC exact entry and read-only preflight',checks:checks.length,passed:checks,actualProviderVerified:false,windowsVerified:false},null,2)+'\n');

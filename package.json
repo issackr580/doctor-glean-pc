@@ -1,6 +1,6 @@
 {
   "name": "doctor-glean-pc",
-  "version": "0.1.0-preview.33",
+  "version": "0.1.0-preview.34",
   "doctorGleanEdition": "developer",
   "private": true,
   "type": "module",

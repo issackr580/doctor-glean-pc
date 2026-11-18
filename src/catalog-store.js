@@ -1,3 +1,4 @@
+import {resourceCount} from './resource-use.js';
 import {readFileSync,statSync,mkdirSync,openSync,writeFileSync,fsyncSync,closeSync,renameSync,unlinkSync} from 'node:fs';
 import {dirname} from 'node:path';
 import {createHash,randomUUID} from 'node:crypto';
@@ -9,9 +10,9 @@ import {officialIdentity,identityInvalid} from './entry-identity.js';
 
 const IDS=new Set(SITES.map(s=>s.id));
 const STATUSES=new Set(['ok','review','login','blocked','error','cancelled','busy']);
-const REASONS=new Set(['list_read','list_unconfirmed','login_required','security_check','network_error','time_limit','cancelled','manual_view_open','invalid_response','date_mismatch','navigation_changed','action_rejected','storage_error','suspended','entry_priority']);
+const REASONS=new Set(['site_wait','list_read','list_unconfirmed','login_required','security_check','network_error','time_limit','cancelled','manual_view_open','invalid_response','date_mismatch','navigation_changed','action_rejected','storage_error','suspended','entry_priority']);
 const MAX_BYTES=4_194_304;
-const STOP_REASONS=new Set(['doctorville_list_exhausted','hmp_list_exhausted','after_target_date','past_target_date','current_list_only','whodadoc_date_checked','selected_month_calendar','docple_list_exhausted']);
+const STOP_REASONS=new Set(['bluepharm_active_lists_read','bluepharm_active_lists_unconfirmed','doctorville_list_exhausted','hmp_list_exhausted','after_target_date','past_target_date','current_list_only','whodadoc_date_checked','selected_month_calendar','docple_list_exhausted']);
 function inspectResult(raw){
  const d=raw?.diagnostics??raw?.inspection??{},out={stopReason:STOP_REASONS.has(d.stopReason)?d.stopReason:'unclassified',listStatus:['checked','read'].includes(d.listDetails?.status??d.listStatus)?d.listDetails?.status??d.listStatus:'unknown'};
  for(const key of ['rows','totalRows','undated','untimed','untitled','pages','expansions','unknown','reads','elapsedMs'])if(Number.isSafeInteger(d[key])&&d[key]>=0&&d[key]<=1000000)out[key]=d[key];
@@ -30,6 +31,7 @@ function inspectResult(raw){
  return out;
 }
 function scopeOf(inspection,coverage,site,date){
+ if(site==='bluepharm'&&inspection.stopReason==='bluepharm_active_lists_read'&&inspection.listStatus==='checked')return 'ongoing_recruiting';
  if(site==='docple'&&coverage&&inspection.stopReason==='docple_list_exhausted'&&inspection.listStatus==='checked'&&inspection.unknown===0)return 'list_checked';
  if(coverage&&['doctorville_list_exhausted','hmp_list_exhausted'].includes(inspection.stopReason)&&inspection.listStatus==='checked')return 'list_checked';
  if(coverage&&inspection.stopReason==='whodadoc_date_checked'&&inspection.listStatus==='checked')return 'date_range_checked';
@@ -122,6 +124,7 @@ export class CatalogStore{
     const results={};for(const [site,row] of Object.entries(snapshot.results)){
      const clean=sanitiseResult(site,date,row,row.checkedAt);clean.stale=row.stale;
      if(Number.isSafeInteger(row.previousCheckedAt))clean.previousCheckedAt=row.previousCheckedAt;
+     if(site==='dtalks'&&row.lastFailure&&REASONS.has(row.lastFailure.reason)&&Number.isSafeInteger(row.lastFailure.checkedAt))clean.lastFailure={reason:row.lastFailure.reason,checkedAt:row.lastFailure.checkedAt,inspection:inspectResult(row.lastFailure)};
      results[site]=clean;
     }
     this.#data.snapshots[date]={date,results};
@@ -137,12 +140,16 @@ export class CatalogStore{
  view(date){if(!validDate(date))throw Error('invalid_date');return clone(this.#data.snapshots[date]??{date,results:{}});}
  record(site,date,raw,now=Date.now()){
   const fresh=sanitiseResult(site,date,raw,now),old=this.#data.snapshots[date]?.results[site];
-  const verifiedEmpty=fresh.events.length===0&&fresh.coverage&&(fresh.status==='ok'||fresh.status==='review'&&['list_checked','date_range_checked','calendar_checked'].includes(fresh.scope));
+  if(site==='dtalks'){
+   if(['login','blocked','error','review'].includes(fresh.status)&&!fresh.coverage)fresh.lastFailure={reason:fresh.reason,checkedAt:fresh.checkedAt,inspection:fresh.inspection};
+   else if(old?.lastFailure)fresh.lastFailure=clone(old.lastFailure);
+  }
+  const verifiedEmpty=fresh.events.length===0&&(fresh.scope==='ongoing_recruiting'||fresh.coverage&&(fresh.status==='ok'||fresh.status==='review'&&['list_checked','date_range_checked','calendar_checked'].includes(fresh.scope)));
   if(!fresh.events.length&&!verifiedEmpty&&old?.events.length){fresh.events=clone(old.events);fresh.stale=true;fresh.previousCheckedAt=old.previousCheckedAt??old.checkedAt;}
   const next=clone(this.#data);next.snapshots[date]??={date,results:{}};next.snapshots[date].results[site]=fresh;
   const keep=new Set([date,...Object.keys(next.snapshots).filter(day=>day!==date).sort().reverse().slice(0,7)]);
   for(const day of Object.keys(next.snapshots))if(!keep.has(day))delete next.snapshots[day];
-  this.#save(next);return clone(fresh);
+  this.#save(next);resourceCount('catalogResults');if(fresh.coverage&&!fresh.stale)resourceCount('catalogComplete');return clone(fresh);
  }
- diagnostics(date){return Object.values(this.view(date).results).map(({site,status,reason,coverage,scope,inspection,checkedAt,stale,events})=>({site,status,reason,coverage,scope,inspection,checkedAt,stale,eventCount:events.length}));}
+ diagnostics(date){return Object.values(this.view(date).results).map(({site,status,reason,coverage,scope,inspection,checkedAt,stale,events,lastFailure})=>({...lastFailure&&{lastFailure},site,status,reason,coverage,scope,inspection,checkedAt,stale,eventCount:events.length}));}
 }

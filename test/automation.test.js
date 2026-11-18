@@ -119,39 +119,39 @@ test('unknown entry dispatch is not retried while unexecuted failures keep a bou
 test('lounge never claims before opening and durably reserves all seven categories',async t=>{
  const {clock,ledger,store}=setup(t,'00:00:02');store.setFeature('lounge',true);let sent=0,loads=0;
  const p=page(async(_name,[input])=>{
-  if(input.mode==='claim'){assert.ok(clock.now()>=at('00:01:02'));assert.equal(Object.values(ledger.snapshot().jobs).filter(j=>j.state==='attempting').length,7);assert.equal(input.mask,127);sent++;return {status:'ready',current:0,total:7,eligibleMask:127,successMask:0,sentMask:127};}
+  if(input.mode==='claim'){assert.ok(clock.now()>=at('00:01:04'));assert.equal(Object.values(ledger.snapshot().jobs).filter(j=>j.state==='attempting').length,7);assert.equal(input.mask,127);sent++;return {status:'ready',current:0,total:7,eligibleMask:127,successMask:0,sentMask:127};}
   return {status:'ready',current:sent?7:0,total:7,eligibleMask:127,successMask:sent?127:0};
  });p.load=async()=>{loads++;p.url='https://www.keymedi.com/drlounge';p.route='lounge';p.version++;};
  const runner=new LoungeRunner({ledger,store,createPage:async()=>p,now:clock.now,sleep:clock.sleep});await runner.run(date,at('00:00:02'));assert.equal(sent,1);assert.ok(loads>=2);assert.equal(store.day(date).lounge.status,'complete');
  await runner.run(date,at('00:00:02'));assert.equal(sent,1);
 });
 test('lounge rejects malformed eligibility and never sends after its deadline',async t=>{
- const {clock,ledger,store}=setup(t,'00:01:03');store.setFeature('lounge',true);let sent=0;
+ const {clock,ledger,store}=setup(t,'00:01:04');store.setFeature('lounge',true);let sent=0;
  const p=page(async(_name,[input])=>{if(input.mode==='claim')sent++;return {status:'ready',total:7,current:0,eligibleMask:'127',successMask:0};});p.load=async()=>{p.url='https://www.keymedi.com/drlounge';p.route='lounge';};
  await new LoungeRunner({ledger,store,createPage:async()=>p,now:clock.now,sleep:clock.sleep}).run(date,at('00:00:02'));assert.equal(sent,0);
 });
 test('pre-opening lounge completion waits for a new opening GET before deciding today',async t=>{
  for(const total of [6,7])for(const remainsComplete of [false,true]){
-  const {clock,ledger,store}=setup(t,'00:00:03');store.setFeature('lounge',true);const mask=total===6?95:127;let sent=0,loads=0,fresh=false;
+  const {clock,ledger,store}=setup(t,'00:00:04');store.setFeature('lounge',true);const mask=total===6?95:127;let sent=0,loads=0,fresh=false;
   const p=page(async(_name,[input])=>{
-   if(input.mode==='claim'){assert.ok(fresh&&clock.now()>=at('00:01:03'));assert.equal(Object.values(ledger.snapshot().jobs).filter(j=>j.state==='attempting').length,total);sent++;return {sentMask:mask};}
+   if(input.mode==='claim'){assert.ok(fresh&&clock.now()>=at('00:01:04'));assert.equal(Object.values(ledger.snapshot().jobs).filter(j=>j.state==='attempting').length,total);sent++;return {sentMask:mask};}
    const complete=!fresh||remainsComplete||sent>0;
    return {status:'ready',total,missionMask:mask,current:complete?total:0,eligibleMask:complete?0:mask,successMask:complete?mask:0};
-  });p.load=async()=>{loads++;fresh=clock.now()>=at('00:01:03');p.version++;p.route='lounge';};
+  });p.load=async()=>{loads++;fresh=clock.now()>=at('00:01:04');p.version++;p.route='lounge';};
   await new LoungeRunner({ledger,store,createPage:async()=>p,now:clock.now,sleep:clock.sleep}).run(date,clock.now());
-  assert.ok(loads>=2);assert.equal(sent,remainsComplete?0:1);assert.equal(store.day(date).lounge.status,'complete');assert.ok(store.day(date).lounge.finishedAt>=at('00:01:03'));
+  assert.ok(loads>=2);assert.equal(sent,remainsComplete?0:1);assert.equal(store.day(date).lounge.status,'complete');assert.ok(store.day(date).lounge.finishedAt>=at('00:01:04'));
  }
 });
 test('cancelling during a stale lounge completion does not claim or mark today complete',async t=>{
- const {clock,ledger,store}=setup(t,'00:00:03');store.setFeature('lounge',true);let sent=0;
+ const {clock,ledger,store}=setup(t,'00:00:04');store.setFeature('lounge',true);let sent=0;
  const p=page(async(_name,[input])=>{if(input.mode==='claim')sent++;return {status:'ready',total:6,missionMask:95,current:6,eligibleMask:0,successMask:95};});
  const runner=new LoungeRunner({ledger,store,createPage:async()=>p,now:clock.now,sleep:async()=>runner.cancel()});
  await runner.run(date,clock.now());assert.equal(sent,0);assert.equal(store.day(date).lounge.status,'unknown');assert.equal(store.day(date).lounge.successMask,0);assert.equal(Object.keys(ledger.snapshot().jobs).length,0);
 });
 test('a lounge GET begun before opening cannot become fresh just by finishing after opening',async t=>{
- const {clock,ledger,store}=setup(t);clock.set(at('00:01:03')-50);store.setFeature('lounge',true);let loads=0,sent=0,postOpening=false;
+ const {clock,ledger,store}=setup(t);clock.set(at('00:01:04')-50);store.setFeature('lounge',true);let loads=0,sent=0,postOpening=false;
  const p=page(async(_name,[input])=>{if(input.mode==='claim'){assert.ok(postOpening);sent++;return {sentMask:95};}const complete=!postOpening||sent>0;return {status:'ready',total:6,missionMask:95,current:complete?6:0,eligibleMask:complete?0:95,successMask:complete?95:0};});
- p.load=async()=>{loads++;postOpening=clock.now()>=at('00:01:03');if(loads===1)clock.advance(100);p.version++;p.route='lounge';};
+ p.load=async()=>{loads++;postOpening=clock.now()>=at('00:01:04');if(loads===1)clock.advance(100);p.version++;p.route='lounge';};
  await new LoungeRunner({ledger,store,createPage:async()=>p,now:clock.now,sleep:clock.sleep}).run(date,clock.now());assert.ok(loads>=2);assert.equal(sent,1);assert.equal(store.day(date).lounge.status,'complete');
 });
 test('a blocked entry load is terminal before dispatch, but uncertain dispatch remains consumed',async t=>{
@@ -207,7 +207,7 @@ test('genuinely ambiguous quiz products remain unsubmitted without consuming a t
 test('morning completion waits for both the daily run and its queued catalog',async t=>{
  const {root,clock,ledger,store}=setup(t,'08:09');store.setFeature('morning',true);let queries=0;
  const c=new AutomationController({file:join(root,'workflows.json'),ledger,createPage:async()=>{throw Error('unexpected_page');},isManualOpen:()=>false,catalog:()=>({}),catalogBusy:()=>false,queueCatalog:()=>queries++,yieldCatalog:()=>{},now:clock.now});t.after(()=>c.close());clearInterval(c.timer);
- c.daily.run=async()=>({reason:'finished'});clock.advance(60000);c.tick();await new Promise(resolve=>setImmediate(resolve));
+ c.daily.run=async()=>({reason:'finished'});clock.set(c.morningAt);c.tick();await new Promise(resolve=>setImmediate(resolve));
  assert.equal(queries,1);assert.equal(c.store.day().morning.status,'running');assert.equal(c.store.day().morning.dailyChecked,true);
  c.catalogFinished(date,[],{reason:'finished'});assert.equal(c.store.day().morning.status,'complete');assert.equal(c.store.day().morning.catalogChecked,true);
 });

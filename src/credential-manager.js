@@ -21,7 +21,7 @@ export class CredentialManager{
   if(!credentialSite(site))return {status:'blocked'};
   if(this.active||this.isManualOpen(site))return {status:'busy'};
   if(!this.vault.available())return {status:'storage_unavailable'};
-  if(automatic&&(!this.automaticAllowed()||!this.vault.enabled(site)))return {status:'disabled'};
+  if(automatic&&(!this.automaticAllowed(site)||!this.vault.enabled(site)))return {status:'disabled'};
   const decision=this.attempts.decision(site,this.now(),kind==='save',automatic);
   if(decision!=='ready'&&!(kind==='recover'&&['cooldown','daily_limit'].includes(decision))){
    const result={status:decision,at:this.now(),attempted:false,submitted:false,retryAt:this.attempts.retryAt(site,this.now(),{automatic}),kind,automatic};
@@ -34,7 +34,7 @@ export class CredentialManager{
   try{
    if(controller.signal.aborted)return result={status:'cancelled'};
    run.page=await this.createPage(site,controller.signal,{validation:kind==='save',partition:'credential-validation-'+randomUUID()});
-   result=await work(run.page,controller.signal,()=>!controller.signal.aborted&&(!automatic||this.automaticAllowed()&&this.vault.enabled(site)));
+   result=await work(run.page,controller.signal,()=>!controller.signal.aborted&&(!automatic||this.automaticAllowed(site)&&this.vault.enabled(site)));
    if(kind==='recover'&&result.status==='authenticated')await run.page.flushSession?.();
   }catch(error){result={status:safeCredentialStatus(controller.signal.aborted?'cancelled':error.code??error.message)};}
   finally{run.page?.close();signal?.removeEventListener('abort',abort);if(this.active===run)this.active=null;this.last.set(site,{status:result.status,at:this.now(),kind,automatic,attempted:result.attempted===true,submitted:result.submitted===true,retryAt:this.attempts.retryAt(site,this.now(),{automatic}),...(result.detail==='input_format'?{detail:'input_format'}:{}),...(Array.isArray(result.trace)?{trace:result.trace}:{}),...(Number.isSafeInteger(result.reads)?{reads:result.reads,elapsedMs:result.elapsedMs}:{})});this.onChange();}
@@ -52,7 +52,7 @@ export class CredentialManager{
   }finally{candidate.id='';candidate.password='';candidate=null;}
  }
  async prepareCollection(site,signal){
-  if(site!=='ckd'||!this.automaticAllowed()||!this.vault.enabled(site)||this.busy||this.isManualOpen(site))return;
+  if(site!=='ckd'||!this.automaticAllowed(site)||!this.vault.enabled(site)||this.busy||this.isManualOpen(site))return;
   const epoch=this.vault.epoch(site),at=this.now();if(this.attempts.decision(site,at,false,true)!=='ready'||signal?.aborted||!this.dailyFuses.claimCkd(at))return;let result={status:'unknown',submitted:false};
   try{result=await this.recover(site,{signal,automatic:true,freshCollection:true});}finally{this.dailyFuses.finishCkd(at,result,this.now());}
   if(result.status==='authenticated'&&result.submitted===true&&!signal?.aborted&&this.vault.epoch(site)===epoch)return {authenticated:true,date:kstDate(this.now()),accountEpoch:epoch};
@@ -76,14 +76,14 @@ export class CredentialManager{
  wrapPage(site,page,{purpose='read'}={}){
   const load=page.load.bind(page),call=page.call.bind(page);let recovering=false,tried=false,target='';
   const recover=async()=>{
-   if(purpose==='entry'&&!automaticEntrySite(site)||recovering||tried||!this.automaticAllowed()||!this.vault.enabled(site))return false;
+   if(purpose==='entry'&&!automaticEntrySite(site)||recovering||tried||!this.automaticAllowed(site)||!this.vault.enabled(site))return false;
    tried=true;recovering=true;
    try{const result=await this.recover(site,{automatic:true,signal:page.signal});if(result.status==='authenticated'&&!page.signal.aborted){await load(target);return true;}return false;}
    finally{recovering=false;}
   };
   page.load=async url=>{
    if(purpose==='entry'&&!automaticEntrySite(site))throw Error('disabled');target=url;await load(url);
-   if(purpose==='entry'&&!automaticEntrySite(site)||recovering||tried||!this.automaticAllowed()||!this.vault.enabled(site))return;
+   if(purpose==='entry'&&!automaticEntrySite(site)||recovering||tried||!this.automaticAllowed(site)||!this.vault.enabled(site))return;
    const state=await this.verifyPage(site,page);if(state!=='login_required')return;
    await recover();
   };

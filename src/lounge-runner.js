@@ -12,7 +12,7 @@ export class LoungeRunner{
  manualOpened(site){if(site==='keymedi')this.cancel();}
  async run(date,scheduledAt){
   if(this.active||this.store.day(date).lounge)return false;
-  const opensAt=kstInstant(date,'00:01:03'),closesAt=opensAt+20000,verifyAt=closesAt+12000,controller=new AbortController();
+  const opensAt=kstInstant(date,'00:01:04'),closesAt=opensAt+20000,verifyAt=closesAt+12000,controller=new AbortController();
   const run={controller,page:null},lease=date+':'+randomUUID();this.active=run;
   const runId=randomUUID().replace(/-/g,''),emit=(phase,detail={})=>executionEvent(this.onEvent,{area:'automation',phase,site:'keymedi',kind:'lounge',runId,due:opensAt,...detail});
   let row={status:'running',reason:'running',startedAt:this.now(),opensAt,alarmDelayMs:Math.max(0,this.now()-scheduledAt),attemptMask:0,sentMask:0,successMask:0},fresh=false,refreshes=0,lastRefresh=0,lastSent=0;
@@ -25,13 +25,15 @@ export class LoungeRunner{
    if(this.isManualOpen('keymedi')){row.status='busy';row.reason='manual_view_open';return false;}
    run.page=await this.createPage('keymedi',controller.signal);const page=run.page;
    const reload=async()=>{const requestedAt=this.now();await page.load('https://www.keymedi.com/drlounge');lastRefresh=this.now();if(requestedAt>=opensAt){fresh=true;refreshes++;}row.firstPageReadyAt??=this.now();};
-   await reload();let openedVersion=-1;
+   await reload();let openedVersion=-1,opens=0,lastOpen=0;
    while(valid()){
     const now=this.now();
     if(['login','provider'].includes(page.route)){row.status='login';row.reason='login_required';break;}
     if(now>=opensAt&&!fresh){await reload();openedVersion=-1;continue;}
     let result=await page.call('keymedi-lounge.js',[{mode:'inspect'}]);
-    if(result.status==='waiting'&&openedVersion!==page.version){openedVersion=page.version;await page.call('keymedi-lounge.js',[{mode:'open'}]);await this.sleep(150,controller.signal);continue;}
+    if(result.providerObservation?.status==='observed')row.providerObservation=result.providerObservation;
+    if(openedVersion!==page.version){openedVersion=page.version;opens=0;lastOpen=0;}
+    if(result.status==='waiting'&&result.reason==='mission_unavailable'&&opens<2&&(!opens||now-lastOpen>=3000)){opens++;lastOpen=now;await page.call('keymedi-lounge.js',[{mode:'open'}]);await this.sleep(150,controller.signal);continue;}
     if(result.status==='login'){row.status='login';row.reason='login_required';break;}
     if(result.status==='ready'){
      const missionMask=result.missionMask??(result.total===7?127:0);

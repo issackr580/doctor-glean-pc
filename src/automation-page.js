@@ -25,8 +25,8 @@ const destinationKind=raw=>{try{const u=new URL(raw);return u.protocol==='http:'
 const networkKind=code=>code===-105?'dns':code===-7||code===-118?'timeout':code<=-200&&code>=-299?'tls':[-100,-101,-102,-106,-109,-111,-130].includes(code)?'connection':'other';
 const dtalksLoginRedirect=raw=>{try{const u=new URL(raw);return u.origin==='http://www.dtalks.kr'&&!u.username&&!u.password&&!u.port&&!u.hash&&u.pathname==='/login.do'&&u.searchParams.getAll('backUrl').length<=1&&[...u.searchParams.keys()].every(k=>k==='backUrl');}catch{return false;}};
 export class AutomationPage{
- constructor(site,signal,preferences,{onDialog=()=>({accept:false,status:'unknown',reason:'manual_confirmation'}),onDiagnostic=()=>{},externalEntryAllowed=()=>false}={}){
-  Object.assign(this,{site,signal,preferences,onDialog,onDiagnostic,externalEntryAllowed});this.navigationBlocks=new WeakMap();this.pendingLoads=new WeakMap();this.secureLoginFallbackUsed=false;this.entryDispatchArmed=false;this.windows=[];this.generation=0;this.popupAllowed=false;this.focusPopup=false;this.closed=false;this.dialogResult=null;this.dialogs=0;
+ constructor(site,signal,preferences,{traffic,onDialog=()=>({accept:false,status:'unknown',reason:'manual_confirmation'}),onDiagnostic=()=>{},externalEntryAllowed=()=>false}={}){
+  Object.assign(this,{site,signal,preferences,traffic,onDialog,onDiagnostic,externalEntryAllowed});this.navigationBlocks=new WeakMap();this.pendingLoads=new WeakMap();this.secureLoginFallbackUsed=false;this.entryDispatchArmed=false;this.windows=[];this.generation=0;this.popupAllowed=false;this.focusPopup=false;this.closed=false;this.dialogResult=null;this.dialogs=0;
   this.runtime={navigationBlocked:0,popupDenied:0,mainFrameFailures:0,consoleErrors:0,credentialRequestObservationSupported:['doctorville','dtalks','whodadoc','hmp'].includes(site),credentialNetworkEnabled:false,credentialRequests:0,credentialResponses:0,credentialHttpStatus:0,credentialNetworkFailures:0};this.root=this.#create();this.current=this.root;this.abort=()=>this.close();signal.addEventListener('abort',this.abort,{once:true});
  }
  #diagnostic(stage,detail={}){if(!this.closed&&!this.signal.aborted)try{this.onDiagnostic(stage,{...detail,pageGeneration:this.generation});}catch{}}
@@ -35,7 +35,7 @@ export class AutomationPage{
   try{this.#guard(window);return window;}catch{window.destroy();throw failure('worker_closed');}
  }
  #guard(window){
-  this.windows.push(window);const contents=window.webContents;const resources=hiddenResources(contents);if(this.entryDispatchArmed)resources.entry();window.once('closed',resources.close);
+  this.windows.push(window);const contents=window.webContents;const resources=hiddenResources(contents,this.traffic);if(this.entryDispatchArmed)resources.entry();window.once('closed',resources.close);
   const guard=(event,url)=>{const target=typeof url==='string'?url:event.url;if(!this.allowsEntryNavigation(target)){this.runtime.navigationBlocked=Math.min(1000,this.runtime.navigationBlocked+1);this.navigationBlocks.set(contents,(this.navigationBlocks.get(contents)??0)+1);const load=this.pendingLoads.get(contents);if(load&&this.site==='dtalks'&&dtalksLoginRedirect(target))load.secureLoginRedirect=true;event.preventDefault();this.#diagnostic('navigation_blocked',{destinationKind:destinationKind(target)});}};
   contents.on('will-navigate',guard);contents.on('will-redirect',(event,url,_inPlace,main)=>{if((main??event.isMainFrame)!==false)guard(event,url);});
   contents.on('will-attach-webview',event=>event.preventDefault());
@@ -44,7 +44,7 @@ export class AutomationPage{
   contents.on('render-process-gone',()=>this.#diagnostic('renderer_gone'));
   contents.on('did-fail-load',(_event,code,_description,_url,main)=>{if(main!==false&&code!==-3){this.runtime.mainFrameFailures=Math.min(1000,this.runtime.mainFrameFailures+1);this.#diagnostic('network_error',{mainFrame:true,networkKind:networkKind(code)});}});
   contents.on('console-message',(event,details)=>{const level=typeof details==='number'?details:details?.level??event.level;if(level==='error'||level===3)this.runtime.consoleErrors=Math.min(1000,this.runtime.consoleErrors+1);});
-  contents.setWindowOpenHandler(({url})=>{if(this.popupAllowed&&this.windows.length<3&&(allowedPopup(this.site,url,contents.getURL())||this.entryDispatchArmed&&this.externalEntryAllowed(this.site,url)))return {action:'allow',overrideBrowserWindowOptions:{show:false,width:1100,height:1800,webPreferences:{...this.preferences,backgroundThrottling:false}}};this.runtime.popupDenied=Math.min(1000,this.runtime.popupDenied+1);return {action:'deny'};});
+  contents.setWindowOpenHandler(({url})=>{if((!this.traffic||this.traffic.allowed())&&this.popupAllowed&&this.windows.length<3&&(allowedPopup(this.site,url,contents.getURL())||this.entryDispatchArmed&&this.externalEntryAllowed(this.site,url)))return {action:'allow',overrideBrowserWindowOptions:{show:false,width:1100,height:1800,webPreferences:{...this.preferences,backgroundThrottling:false}}};this.runtime.popupDenied=Math.min(1000,this.runtime.popupDenied+1);return {action:'deny'};});
   contents.on('did-create-window',child=>{try{this.#guard(child);if(this.focusPopup)this.current=child;this.#diagnostic('popup_opened',{popup:true});}catch{child.destroy();this.dialogResult={status:'unknown',reason:'worker_closed'};}});
   // Browser dialogs are read only to fixed classifications, never logged raw.
   // Unknown confirmations are dismissed; only a task-specific original claim
@@ -65,7 +65,7 @@ export class AutomationPage{
    this.lastEntryDialog={...obstacle,generation:this.generation};
    this.#diagnostic('dialog_observed',obstacle);
    this.dialogs++;let decision={accept:false,status:'unknown',reason:'manual_confirmation'};
-   if(!this.closed&&!this.signal.aborted&&this.dialogs<=5&&allowedNavigation(this.site,contents.getURL()))try{
+   if((!this.traffic||this.traffic.allowed())&&!this.closed&&!this.signal.aborted&&this.dialogs<=5&&allowedNavigation(this.site,contents.getURL()))try{
     decision=this.credentialDialog?{accept:false,status:/비밀번호.*(?:틀|오류|일치하지)|아이디.*(?:틀|오류|일치하지)|invalid.*(?:password|credential)/i.test(params.message)?'rejected':/captcha|보안문자|인증번호|추가인증/i.test(params.message)?'challenge':'manual',reason:'site_dialog'}:this.onDialog(params.message,params.type)??decision;
    }catch{}
    if(decision.status)this.dialogResult={status:decision.status,reason:decision.reason};
@@ -81,8 +81,14 @@ export class AutomationPage{
   this.credentialNetwork=true;
   await Promise.all(this.windows.map(async window=>{try{await bounded(window.webContents.debugger.sendCommand('Network.enable',{maxPostDataSize:0}),this.signal,5000);this.runtime.credentialNetworkEnabled=true;}catch{this.runtime.credentialNetworkEnabled=false;}}));
  }
- #alive(){if(this.closed||this.signal.aborted||!this.current||this.current.isDestroyed())throw failure('cancelled');}
+ #alive(){if(this.traffic&&!this.traffic.allowed())throw failure('site_wait');if(this.closed||this.signal.aborted||!this.current||this.current.isDestroyed())throw failure('cancelled');}
  async load(url){
+  if(this.site==='keymedi'&&url==='https://www.keymedi.com/drlounge'&&!this.loungeObserverInstalled){
+   this.#alive();
+   const source=readFileSync(new URL('../vendor/direction161/keymedi-lounge.js',import.meta.url),'utf8');
+   try{if(!this.current.webContents.getURL())await bounded(this.current.loadURL('about:blank'),this.signal,2000);
+    await bounded(this.current.webContents.debugger.sendCommand('Page.addScriptToEvaluateOnNewDocument',{source:'('+source+')({mode:"observe_start"})'}),this.signal,2000);this.loungeObserverInstalled=true;}catch{/* Observation is optional. */}
+  }
   this.#alive();if(!allowedNavigation(this.site,url))throw failure('policy_rejected');const window=this.current,contents=window.webContents,blockedBefore=this.navigationBlocks.get(contents)??0,context={secureLoginRedirect:false};this.pendingLoads.set(contents,context);
   const loading=window.loadURL(url).catch(async error=>{
    if(error.errno!==-3||this.signal.aborted||(this.navigationBlocks.get(contents)??0)>blockedBefore)throw error;
@@ -143,7 +149,7 @@ export class AutomationPage{
   if(entry&&identityInvalid(args?.[0]))throw failure('policy_rejected');
   if(official&&!['preflight','inspect','click','schedule-inspect','open_target','open_catalog','entry_probe','playback_start','playback_probe'].includes(args?.[1]))throw failure('policy_rejected');
   const assetKey=(this.site==='hmp'&&name==='auto-entry.js'?'hmp/':'')+(official&&name==='auto-entry.js'?'identity/'+name:name);
-  if(!assets.has(assetKey))assets.set(assetKey,name==='pc-registration.js'?`(job)=>(${pcEntrySource()})(job,'registration-inspect')`:landing?credentialProviderLanding.toString():name==='pc-entry.js'?pcEntrySource():name==='credential-page-state.js'?credentialPageState.toString():name==='credential-docple-session.js'?credentialDocpleSession.toString():name==='doctorville-quiz-page.js'?doctorvilleQuizPage.toString():readFileSync(new URL('../vendor/'+(official&&name==='auto-entry.js'?'identity/':name.startsWith('credential-')?'credentials/':'automation/')+name,import.meta.url),'utf8'));
+  if(!assets.has(assetKey))assets.set(assetKey,name==='pc-registration.js'?`(job)=>(${pcEntrySource()})(job,'registration-inspect')`:landing?credentialProviderLanding.toString():name==='pc-entry.js'?pcEntrySource():name==='credential-page-state.js'?credentialPageState.toString():name==='credential-docple-session.js'?credentialDocpleSession.toString():name==='doctorville-quiz-page.js'?doctorvilleQuizPage.toString():readFileSync(new URL('../vendor/'+(name==='keymedi-lounge.js'?'direction161/':official&&name==='auto-entry.js'?'identity/':name.startsWith('credential-')?'credentials/':'automation/')+name,import.meta.url),'utf8'));
   if(this.site==='hmp'&&name==='auto-entry.js'&&!assets.get(assetKey).includes("key:'hmp:2:'"))assets.set(assetKey,hmpEntrySource(assets.get(assetKey)));
   const contents=this.current.webContents,url=this.url,version=this.version;
   const credential=name.startsWith('credential-'),reading=credential&&['probe','verify','cancel'].includes(args?.[0]?.mode);
@@ -156,7 +162,7 @@ export class AutomationPage{
   const result=`(${assets.get(assetKey)})(...${JSON.stringify(args)})`;
   const script=`(()=>{if(location.href!==${JSON.stringify(url)})return null;${binding}return JSON.stringify(${entry?'{value:'+result+',tag:window.__pcEntryDocument}':result});})()`;
   let encoded;
-  if(!authorize())throw failure('scope_changed');
+  this.#alive();if(!authorize())throw failure('scope_changed');
   try{encoded=await bounded(entry?contents.executeJavaScriptInIsolatedWorld(1003,[{code:script}]):contents.executeJavaScript(script,false),this.signal,10000);}
   catch(error){if(navigation&&!this.closed&&!this.signal.aborted&&this.version!==version)return {status:'unknown',reason:'navigation_unconfirmed',navigationObserved:true};throw error;}
   this.#alive();

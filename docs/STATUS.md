@@ -1,5 +1,7 @@
 # PC판 현재 상태와 다음 작업
 
+작업 후보 **0.1.0-preview.34**는 v161 사이트 대기, 오전 분산, 라운지 관측, 블루팜 범위 조회, 로컬 사용량 및 조회 재개를 연결한다. 합성 검사는 `npm run verify:pc`로 수행한다. 공개 버전과 Windows 실사용 검증은 별도로 기록한다.
+
 기준 공개 빌드: **0.1.0-preview.33**. 실행 소스 `1c762e6842091d08b7d55375fdbc113d9da87ed8` / `pc-source-v0.1.0-preview.33`. [배포용](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.33) 공개 prerelease·[개발자용](https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-f038b48c19817359e0f9) 협업자 Draft(ID441558216)와 서명 피드를 확인했다. Node444·구문·Linux Electron45/Xvfb 합성 HTTPS 조회155·일일30·계정121·입장461·replay136·신청193·업데이트23, Electron 전체1119개·최종 Windows resources/app의 Linux 관리 창 개발자155/배포141·에디션 데이터 분리·깨끗한 소스252파일·의존성/Node444/구문 재현·같은 에디션20~32의 실제 ZIP runtime·전체 app 패치 교체26경우,12서버 자산 전체 검증·독립 공개/404·서버 패치 서명/28선택을 대조했다. 입력 SHA `22a1d08ad9f6fdab81ed79f4bf218c0cf0536c776f84f8e7d7debcd36600d32d` 전후 일치. [PC-023 적용 범위](PORTING_DIRECTION_V156.md)와 D32가 과거 반복 정책보다 우선하며 실제 Windows/회원 결과·절감률은 미확인이다.
 
 ## PC-023 — v156 자동입장 정책·읽기 API·숨은 미디어 제한 (게시 완료)

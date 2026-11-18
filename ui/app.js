@@ -26,6 +26,11 @@ async function refresh(){
   if(!api){say('프로그램에서 이 화면을 열어 주세요.');return;}
   const state=await api.state();if(!state?.sites){say('프로그램 상태를 확인하지 못했어요.');return;}
   renderUpdate(state.update);
+  const usage=state.usage,toggle=document.getElementById('usage-toggle');
+  document.getElementById('usage-status').textContent=(usage.enabled?'기록 중 · '+new Date(usage.until).toLocaleString('ko-KR')+' 종료':'기록 꺼짐')+' · API 요청 '+usage.apiRequests+'회 / 본문 '+usage.apiBodyBytes+'바이트 · 브라우저 관측 '+usage.browserEncodedBytes+'바이트 · 목록 DOM 판독 '+usage.domReads+'회 · 전체 범위 확인 '+usage.catalogComplete+'/'+usage.catalogResults+'건 · Windows 전체 사용량 미측정';
+  toggle.textContent=usage.enabled?'기록 중지':'7일간 기록';
+  toggle.onclick=()=>perform(()=>api.usage(usage.enabled?'stop':'start'),'기록 설정을 저장했어요.');
+  document.getElementById('usage-delete').onclick=()=>perform(()=>api.usage('delete'),'사용량 기록을 삭제했어요.');
   document.title=state.appName;document.getElementById('app-name').textContent=state.appName;
   document.getElementById('edition').textContent=state.edition==='developer'?'PC 개발자용 · 검증판':'PC 배포용 · 검증판';
   document.getElementById('date').textContent=state.date+' · 한국 시간';document.getElementById('version').textContent='PC '+state.version;
@@ -49,6 +54,11 @@ async function refresh(){
    const actions=node('div',undefined,'site-actions');
    const button=node('button',site.open?'열린 창 보기':'사이트 열기');button.type='button';
    button.addEventListener('click',()=>perform(()=>api.openSite(site.id),'로그인 뒤 그 창 위쪽의 「로그인 마침」을 눌러 주세요.'));actions.append(button);
+   const wait=site.serverWait;
+   if(wait&&(wait.manual||wait.until>Date.now())){
+    const message=document.createElement('span');message.textContent=(wait.manual?'서버 403 · 직접 확인 필요 ':'')+(wait.until>Date.now()?'자동 요청 대기 · '+(wait.until>8640000000000000?'장기 대기':new Date(wait.until).toLocaleString('ko-KR')):'');actions.append(message);
+    if(wait.manual){const ack=document.createElement('button');ack.textContent='직접 확인했어요';ack.onclick=()=>perform(()=>api.confirmSiteWait(site.id,wait.at,wait.revision),'현재 사이트 상태를 확인했어요.');actions.append(ack);}
+   }
    if(site.loginEntry){const login=node('button','로그인 화면');login.type='button';login.addEventListener('click',()=>perform(()=>api.openLogin(site.id),'로그인 화면을 열었어요. 로그인 뒤 상단의 「로그인 마침」을 눌러 주세요.'));actions.append(login);}
    if(site.open){const finish=node('button',site.catalog?'로그인 마침 · 조회':'로그인 마침');finish.type='button';finish.addEventListener('click',()=>perform(()=>api.finishLogin(site.id),'세션 저장 요청을 마쳤어요. 조회 결과에서 로그인 상태를 확인해 주세요.'));actions.append(finish);}
    const account=node('button','계정 저장·복구');account.type='button';account.addEventListener('click',()=>openCredential(site.id));actions.append(account);

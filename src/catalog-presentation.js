@@ -1,4 +1,4 @@
-export const reasonLabels={manual_view_open:'사이트 창을 닫거나 「로그인 마침 · 이 사이트 조회」를 눌러 주세요.',login_required:'로그인이 필요해요. 사이트에서 로그인한 뒤 다시 조회해 주세요.',security_check:'사이트의 접근 확인 화면을 확인해 주세요.',network_error:'연결을 확인하고 다시 조회해 주세요.',time_limit:'조회 시간이 지났어요.',cancelled:'조회를 중지했어요.',suspended:'PC 절전으로 조회를 중지했어요.',invalid_response:'강의 정보를 읽지 못했어요.',date_mismatch:'날짜가 바뀌어 조회를 중지했어요.',navigation_changed:'사이트 화면이 바뀌었어요. 다시 조회해 주세요.',action_rejected:'목록 이동을 확인하지 못했어요.',storage_error:'조회 결과를 저장하지 못했어요.',list_unconfirmed:'목록은 읽었지만 전체 범위를 확인하지 못했어요.'};
+export const reasonLabels={site_wait:'사이트가 요청을 제한해 자동 작업을 보류했어요.',manual_view_open:'사이트 창을 닫거나 「로그인 마침 · 이 사이트 조회」를 눌러 주세요.',login_required:'로그인이 필요해요. 사이트에서 로그인한 뒤 다시 조회해 주세요.',security_check:'사이트의 접근 확인 화면을 확인해 주세요.',network_error:'연결을 확인하고 다시 조회해 주세요.',time_limit:'조회 시간이 지났어요.',cancelled:'조회를 중지했어요.',suspended:'PC 절전으로 조회를 중지했어요.',invalid_response:'강의 정보를 읽지 못했어요.',date_mismatch:'날짜가 바뀌어 조회를 중지했어요.',navigation_changed:'사이트 화면이 바뀌었어요. 다시 조회해 주세요.',action_rejected:'목록 이동을 확인하지 못했어요.',storage_error:'조회 결과를 저장하지 못했어요.',list_unconfirmed:'목록은 읽었지만 전체 범위를 확인하지 못했어요.'};
 export function resultGroup(result){
  if(!result)return 'unread';
  if(result.status==='login')return 'login';
@@ -17,6 +17,7 @@ export function siteLabel(result){
  if(result.reason==='network_error'&&result.inspection?.failure)return ({dns_error:'사이트 주소에 연결하지 못했어요.',offline:'인터넷 연결을 확인해 주세요.',time_limit:'사이트 연결 시간이 지났어요.',certificate_error:'사이트 인증서를 확인하지 못했어요.',navigation_cancelled:'사이트가 연결을 전환하다 멈췄어요. 다시 조회해 주세요.',load_failed:'사이트 연결을 마치지 못했어요.'})[result.inspection.failure]??'사이트 연결을 마치지 못했어요.';
  const label=reasonLabels[result.reason];
  if(result.stale)return '저장된 목록 · '+(label??'최신 조회 미완료');
+ if(result.scope==='ongoing_recruiting')return '진행 중·모집 중 목록 확인 · '+result.events.length+'개 · 종료 강의 제외';
  if(resultGroup(result)==='complete')return result.events.length?'강의 '+result.events.length+'개':'강의 없음';
  if(resultGroup(result)==='read')return (result.events.length?'강의 '+result.events.length+'개 조회됨':'선택일 강의 없음')+' · '+({list_checked:'현재 목록 끝 확인',date_range_checked:'선택일 날짜 범위 확인',calendar_checked:'월·일정 목록 대조 완료'})[result.scope];
  if(resultGroup(result)==='current')return (result.events.length?'강의 '+result.events.length+'개 조회됨':'현재 목록에서 선택일 강의 0개')+' · 현재 목록만 확인 · 전체 범위 미확인'+continuationLabel(result.inspection);

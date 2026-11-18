@@ -75,7 +75,7 @@ test('IPC accepts only the exact control window main frame and file', () => {
 
 test('KST day and scheduling are independent of computer timezone', () => {
   assert.equal(kstDate(Date.parse('2026-10-25T15:00:00Z')),'2026-10-26');
-  assert.equal(kstInstant('2026-10-26','00:01:02'),Date.parse('2026-10-25T15:01:02Z'));
+  assert.equal(kstInstant('2026-10-26','00:01:04'),Date.parse('2026-10-25T15:01:04Z'));
   assert.throws(()=>kstInstant('2026-02-30','00:00'));
   assert.throws(()=>kstInstant('2026-10-26','24:00'));
 });
@@ -90,8 +90,8 @@ test('Hanmi slots follow registered start time, never a hardcoded lunch slot', (
 });
 
 test('weekday lounge preparation skips passed preparation and weekends', () => {
-  assert.equal(nextLoungePreparation(kstInstant('2026-10-23','23:00')),kstInstant('2026-10-26','00:00:03'));
-  assert.equal(nextLoungePreparation(kstInstant('2026-10-26','00:00:03')),kstInstant('2026-10-27','00:00:03'));
+  assert.equal(nextLoungePreparation(kstInstant('2026-10-23','23:00')),kstInstant('2026-10-26','00:00:04'));
+  assert.equal(nextLoungePreparation(kstInstant('2026-10-26','00:00:04')),kstInstant('2026-10-27','00:00:04'));
 });
 
 test('expired jobs and jobs from another Korean day cannot execute after resume', () => {

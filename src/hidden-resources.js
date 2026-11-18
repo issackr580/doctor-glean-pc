@@ -1,4 +1,4 @@
-import {resourceCount,trackPage} from './resource-use.js';
+import {resourceCount,trackPage,onUsageChange} from './resource-use.js';
 const profiles=new WeakMap();
 const measured=new WeakSet();
 export function blockHiddenMedia(request,role){
@@ -7,13 +7,19 @@ export function blockHiddenMedia(request,role){
  if(!['https:','http:'].includes(url.protocol)||/\/(?:api|captcha)(?:\/|$)/i.test(url.pathname))return false;
  return request.resourceType==='media'||/\.(?:mp4|webm|m4v|mov|mp3|m4a|aac|ogg|oga|wav|flac|m4s|m3u8|mpd)$/i.test(url.pathname);
 }
-export function hiddenResources(contents){
+export function hiddenResources(contents,traffic){
  const profile=contents.session,id=contents.id;let owners=profiles.get(profile);
  if(!owners){owners=new Map();profiles.set(profile,owners);profile.webRequest.onBeforeRequest((request,done)=>{
-  const owner=owners.get(request.webContentsId),cancel=!!owner&&blockHiddenMedia(request,owner.role);if(cancel)resourceCount('mediaGetBlocked');done({cancel});
- });}
+  const owner=owners.get(request.webContentsId);if(owner?.traffic&&!owner.traffic.allowed())return done({cancel:true});const cancel=!!owner&&blockHiddenMedia(request,owner.role);if(cancel)resourceCount('mediaGetBlocked');done({cancel});
+ });
+ profile.webRequest.onHeadersReceived((details,done)=>{
+  const policy=owners.get(details.webContentsId)?.traffic;
+  if(!policy)return done({});
+  try{policy.response(details);done({cancel:!policy.allowed()});}catch{done({cancel:true});}
+ });
+ }
  if(owners.has(contents.id))return owners.get(contents.id).controller;
- const owner={role:'hidden_read'};owners.set(contents.id,owner);trackPage(contents,'hidden');
+ const owner={role:'hidden_read',traffic};owners.set(contents.id,owner);trackPage(contents,'hidden');
  const close=()=>owners.delete(id);contents.once('destroyed',close);
  owner.controller={entry:()=>{owner.role='entry';},close};return owner.controller;
 }
@@ -22,5 +28,11 @@ export function observeResourceBytes(contents){
  const debug=contents.debugger;
  // Uses existing debugger transport, without reading request headers or data.
  const receive=(_event,method,params)=>{if(method==='Network.requestWillBeSent')resourceCount('browserRequests');else if(method==='Network.dataReceived'&&Number.isSafeInteger(params.encodedDataLength)&&params.encodedDataLength>=0)resourceCount('browserEncodedBytes',params.encodedDataLength);};
- debug.on('message',receive);debug.sendCommand('Network.enable',{maxPostDataSize:0}).catch(()=>{});contents.once('destroyed',()=>debug.removeListener('message',receive));
+ let listening=false;
+ const unsubscribe=onUsageChange(enabled=>{
+  if(enabled===listening)return;listening=enabled;
+  if(enabled){debug.on('message',receive);debug.sendCommand('Network.enable',{maxPostDataSize:0}).catch(()=>{});}
+  else debug.removeListener('message',receive);
+ });
+ contents.once('destroyed',()=>{unsubscribe();debug.removeListener('message',receive);});
 }

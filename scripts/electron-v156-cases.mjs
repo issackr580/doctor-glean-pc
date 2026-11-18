@@ -10,7 +10,7 @@ import {LocalState} from '../src/local-state.js';
 import {CatalogRunner} from '../src/catalog-runner.js';
 import {CatalogStore} from '../src/catalog-store.js';
 import {NativeCatalogRead} from '../src/native-catalog.js';
-import {resourceUse,trackPage} from '../src/resource-use.js';
+import {changeUsage,resourceUse,trackPage} from '../src/resource-use.js';
 import {remotePreferences} from '../src/security.js';
 import {initialSettings} from '../vendor/engine/core.js';
 import {syntheticEntryClock} from './electron-entry-clock.mjs';
@@ -18,6 +18,7 @@ import {kstInstant} from '../src/schedule.js';
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const html=body=>'<!doctype html><meta charset="utf-8"><body>'+body+'</body>';
 export async function v156Cases({root,date,check}){
+ changeUsage('start');
  const windows=[],controllers=[],track=(_e,c)=>trackPage(c,'all');app.on('web-contents-created',track);
  let server;
  try{

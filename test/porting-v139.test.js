@@ -85,7 +85,7 @@ test('read-only refresh never joins a queued write batch',t=>{
  c.cancel();assert.deepEqual(c.followupReads,[]);
 });
 test('six-mission layout commits exactly the observed six category attempts before one original batch call',async t=>{
- const s=harness(t);s.set(at('00:00:03'));s.store.setFeature('lounge',true);let sends=0;
+ const s=harness(t);s.set(at('00:00:04'));s.store.setFeature('lounge',true);let sends=0;
  const page={url:'',route:'lounge',version:0,async load(url){this.url=url;this.version++;},async call(_name,[input]){if(input.mode==='claim'){assert.equal(Object.values(s.ledger.snapshot().jobs).filter(r=>r.state==='attempting').length,6);assert.equal(input.mask,95);sends++;return {sentMask:95};}return {status:'ready',total:6,missionMask:95,current:sends?6:0,eligibleMask:sends?0:95,successMask:sends?95:0};},close(){}};
  await new LoungeRunner({...s,createPage:async()=>page}).run(date,s.now());assert.equal(sends,1);assert.equal(s.store.day(date).lounge.missionTotal,6);assert.equal(s.store.day(date).lounge.status,'complete');
 });

@@ -68,8 +68,8 @@ export async function weekendCases({application,temporary,check}){
   }
   {
    const ledger=new LocalState(join(temporary,'weekend-controller-ledger.json'));ledger.setPaused(false);const controller=new AutomationController({file:join(temporary,'weekend-controller.json'),ledger,now:()=>base,createPage:async()=>{throw Error('no real page');},isManualOpen:()=>false,catalog:()=>({}),catalogBusy:()=>false,queueCatalog(){},yieldCatalog(){}});clearInterval(controller.timer);
-   check('weekday lounge skips Saturday and Sunday to next Monday',controller.loungeAt===kstInstant(monday,'00:00:03')&&nextLoungePreparation(kstInstant(sunday,'23:59'))===kstInstant(monday,'00:00:03'));
-   check('daily morning check remains scheduled on Sunday',controller.morningAt===kstInstant(sunday,'08:10'));
+   check('weekday lounge skips Saturday and Sunday to next Monday',controller.loungeAt===kstInstant(monday,'00:00:04')&&nextLoungePreparation(kstInstant(sunday,'23:59'))===kstInstant(monday,'00:00:04'));
+   check('daily morning check remains scheduled on Sunday',controller.morningAt>=kstInstant(sunday,'08:10')&&controller.morningAt<=kstInstant(sunday,'08:12'));
    check('weekend test does not enable any default automatic feature',Object.values(controller.store.features()).every(value=>value===false));controller.close();
   }
  }finally{for(const window of pages)if(!window.isDestroyed())window.destroy();}
