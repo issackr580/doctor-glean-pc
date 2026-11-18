@@ -145,3 +145,7 @@ node scripts/build-app-patch.mjs --from=/old/artifact/developer --to=/new/artifa
 ## preview.33 게시 확인
 
 [소유자 수동 runner](https://github.com/issackr580/doctor-glean-pc/actions/runs/43006603342)는 고정 소스 `1c762e6842091d08b7d55375fdbc113d9da87ed8`·검증본 전체 파일 해시·기존 v32 자산 SHA를 확인해 빈 Draft에만 업로드했다.12자산 재다운로드/서버 SHA·체크섬/ZIP 전체와 독립 공개·404를 확인한 뒤 배포용만 공개했다. 개발자용은 Draft다. 같은 에디션20~32의26직접 패치 경로와 실제 서버 패치 서명/피드28선택을 확인했다. 임시 workflow는 제거했다. 모바일/vendor·과거 자산·서명키/updater는 유지한다. [D32 저장 형식 변경과 검증 한계](PORTING_DIRECTION_V156.md)를 따른다.
+
+## preview.34 게시 확인
+
+[두 에디션의 검증 결과와 릴리스 자산](releases/0.1.0-preview.34.md)을 기록했다.

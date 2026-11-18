@@ -1,4 +1,10 @@
-# PC판 현재 인계 — preview.33
+# PC판 현재 인계 — preview.34
+
+현재 공개판은 **0.1.0-preview.34**입니다. 실행 소스는 `73107b4fd9ec1cd1370ab529bde915c050115f9e`입니다. [배포용](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.34) · [협업자용 Draft](https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-1e24228e53bb2423b492) · [검증 및 게시 기록](releases/0.1.0-preview.34.md)
+
+[사이트 요청 제어와 v161 인수표](PORTING_DIRECTION_V161.md)를 먼저 확인합니다.
+
+## preview.33 이력
 
 | 항목 | 기준 |
 |---|---|
