@@ -2,7 +2,7 @@
 
 # 의사 이삭 줍기 PC
 
-Windows PC를 켜두고 사용하는 독립형 상주 프로그램. 기준 공개판은 **0.1.0-preview.34**다. 운영 서버·유료 API·모바일 동기화·자체 원격 조작·절전 해제를 사용하지 않는다.
+Windows PC를 켜두고 사용하는 독립형 상주 프로그램. 기준 공개판은 **0.1.0-preview.35**다. 운영 서버·유료 API·모바일 동기화·자체 원격 조작·절전 해제를 사용하지 않는다.
 
 ## 공동 개발 시작
 
@@ -13,7 +13,7 @@ PC 전용 [공개 소스 저장소](https://github.com/issackr580/doctor-glean-p
 3. [구조](docs/ARCHITECTURE.md): 모듈·신뢰 경계·저장 형식·엔진 동기화
 4. [개발 방침](docs/DEVELOPMENT_POLICY.md)과 [결정 기록](docs/DECISIONS.md): 확정 범위
 5. [개발자 로그 수집](docs/DIAGNOSTICS.md): 재현 전 기록 켜기·JSON 내보내기·공유 기준
-6. [배포 절차](docs/RELEASE_PROCESS.md)와 [이번 기록](docs/releases/0.1.0-preview.34.md): 소스 기준점·검증·릴리스
+6. [배포 절차](docs/RELEASE_PROCESS.md)와 [이번 기록](docs/releases/0.1.0-preview.35.md): 소스 기준점·검증·릴리스
 
 ```sh
 npm ci
