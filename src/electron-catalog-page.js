@@ -1,4 +1,5 @@
 import {hiddenResources,observeResourceBytes} from './hidden-resources.js';
+import {CatalogRedirects} from './catalog-redirects.js';
 import {BrowserWindow} from 'electron';
 import {CatalogPage} from './catalog-page.js';
 import {allowedNavigation} from './security.js';
@@ -12,9 +13,11 @@ const bounded=(promise,signal,ms)=>boundedWork(promise,signal,ms,(code,error)=>O
 
 export function electronCatalogPage(profile,signal,preferences,traffic){
  const window=new BrowserWindow({show:false,width:1100,height:1800,autoHideMenuBar:true,webPreferences:{...preferences,backgroundThrottling:false}});
- const contents=window.webContents;const resources=hiddenResources(contents,traffic);try{contents.debugger.attach('1.3');observeResourceBytes(contents);}catch{}window.once('closed',resources.close);let version=0,lastFailure='';
+ const contents=window.webContents;const redirects=new CatalogRedirects(url=>allowedNavigation(profile.id,url));
+ const checkRedirect=()=>{if(redirects.stopped)throw Object.assign(Error('redirect_limit'),{code:'redirect_limit'});};
+ const resources=hiddenResources(contents,traffic,redirects);try{contents.debugger.attach('1.3');observeResourceBytes(contents);}catch{}window.once('closed',resources.close);let version=0,lastFailure='';
  contents.on('did-fail-load',(_event,code,_description,_url,main)=>{if(main!==false&&code!==-3)lastFailure=loadFailure(code);});
- contents.on('did-start-navigation',(event,_url,isInPlace,isMainFrame)=>{if((isMainFrame??event.isMainFrame)&&!(isInPlace??event.isInPlace))version++;});
+ contents.on('did-start-navigation',(event,_url,isInPlace,isMainFrame)=>{if((isMainFrame??event.isMainFrame)&&!(isInPlace??event.isInPlace)){version++;lastFailure='';}});
  const navigation=(event,url)=>{if(!allowedNavigation(profile.id,typeof url==='string'?url:event.url))event.preventDefault();};
  contents.on('will-navigate',navigation);
  contents.on('will-redirect',(event,url,_inPlace,isMainFrame)=>{if((typeof isMainFrame==='boolean'?isMainFrame:event.isMainFrame)!==false)navigation(event,url);});
@@ -23,7 +26,7 @@ export function electronCatalogPage(profile,signal,preferences,traffic){
  const close=()=>{if(!window.isDestroyed())window.destroy();signal.removeEventListener('abort',close);};
  signal.addEventListener('abort',close,{once:true});
  return new CatalogPage(profile,{
-  snapshot:()=>({url:contents.isDestroyed()?'':contents.getURL(),version,loading:!contents.isDestroyed()&&contents.isLoadingMainFrame(),failure:lastFailure}),
+  snapshot:()=>{checkRedirect();return {url:contents.isDestroyed()?'':contents.getURL(),version,loading:!contents.isDestroyed()&&contents.isLoadingMainFrame(),failure:lastFailure,crashed:contents.isDestroyed()||contents.isCrashed()};},
   load:async url=>{
    if(traffic&&!traffic.allowed())throw Error('site_wait');
    if(!allowedNavigation(profile.id,url))throw Object.assign(Error(),{code:'navigation_changed'});
@@ -31,7 +34,7 @@ export function electronCatalogPage(profile,signal,preferences,traffic){
    // A site's client redirect may abort the initial navigation. Wait for its
    // destination instead of reporting ERR_ABORTED as a connection failure.
    const load=window.loadURL(url).catch(async error=>{
-    if(error.errno!==-3||signal.aborted)throw error;
+    checkRedirect();if(error.errno!==-3||signal.aborted)throw error;
     const until=Date.now()+15000;let stableAt=Date.now(),lastVersion=version;
     while(!signal.aborted&&!contents.isDestroyed()&&Date.now()<until){
      if(lastFailure)throw error;
@@ -41,7 +44,7 @@ export function electronCatalogPage(profile,signal,preferences,traffic){
     }
     throw error;
    });
-   await bounded(load,signal,45_000);
+   try{await bounded(load,signal,45_000);}finally{checkRedirect();}
   },
   evaluate:script=>{if(traffic&&!traffic.allowed())throw Error('site_wait');return bounded(contents.executeJavaScript(script,false),signal,10_000);},
   close,

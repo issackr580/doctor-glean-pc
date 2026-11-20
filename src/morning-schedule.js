@@ -10,6 +10,10 @@ export class MorningSchedule {
    if(!this.state){this.state={version:1,seed:randomBytes(32).toString('hex')};atomicJson(file,this.state);}
   }catch{this.failed=true;}
  }
+ quizDue(date){
+  if(this.failed||[0,6].includes(new Date(date+'T00:00:00Z').getUTCDay()))return 0;
+  return kstInstant(date,'08:00:30')+createHmac('sha256',Buffer.from(this.state.seed,'hex')).update('intermd:'+date).digest().readUInt32BE()%120001;
+ }
  next(now){
   if(this.failed)return 0;
   const today=kstDate(now),date=now>=kstInstant(today,'08:40')?kstDate(now+86400000):today;

@@ -7,11 +7,14 @@ export function blockHiddenMedia(request,role){
  if(!['https:','http:'].includes(url.protocol)||/\/(?:api|captcha)(?:\/|$)/i.test(url.pathname))return false;
  return request.resourceType==='media'||/\.(?:mp4|webm|m4v|mov|mp3|m4a|aac|ogg|oga|wav|flac|m4s|m3u8|mpd)$/i.test(url.pathname);
 }
-export function hiddenResources(contents,traffic){
+export function hiddenResources(contents,traffic,redirects){
  const profile=contents.session,id=contents.id;let owners=profiles.get(profile);
  if(!owners){owners=new Map();profiles.set(profile,owners);profile.webRequest.onBeforeRequest((request,done)=>{
-  const owner=owners.get(request.webContentsId);if(owner?.traffic&&!owner.traffic.allowed())return done({cancel:true});const cancel=!!owner&&blockHiddenMedia(request,owner.role);if(cancel)resourceCount('mediaGetBlocked');done({cancel});
+  const owner=owners.get(request.webContentsId);if(owner?.redirects?.block(request)||owner?.traffic&&!owner.traffic.allowed())return done({cancel:true});const cancel=!!owner&&blockHiddenMedia(request,owner.role);if(cancel)resourceCount('mediaGetBlocked');done({cancel});
  });
+ profile.webRequest.onBeforeRedirect(details=>owners.get(details.webContentsId)?.redirects?.redirect(details));
+ const finished=details=>owners.get(details.webContentsId)?.redirects?.finish(details.id);
+ profile.webRequest.onCompleted(finished);profile.webRequest.onErrorOccurred(finished);
  profile.webRequest.onHeadersReceived((details,done)=>{
   const policy=owners.get(details.webContentsId)?.traffic;
   if(!policy)return done({});
@@ -19,7 +22,7 @@ export function hiddenResources(contents,traffic){
  });
  }
  if(owners.has(contents.id))return owners.get(contents.id).controller;
- const owner={role:'hidden_read',traffic};owners.set(contents.id,owner);trackPage(contents,'hidden');
+ const owner={role:'hidden_read',traffic,redirects};owners.set(contents.id,owner);trackPage(contents,'hidden');
  const close=()=>owners.delete(id);contents.once('destroyed',close);
  owner.controller={entry:()=>{owner.role='entry';},close};return owner.controller;
 }

@@ -24,7 +24,7 @@ contextBridge.exposeInMainWorld('doctorGlean',Object.freeze({
   selectDaily:keys=>ipcRenderer.invoke('pc:daily-selection',keys),
   saveMemo:(date,text)=>ipcRenderer.invoke('pc:memo',date,text),
   setEntryHosts:rows=>ipcRenderer.invoke('pc:entry-hosts',rows),
-  excludeSurvey:(key,value)=>ipcRenderer.invoke('pc:survey-exclude',key,value),
+  skipSurvey:(key,value)=>ipcRenderer.invoke('pc:survey-skip',key,value),
   openSurvey:key=>ipcRenderer.invoke('pc:survey-open',key),
   setEntrySites:ids=>ipcRenderer.invoke('pc:set-entry-sites',ids),
   checkDaily:readOnly=>ipcRenderer.invoke('pc:daily',readOnly),

@@ -177,3 +177,7 @@ Node201·구문, 실제 Linux Electron45/Xvfb 합성 HTTPS 관리 창78·자동 
 모바일 소스·APK·서명·릴리스는 수정하지 않는다. 운영 서버·유료 API·기기 동기화·iPhone 조작·WOL·절전 해제·지속 영상 재생은 추가하지 않는다. 공개 실행파일은 distribution만 대상이고 developer는 협업자 전용 Draft다. [개발 방침](DEVELOPMENT_POLICY.md)·[공동작업](../CONTRIBUTING.md)·[접근](ACCESS.md)·[인계](CODEX_HANDOFF.md)·[PC 검증](ENTRY_VALIDATION.md)을 따른다.
 
 완료한 preview.29 임시 수동 업로드 workflow를 제거했다. 인계는 문서/피드만 갱신하며 실행 소스·태그·기존 자산·모바일은 교체하지 않는다.
+
+### 0.1.0-preview.35 PC 후보
+
+목록 재사용과 사이트별 리디렉션 중단, 인터엠디 공개 전 로컬 처리 및 공개 후 단일 읽기, 닥터빌 직접 설문 열기를 연결했다. 전용 합성 검사는 npm run test:electron -- --suite=traffic 으로 실행한다. 연속 두 창의 IPC, 기존 목록 복귀 및 서버 응답 바이트를 측정한다. 실기기 절전과 실제 회원 사이트의 데이터 사용량은 별도 확인 대상이다.

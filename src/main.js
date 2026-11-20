@@ -1,7 +1,8 @@
+import {bindPowerEvents} from './power-events.js';
 import {SiteWait,workerWait} from './site-wait.js';
 import {NativeCatalogRead} from './native-catalog.js';
 import {configureUsage,changeUsage,flushUsage,resourceUse,trackPage} from './resource-use.js';
-import {app,BrowserWindow,Menu,Tray,nativeImage,ipcMain,session,dialog,clipboard,powerMonitor,safeStorage,net,shell,Notification} from 'electron';
+import {app,BrowserWindow,Menu,Tray,nativeImage,ipcMain,session,dialog,clipboard,powerMonitor,safeStorage,net,shell} from 'electron';
 import {fileURLToPath} from 'node:url';
 import {join} from 'node:path';
 import {writeFile} from 'node:fs/promises';
@@ -55,7 +56,7 @@ if(process.platform==='win32')app.setAppUserModelId(EDITION.appId);
 const controlUrl=new URL('../ui/index.html',import.meta.url).href;
 let control,tray,state,catalog,collector,catalogQueue,automation,credentials,registration,developerTools,preload,updater,pcOptions,quitting=false,viewDate=kstDate();
 const reportPreview=new ReportPreview();
-const surveyNotices=new Map();
+const manualSurveyKeys=new WeakMap();
 const registrationWindows=new Map(),registrationConfirmed=new Map();
 const siteWindows=new Map(),remoteWindows=new Set(),configuredSessions=new Set();
 const manualOwners=new Map();
@@ -247,7 +248,7 @@ function hardenSiteWindow(window,id){
   if(remoteWindows.has(window))return;
   remoteWindows.add(window);manualOwners.set(window,id);notify();
   const contents=window.webContents;
-  watchManualEntry(window,id,{jobs:()=>automation?.store.entries()??[],surveyAllowed:()=>!!automation?.allowed()&&automation.store.features().survey,onSurvey:(url,raw)=>automation?.survey.observe(url,raw),onClick:key=>{automation?.entry.cancelJob(key,true);browserEvent(id,'manual_entry_observed');}});
+  watchManualEntry(window,id,{jobs:()=>automation?.store.entries()??[],surveyAllowed:()=>manualSurveyKeys.has(window),onSurvey:(url,raw)=>automation?.survey.observe(url,raw,manualSurveyKeys.get(window)),onClick:key=>{automation?.entry.cancelJob(key,true);browserEvent(id,'manual_entry_observed');}});
   window.setTitle(siteById(id).name+' · 로그인 후 상단의 「로그인 마침」을 눌러 주세요');
   contents.on('page-title-updated',event=>event.preventDefault());
   window.setAutoHideMenuBar(false);
@@ -282,7 +283,7 @@ function hardenSiteWindow(window,id){
     if(!allowedPopup(id,url,contents.getURL())||remoteWindows.size>=12){sessionChange(id,{lastError:'popup_blocked'});browserEvent(id,'popup_blocked');return {action:'deny'};}
     return {action:'allow',overrideBrowserWindowOptions:{show:true,width:1100,height:820,autoHideMenuBar:false,webPreferences:prepareSession(id)}};
   });
-  contents.on('did-create-window',child=>{hardenSiteWindow(child,id);child.show();child.focus();});
+  contents.on('did-create-window',child=>{if(manualSurveyKeys.has(window))manualSurveyKeys.set(child,manualSurveyKeys.get(window));hardenSiteWindow(child,id);child.show();child.focus();});
   window.on('close',event=>{
     if(quitting||closingWindows.has(window))return;
     event.preventDefault();
@@ -295,7 +296,7 @@ function hardenSiteWindow(window,id){
     if(!quitting&&!manualOwners.size)showControl();
   });
 }
-function openSite(id,login=false){
+function openSite(id,login=false,survey){
   const site=siteById(id);if(!site)throw Error('invalid_site');
   if(collector.snapshot().running&&collector.snapshot().site===id)collector.cancel();
   automation?.manualOpened(id);
@@ -303,14 +304,16 @@ function openSite(id,login=false){
   const existing=siteWindows.get(id);
   if(existing&&!existing.isDestroyed()){
     if(existing.isMinimized())existing.restore();existing.show();existing.focus();
-    if(login&&site.loginUrl)navigateSite(existing,id,site.loginUrl);
+    if(survey){manualSurveyKeys.set(existing,survey.key);navigateSite(existing,id,survey.url);}
+    else if(login&&site.loginUrl)navigateSite(existing,id,site.loginUrl);
     return;
   }
   let window;try{window=new BrowserWindow({width:1100,height:820,show:false,parent:control,title:site.name,autoHideMenuBar:false,webPreferences:prepareSession(id)});}
   catch{sessionChange(id,{load:'failed',login:'not_confirmed',lastError:'window_unavailable'});browserEvent(id,'window_open_failed');throw Error('window_unavailable');}
   siteWindows.set(id,window);hardenSiteWindow(window,id);
   browserEvent(id,'window_opened');
-  navigateSite(window,id,login&&site.loginUrl?site.loginUrl:site.url);
+  if(survey)manualSurveyKeys.set(window,survey.key);
+  navigateSite(window,id,survey?.url??(login&&site.loginUrl?site.loginUrl:site.url));
 }
 function registerIPC(channel,handler){
   ipcMain.handle(channel,async(event,...args)=>{
@@ -356,14 +359,14 @@ function ipc(){
   registerIPC('pc:daily-selection',keys=>{catalogQueue.invalidateAutomatic();automation.daily.cancel();pcOptions.selectDaily(keys);notify();return {ok:true};});
   registerIPC('pc:memo',(date,text)=>{if(!validQueryDate(date))return {ok:false};pcOptions.memo(date,text);notify();return {ok:true};});
   registerIPC('pc:entry-hosts',rows=>{if(automation.busy||remoteWindows.size||credentials.busy||collector.snapshot().running)return {ok:false,reason:'busy'};pcOptions.hosts(rows);notify();return {ok:true};});
-  registerIPC('pc:survey-exclude',(key,value)=>{pcOptions.excludeSurvey(key,value);if(value){surveyNotices.get(key)?.close();surveyNotices.delete(key);}automation.survey.cancel();notify();return {ok:true};});
-  registerIPC('pc:survey-open',key=>{const url=automation.survey.target(key);if(!url)return {ok:false};openSite('doctorville');navigateSite(siteWindows.get('doctorville'),'doctorville',url);return {ok:true};});
+  registerIPC('pc:survey-skip',(key,value)=>({ok:automation.survey.skip(key,value)}));
+  registerIPC('pc:survey-open',key=>{const url=automation.survey.target(key);if(!url)return {ok:false};openSite('doctorville',false,{key,url});return {ok:true};});
   registerIPC('pc:copy-schedule',async()=>{await clipboard.writeText(formatPcSchedule(viewDate,catalog.selected(),catalog.view(viewDate).results)+(pcOptions.snapshot().memos[viewDate]?'\n\n메모: '+pcOptions.snapshot().memos[viewDate]:''));return {ok:true};});
   registerIPC('pc:pause',value=>{
     if(typeof value!=='boolean')return {ok:false,reason:'invalid_setting'};
     if(value){catalogQueue.clear();collector.cancel();automation?.cancel();credentials?.cancel();registration?.cancel();}state.setPaused(value);if(!value)automation?.resumed();updateTray();notify();return {ok:true,state:buildState()};
   });
-  registerIPC('pc:set-feature',(key,value)=>{automation.setFeature(key,value);if(!value&&['morning','dailyClaim'].includes(key))catalogQueue.invalidateAutomatic();if(key==='survey'&&!value){for(const notice of surveyNotices.values())notice.close();surveyNotices.clear();}return {ok:true,state:buildState()};});
+  registerIPC('pc:set-feature',(key,value)=>{automation.setFeature(key,value);if(!value&&['morning','dailyClaim'].includes(key))catalogQueue.invalidateAutomatic();return {ok:true,state:buildState()};});
   registerIPC('pc:set-entry-sites',ids=>{automation.setEntrySites(ids);return {ok:true,state:buildState()};});
   registerIPC('pc:daily',readOnly=>{if(typeof readOnly!=='boolean')return {ok:false,reason:'invalid_setting'};return automation.requestDaily({readOnly});});
   registerIPC('pc:quick-run',()=>automation.quick());
@@ -455,12 +458,12 @@ else{
         return page;
        },onChange:()=>{notify();if(!credentials?.busy)queueMicrotask(()=>{catalogQueue?.pump();automation?.tick();});}});
       const nativeCatalog=new NativeCatalogRead({gate:siteWait,sessionOwner:id=>session.fromPartition(prepareSession(id).partition),accountEpoch:id=>credentials.vault.epoch(id),profileEpoch:id=>profileEpochs.get(id)??0});
-      collector=new CatalogRunner({gate:siteWait,store:catalog,createPage:(profile,signal)=>electronCatalogPage(profile,signal,prepareSession(profile.id),workerTraffic(profile.id,signal)),
+      collector=new CatalogRunner({online:()=>net.isOnline(),context:id=>credentials.vault.epoch(id)+':'+(profileEpochs.get(id)??0),gate:siteWait,store:catalog,createPage:(profile,signal)=>electronCatalogPage(profile,signal,prepareSession(profile.id),workerTraffic(profile.id,signal)),
         prepareCollection:async(id,signal)=>{const admission=await credentials.prepareCollection(id,signal);if(id==='ckd')nativeCatalog.admitCkd(admission);},nativeRead:(...args)=>nativeCatalog.read(...args),
         recoverLogin:async(id,signal)=>(await credentials.recover(id,{automatic:true,signal})).status==='authenticated',
         isManualOpen:id=>[...manualOwners.values()].includes(id)||credentials.active?.site===id,onChange:snapshot=>{developerTools.observe(snapshot);notify();if(!snapshot.running)queueMicrotask(()=>catalogQueue?.pump());}});
-      catalogQueue=new CatalogQueue({start:async(date,ids)=>{await collector.start(date,ids);automation?.catalogFinished(date,ids,collector.snapshot());},busy:()=>updater.guarded||collector.snapshot().running||!!automation?.busy||credentials.busy,validDate:validQueryDate,onChange:notify});
-      automation=new AutomationController({file:join(dataDirectory,'workflows-v1.json'),options:pcOptions,notifySurvey:key=>{if(Notification.isSupported()){const notice=new Notification({title:'닥터빌 설문 참여 안내',body:'설문 기한을 확인했어요. 앱에서 상세 화면을 열어 직접 참여해 주세요.'});notice.on('click',()=>showControl());notice.on('close',()=>surveyNotices.delete(key));surveyNotices.set(key,notice);notice.show();}},ledger:state,executionAllowed:()=>!updater.guarded,
+      catalogQueue=new CatalogQueue({context:id=>credentials.vault.epoch(id)+':'+(profileEpochs.get(id)??0),resultValid:(date,id)=>{const row=catalog.view(date).results[id];return row?.coverage===true&&!row.stale&&row.status==='ok';},start:async(date,ids)=>{await collector.start(date,ids);automation?.catalogFinished(date,ids,collector.snapshot());},busy:()=>updater.guarded||collector.sleeping||collector.snapshot().running||!!automation?.busy||credentials.busy,validDate:validQueryDate,onChange:notify});
+      automation=new AutomationController({file:join(dataDirectory,'workflows-v1.json'),options:pcOptions,followupAllowed:()=>net.isOnline()&&siteWait.allowed('intermd')&&!credentials.busy&&![...manualOwners.values()].includes('intermd'),ledger:state,executionAllowed:()=>!updater.guarded,
        entryContextEpoch:site=>credentials.vault.epoch(site),createPage:(site,signal,options)=>credentials.wrapPage(site,new AutomationPage(site,signal,prepareSession(site),{...options,traffic:workerTraffic(site,signal),externalEntryAllowed:(id,url)=>pcOptions.allowsEntry(id,url)}),options),
        createInspectionPage:(site,signal,options)=>new AutomationPage(site,signal,prepareSession(site),{...options,traffic:workerTraffic(site,signal),externalEntryAllowed:(id,url)=>pcOptions.allowsEntry(id,url)}),onEvent:event=>developerTools.event(event),traceEntry:(job,kind)=>developerTools.traceEntry(job,kind),observeEntry:(...args)=>developerTools.observeEntry(...args),
        isManualOpen:id=>[...manualOwners.values()].includes(id)||credentials.active?.site===id,catalog:date=>catalog.view(date).results,catalogBusy:()=>collector.snapshot().running||credentials.busy,
@@ -482,8 +485,7 @@ else{
       app.quit();return;
     }
     ipc();
-    powerMonitor.on('suspend',()=>{try{developerTools.event({area:'process',phase:'suspend',site:''});registration.cancel();catalogQueue.clear();collector.cancel('suspended');automation.suspended();credentials.cancel();}catch{}});
-    powerMonitor.on('resume',()=>{developerTools.event({area:'process',phase:'resume',site:''});automation.resumed();});
+    bindPowerEvents(powerMonitor,{collector,automation,onSuspend:()=>{developerTools.event({area:'process',phase:'suspend',site:''});registration.cancel();catalogQueue.clear({keepRunning:true});credentials.cancel();},onResume:()=>{catalogQueue.pump();developerTools.event({area:'process',phase:'resume',site:''});}});
     tray=new Tray(nativeImage.createFromPath(fileURLToPath(new URL('../ui/tray.png',import.meta.url))));
     tray.setToolTip(EDITION.name);tray.on('double-click',showControl);updateTray();showControl();
   }).catch(()=>app.quit());

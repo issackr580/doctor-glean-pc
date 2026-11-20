@@ -25,3 +25,12 @@ test('revoking automatic selection preserves queued manual reads and drops late 
  q.request('2026-11-18',['hmp'],{automatic:true});q.request('2026-11-18',['docple']);busy=false;q.pump();q.invalidateAutomatic();reject(Error('collection_busy'));
  await new Promise(r=>setImmediate(r));q.pump();q.close();assert.deepEqual(calls,[['hmp','docple'],['docple']]);
 });
+test('automatic duplicates share a running or fresh scoped result, manual refresh and changed profiles proceed',async()=>{
+ let now=0,scope=0,complete,result=true;const calls=[];
+ const q=new CatalogQueue({context:()=>scope,resultValid:()=>result,now:()=>now,validDate:()=>true,busy:()=>false,start:async(date,ids)=>{calls.push([date,ids]);await new Promise(r=>complete=r);}});
+ const ask=(automatic=true)=>q.request('2026-11-20',['docple'],{automatic});
+ const settle=async()=>{complete();await new Promise(r=>setImmediate(r));};
+ ask();ask();assert.equal(q.snapshot().length,0);await settle();ask();assert.equal(calls.length,1);
+ ask(false);await settle();scope++;ask();await settle();result=false;ask();await settle();
+ result=true;now+=60000;ask();await settle();assert.equal(calls.length,5);q.close();
+});

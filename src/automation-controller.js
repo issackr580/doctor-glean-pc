@@ -12,15 +12,15 @@ import {DAILY_TASKS} from './automation-policy.js';
 import {kstDate,kstInstant,nextLoungePreparation} from './schedule.js';
 import {MorningSchedule} from './morning-schedule.js';
 export class AutomationController{
- constructor({file,ledger,createPage,createInspectionPage,isManualOpen,catalog,catalogBusy,queueCatalog,yieldCatalog,onChange=()=>{},onEvent=()=>{},onError=()=>{},now=Date.now,traceEntry,observeEntry,entryContextEpoch=()=>0,executionAllowed=()=>true,options=new PcOptions(join(dirname(file),'pc-options-v1.json')),notifySurvey=()=>{}}){
-  Object.assign(this,{ledger,createPage,isManualOpen,catalog,catalogBusy,queueCatalog,yieldCatalog,onChange,onError,now,executionAllowed});this.store=new WorkflowStore(file,{now,policyConsumed:j=>Object.values(ledger.snapshot().jobs).some(r=>r.site==='hmp'&&r.target===j.key&&r.slot===j.slot&&r.dueAt===j.due)});this.options=options;this.active=null;this.pendingDaily=[];this.followupReads=[];this.pendingReadOnly=true;this.closed=false;
+ constructor({file,ledger,createPage,createInspectionPage,isManualOpen,catalog,catalogBusy,queueCatalog,yieldCatalog,onChange=()=>{},onEvent=()=>{},onError=()=>{},now=Date.now,traceEntry,observeEntry,entryContextEpoch=()=>0,executionAllowed=()=>true,followupAllowed=()=>true,options=new PcOptions(join(dirname(file),'pc-options-v1.json'))}){
+  Object.assign(this,{ledger,createPage,isManualOpen,catalog,catalogBusy,queueCatalog,yieldCatalog,onChange,onError,now,executionAllowed,followupAllowed});this.store=new WorkflowStore(file,{now,policyConsumed:j=>Object.values(ledger.snapshot().jobs).some(r=>r.site==='hmp'&&r.target===j.key&&r.slot===j.slot&&r.dueAt===j.due)});this.options=options;this.active=null;this.pendingDaily=[];this.followupReads=[];this.pendingReadOnly=true;this.closed=false;
   this.morning=new MorningSchedule(join(dirname(file),'morning-schedule-v1.json'));this.store.recover();
   const common={ledger,store:this.store,createPage,createInspectionPage,isManualOpen,onChange:()=>{onChange();},onEvent,now};
   this.quiz=new DoctorvilleQuizRunner(common);
   this.daily=new DailyRunner({...common,quiz:this.quiz,shouldYield:()=>this.allowed()&&!!(this.entry.due(this.now())||this.entry.revisionDue())});
-  this.survey=new SurveyRunner({file:join(dirname(file),'surveys-v1.json'),options,createPage:createInspectionPage??createPage,isManualOpen,allowed:()=>this.allowed()&&this.store.features().survey,notify:notifySurvey,onChange,now});
+  this.survey=new SurveyRunner({file:join(dirname(file),'surveys-v1.json'),options,allowed:()=>this.store.features().survey,onChange,now});
   this.daily.taskSelected=key=>this.options.snapshot().dailyKeys.includes(key);
-  this.entry=new EntryRunner({...common,catalog,traceEntry,observeEntry,contextEpoch:entryContextEpoch,onSurvey:(url,raw)=>this.survey.observe(url,raw)});this.entry.recover();this.lounge=new LoungeRunner(common);
+  this.entry=new EntryRunner({...common,catalog,traceEntry,observeEntry,contextEpoch:entryContextEpoch});this.entry.recover();this.lounge=new LoungeRunner(common);
   this.rearm();this.timer=setInterval(()=>this.tick(),250);this.timer.unref();
  }
  allowed(){return !this.closed&&this.executionAllowed()&&!this.ledger.snapshot().paused&&!this.store.failed&&!this.options.failed;}
@@ -28,7 +28,7 @@ export class AutomationController{
  rearm(){this.boundary=this.now();this.morningAt=this.morning.next(this.now());this.loungeAt=nextLoungePreparation(this.now());}
  snapshot(){return {features:this.store.features(),entrySites:this.store.entrySites(),automaticEntrySites:this.store.entrySites().filter(automaticEntrySite),today:this.store.day(),entries:this.store.entries(),surveys:this.survey.snapshot(),daily:this.daily.snapshot(),preflight:this.preflightProgress,active:this.active??'',queuedDaily:[...this.pendingDaily],nextMorning:this.store.features().morning?this.morningAt:0,nextLounge:this.store.features().lounge?this.loungeAt:0,storageUnavailable:this.store.failed||this.options.failed};}
  diagnostics(){return {...this.store.diagnostics(),storageUnavailable:this.store.failed||this.options.failed,surveys:this.survey.snapshot({diagnostics:true}),quizFuses:this.quiz.fuses.summary(),daily:this.daily.snapshot(),preflight:this.preflightProgress,active:this.active??'',queuedDaily:[...this.pendingDaily],nextMorning:this.morningAt,nextLounge:this.loungeAt};}
- setFeature(key,value){this.store.setFeature(key,value);if(!value){if(key==='entry')this.entry.cancel();if(key==='lounge')this.lounge.cancel();if(key==='survey')this.survey.cancel();if(['dailyClaim','quizAuto','brand'].includes(key))this.daily.cancel();}this.rearm();if(key==='entry'&&value)this.entry.reserveCatalog(kstDate(this.now()),this.catalog(kstDate(this.now())));this.onChange();this.tick();}
+ setFeature(key,value){this.store.setFeature(key,value);if(!value){if(key==='entry')this.entry.cancel();if(key==='lounge')this.lounge.cancel();if(['dailyClaim','quizAuto','brand'].includes(key))this.daily.cancel();}this.rearm();if(key==='entry'&&value)this.entry.reserveCatalog(kstDate(this.now()),this.catalog(kstDate(this.now())));this.onChange();this.tick();}
  setEntrySites(ids){this.store.setEntrySites(ids);this.onChange();this.tick();}
  async preflightEntry(key){
   if(this.closed||typeof key!=='string'||!/^[a-f0-9]{64}$/.test(key)||this.busy||this.catalogBusy())return {ok:false,reason:'busy'};
@@ -78,10 +78,10 @@ export class AutomationController{
   if(ids.includes('doctorville')&&this.allowed()&&this.store.features().quizAuto&&!this.ledger.consumed(dailyTicket({site:'doctorville',kind:'quiz'},date,0,this.now()))&&!['complete','wrong'].includes(this.store.day(date).quizAuto?.status)&&!this.pendingDaily.includes('doctorville:quiz'))this.requestDaily({keys:['doctorville:quiz']});
   this.onChange();this.tick();
  }
- manualOpened(site){this.daily.manualOpened(site);this.entry.manualOpened(site);if(site==='doctorville')this.survey.cancel();this.lounge.manualOpened(site);}
- cancel(reason='cancelled'){this.preflightBatch?.abort();this.pendingDaily=[];this.followupReads=[];this.pendingReadOnly=true;this.daily.cancel(reason);this.entry.cancel();this.lounge.cancel();this.survey.cancel();this.onChange();}
- suspended(){this.cancel('suspended');this.rearm();}
- resumed(){this.rearm();this.tick();}
+ manualOpened(site){this.daily.manualOpened(site);this.entry.manualOpened(site);this.lounge.manualOpened(site);}
+ cancel(reason='cancelled'){this.preflightBatch?.abort();this.pendingDaily=[];this.followupReads=[];this.pendingReadOnly=true;this.daily.cancel(reason);this.entry.cancel();this.lounge.cancel();this.onChange();}
+ suspended(){this.sleeping=true;this.cancel('suspended');this.rearm();}
+ resumed(){this.sleeping=false;this.rearm();this.tick();}
  async #work(kind,work,{priority=false}={}){
   if(this.active)return;this.active=kind;this.onChange();
   try{if(priority)this.yieldCatalog();await work();}
@@ -89,7 +89,7 @@ export class AutomationController{
   finally{this.active=null;this.onChange();if(!this.closed){queueMicrotask(()=>this.tick());}}
  }
  tick(){
-  if(this.closed||!this.executionAllowed())return;
+  if(this.closed||this.sleeping||!this.executionAllowed())return;
   try{
    const now=this.now(),features=this.store.features();
    if(this.allowed()&&features.survey&&this.surveySeedDate!==kstDate(now)){this.surveySeedDate=kstDate(now);this.survey.seed(kstDate(now),this.catalog(kstDate(now)).doctorville);}
@@ -97,7 +97,7 @@ export class AutomationController{
    const loungeDue=this.allowed()&&features.lounge&&now>=this.loungeAt&&now<this.loungeAt+60000+20000&&!this.store.day(kstDate(now)).lounge;
    if(this.active){
     if((entry||loungeDue||this.entry.revisionDue())&&this.active==='daily'&&!this.daily.claimPending)this.daily.cancel('entry_priority');
-    if(entry&&this.active==='lounge')this.lounge.cancel();if((entry||loungeDue)&&this.active==='survey')this.survey.cancel();
+    if(entry&&this.active==='lounge')this.lounge.cancel();
     if(entry&&this.active==='prepare'||(entry||loungeDue)&&['preflight','schedule'].includes(this.active)){this.preflightBatch?.abort();this.entry.cancel();}return;
    }
    if(entry){
@@ -111,13 +111,23 @@ export class AutomationController{
     const date=kstDate(this.morningAt),missed=now>=kstInstant(date,'08:40');this.morningAt=this.morning.next(Math.max(now,kstInstant(date,'08:40')));
     if(!this.store.day(date).morning){this.store.record(date,'morning',{status:missed?'missed':'running',reason:missed?'missed':'scheduled'});if(!missed)this.quick();}
    }
-   const quizAt=kstInstant(kstDate(now),'08:00'),quiz=this.store.day().daily['intermd:quiz'];
-   if(this.allowed()&&features.dailyClaim&&this.options.snapshot().dailyKeys.includes('intermd:quiz')&&quiz?.status==='scheduled'&&quiz.checkedAt<quizAt&&now>=quizAt&&now<=quizAt+1800000&&this.intermdQueuedDate!==kstDate(now)){this.intermdQueuedDate=kstDate(now);this.pendingDaily=[...new Set([...this.pendingDaily,'intermd:quiz'])];}
    if(this.catalogBusy())return;
    const prep=this.allowed()&&features.entry?this.entry.prepareDue(now):null;
    if(prep){this.#work('prepare',()=>this.entry.run(prep,{prepare:true}));return;}
    const revision=this.allowed()&&features.entry?this.entry.revisionDue():null;
    if(revision){this.#work('schedule',()=>this.entry.reviseSchedule(revision.key));return;}
+   if(!this.pendingDaily.length&&!this.followupReads.length&&this.allowed()&&features.dailyClaim&&this.options.snapshot().dailyKeys.includes('intermd:quiz')){
+    const date=kstDate(now),quiz=this.store.day(date).daily['intermd:quiz'],due=this.morning.quizDue(date);
+    if(due&&now>=due&&now<kstInstant(date,'08:20')&&quiz?.status==='scheduled'&&quiz.checkedAt<kstInstant(date,'08:00')&&this.followupAllowed()){
+     const job={...dailyTicket({site:'intermd',kind:'quiz'},date,96,now),dueAt:due,deadline:kstInstant(date,'08:20')-1};
+     if(!this.ledger.consumed(job)){
+      const ticket=this.ledger.reserve(job,now);
+      if(ticket&&this.ledger.beginDispatch(ticket,now)){
+       this.#work('daily',async()=>{try{await this.daily.run(['intermd:quiz'],{readOnly:true});}finally{this.ledger.finish(ticket,'unknown',this.now());}});return;
+      }
+     }
+    }
+   }
    if(!this.pendingDaily.length&&this.followupReads.length){this.pendingDaily=this.followupReads;this.followupReads=[];this.pendingReadOnly=true;}
    if(this.pendingDaily.length){
     const keys=this.pendingDaily;this.pendingDaily=[];const readOnly=this.pendingReadOnly;this.pendingReadOnly=true;
@@ -129,7 +139,7 @@ export class AutomationController{
      if(morning?.status==='running'&&result.reason!=='entry_priority')this.store.record(kstDate(this.now()),'morning',{...morning,dailyChecked:result.reason==='finished',status:result.reason==='finished'?morning.catalogChecked?'complete':'running':'unknown',reason:result.reason});
     });return;
    }
-   const survey=this.survey.due();if(survey)this.#work('survey',()=>this.survey.run(survey));
+
   }catch(error){try{this.ledger.setPaused(true);}catch{}this.onError(error);}
  }
  close(){this.closed=true;clearInterval(this.timer);this.cancel();}

@@ -10,7 +10,7 @@ import {officialIdentity,identityInvalid} from './entry-identity.js';
 
 const IDS=new Set(SITES.map(s=>s.id));
 const STATUSES=new Set(['ok','review','login','blocked','error','cancelled','busy']);
-const REASONS=new Set(['site_wait','list_read','list_unconfirmed','login_required','security_check','network_error','time_limit','cancelled','manual_view_open','invalid_response','date_mismatch','navigation_changed','action_rejected','storage_error','suspended','entry_priority']);
+const REASONS=new Set(['redirect_limit','connection_context_changed','site_wait','list_read','list_unconfirmed','login_required','security_check','network_error','time_limit','cancelled','manual_view_open','invalid_response','date_mismatch','navigation_changed','action_rejected','storage_error','suspended','entry_priority']);
 const MAX_BYTES=4_194_304;
 const STOP_REASONS=new Set(['bluepharm_active_lists_read','bluepharm_active_lists_unconfirmed','doctorville_list_exhausted','hmp_list_exhausted','after_target_date','past_target_date','current_list_only','whodadoc_date_checked','selected_month_calendar','docple_list_exhausted']);
 function inspectResult(raw){
