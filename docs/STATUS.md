@@ -1,6 +1,6 @@
 # PC판 현재 상태와 다음 작업
 
-현재 공개판은 **0.1.0-preview.34**입니다. 실행 소스는 `73107b4fd9ec1cd1370ab529bde915c050115f9e`입니다. [배포용](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.34) · [협업자용 Draft](https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-1e24228e53bb2423b492) · [검증 및 게시 기록](releases/0.1.0-preview.34.md)
+현재 공개 배포용은 **0.1.0-preview.35**입니다. 실행 소스는 `48976e402c274ffee47a03677b5407de066ceef9`입니다. [배포용](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.35) · [검증 및 게시 기록](releases/0.1.0-preview.35.md) · [개발자용 preview.34 Draft](https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-1e24228e53bb2423b492)
 
 ## PC-023 — v156 자동입장 정책·읽기 API·숨은 미디어 제한 (게시 완료)
 
@@ -178,6 +178,6 @@ Node201·구문, 실제 Linux Electron45/Xvfb 합성 HTTPS 관리 창78·자동 
 
 완료한 preview.29 임시 수동 업로드 workflow를 제거했다. 인계는 문서/피드만 갱신하며 실행 소스·태그·기존 자산·모바일은 교체하지 않는다.
 
-### 0.1.0-preview.35 PC 후보
+### 0.1.0-preview.35 PC 배포용 게시
 
 목록 재사용과 사이트별 리디렉션 중단, 인터엠디 공개 전 로컬 처리 및 공개 후 단일 읽기, 닥터빌 직접 설문 열기를 연결했다. 전용 합성 검사는 npm run test:electron -- --suite=traffic 으로 실행한다. 연속 두 창의 IPC, 기존 목록 복귀 및 서버 응답 바이트를 측정한다. 실기기 절전과 실제 회원 사이트의 데이터 사용량은 별도 확인 대상이다.
