@@ -1,6 +1,6 @@
 import {DAILY_TASKS,taskByKey,actionAllowed,dailyDialog,safeReason} from './automation-policy.js';
 import {dailyTicket} from './task-ticket.js';
-import {kstDate} from './schedule.js';
+import {kstDate,kstInstant} from './schedule.js';
 import {waitFor} from './async-work.js';
 import {randomUUID} from 'node:crypto';
 import {executionEvent} from './build-info.js';
@@ -25,6 +25,10 @@ export class DailyRunner{
     const key=run.remaining.shift(),task=taskByKey(key);run.key=key;run.site=task.site;run.claimSent=false;
     const features=this.store.features();if(!readOnly&&!this.taskSelected(key))continue;
     if(task.kind.startsWith('brand')&&!features.brand)continue;
+    if(key==='intermd:quiz'&&![0,6].includes(new Date(date+'T00:00:00Z').getUTCDay())&&this.now()<kstInstant(date,'08:00')){
+     if(this.store.day(date).daily[key]?.status!=='complete')this.store.record(date,key,{status:'scheduled',reason:'intermd_quiz_before_open'},this.now());
+     completed++;continue;
+    }
     if(this.isManualOpen(task.site)){this.store.record(date,key,{status:'busy',reason:'manual_view_open'});completed++;continue;}
     const old=this.store.day(date).daily[key];
     if(!readOnly&&(old?.status==='complete'||task.kind.startsWith('brand')&&['ended','none'].includes(old?.status))&&task.kind!=='quiz'){completed++;continue;}

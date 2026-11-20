@@ -72,8 +72,17 @@ test('CKD daily lease never restarts after an unavailable pre-submit outcome',t=
 test('external entry settings are exact DNS choices; HTTP is explicit and secrets/ports/files are rejected',t=>{
  const s=setup(t),o=new PcOptions(join(s.root,'options.json'));for(const host of ['*.example.com','127.0.0.1','localhost','host.local','www.keymedi.com','github.com','user@example.com'])assert.throws(()=>o.hosts([{host,http:false}]));o.hosts([{host:'entry.example.com',http:false}]);assert.equal(o.allowsEntry('medigate','https://entry.example.com/native'),true);assert.equal(o.allowsEntry('keymedi','https://entry.example.com/native'),false);assert.equal(o.allowsEntry('medigate','http://entry.example.com/native'),false);for(const u of ['https://entry.example.com:8443/x','https://entry.example.com.evil.org/','https://user@entry.example.com/','https://entry.example.com/update.exe'])assert.equal(o.allowsEntry('medigate',u),false);o.hosts([{host:'entry.example.com',http:true}]);assert.equal(o.allowsEntry('medigate','http://entry.example.com/native'),true);
 });
-test('survey reads preserve observed deadlines across restart and notification exclusions never touch action records',t=>{
- const s=setup(t),options=new PcOptions(join(s.root,'options.json')),file=join(s.root,'surveys.json'),url='https://www.doctorville.co.kr/seminar/broadcastSeminarPopup?seminarId=17';let alerts=0;const make=()=>new SurveyRunner({file,options,now:s.now,allowed:()=>true,notify:()=>alerts++});const raw={site:'doctorville',seminarId:'17',status:'open',minutesLeft:5,buttonCount:1,disabled:false};const runner=make();runner.observe(url,raw,{background:true});const row=runner.snapshot()[0];s.set(s.now()+60000);make().observe(url,{...raw,minutesLeft:60},{background:true});assert.equal(make().snapshot()[0].closesAt,row.closesAt);assert.equal(alerts,1);options.excludeSurvey(row.key,true);make().observe(url,raw);assert.equal(make().snapshot()[0].reads,2);assert.equal(options.snapshot().surveyExcluded.length,1);
+test('selected Doctorville survey completes only with matching manual proof; exclusion survives upgrade',t=>{
+ const s=setup(t),options=new PcOptions(join(s.root,'options.json')),file=join(s.root,'surveys.json');
+ const make=()=>new SurveyRunner({file,options,now:s.now,allowed:()=>true}),runner=make();
+ const detail='https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=17';
+ runner.seed(date,{status:'ok',stale:false,events:[{site:'doctorville',date,url:detail}]});
+ const {key}=runner.snapshot()[0],url='https://www.doctorville.co.kr/seminar/broadcastSeminarPopup?seminarId=17';
+ const proof={site:'doctorville',seminarId:'17',status:'complete'};options.excludeSurvey(key,true);
+ runner.observe(url,proof);runner.observe(url,{...proof,seminarId:'18'},key);assert.equal(runner.snapshot()[0].status,'unknown');
+ assert.equal(runner.skip(key,true),true);assert.equal(make().target(key),null);
+ const again=make();assert.equal(again.snapshot()[0].status,'skipped');again.skip(key,false);assert.equal(again.target(key),detail);
+ again.observe(url,proof,key);assert.equal(make().snapshot()[0].status,'complete');assert.equal(make().skip(key,true),false);assert.equal(make().snapshot()[0].excluded,true);
 });
 test('workflow write failure after the ledger dispatch reservation still sends zero clicks',async t=>{
  const s=harness(t);s.reserve([event()]);const broken=new WorkflowStore(s.store.file,{commit:(file,data)=>{if(Object.values(data.entries).some(r=>r.status==='attempting'))throw Error('disk_full');atomicJson(file,data);}});s.runner.store=broken;s.runner.createPage=async()=>actionPage(s);
@@ -92,7 +101,9 @@ test('six-mission layout commits exactly the observed six category attempts befo
 test('survey discovery uses the reviewed catalog identity and never invents a countdown or resets forty reads',t=>{
  const s=setup(t),options=new PcOptions(join(s.root,'options.json')),file=join(s.root,'surveys.json'),runner=new SurveyRunner({file,options,now:s.now,allowed:()=>true});
  runner.seed(date,{status:'review',stale:false,events:[{site:'doctorville',date,time:'13:00',url:'https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=17'}]});const row=runner.snapshot()[0];assert.equal(row.status,'unknown');assert.equal(row.closesAt,0);assert.equal(row.reads,0);
- s.set(at('13:20'));assert.ok(runner.due());for(let i=0;i<45;i++)runner.observe(runner.target(row.key),null,{background:true});assert.equal(runner.snapshot()[0].reads,40);assert.equal(new SurveyRunner({file,options,now:s.now,allowed:()=>true}).due(),undefined);
+ const old=structuredClone(runner.data);Object.assign(old.rows[row.key],{reads:32,nextAt:at('13:20'),discoveryUntil:at('14:00'),notified:true});atomicJson(file,old);
+ const upgraded=new SurveyRunner({file,options,now:s.now,allowed:()=>true});
+ assert.equal(upgraded.data.rows[row.key].nextAt,0);assert.equal(upgraded.data.rows[row.key].discoveryUntil,0);assert.equal(upgraded.snapshot()[0].reads,32);assert.equal(upgraded.snapshot()[0].closesAt,0);
 });
 test('report preview exports exactly frozen bytes and rejects stale or replaced tokens',()=>{
  let time=1000;const p=new ReportPreview({now:()=>time}),first=p.freeze('처음 보고서\n');assert.equal(p.text(first.token),first.text);const second=p.freeze('다음 보고서\n');assert.equal(p.text(first.token),null);assert.equal(p.text(second.token),second.text);time+=600001;assert.equal(p.text(second.token),null);

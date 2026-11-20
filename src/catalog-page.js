@@ -23,6 +23,15 @@ export function safeCatalogNavigation(profile,action,state){
 export class CatalogPage{
  constructor(profile,transport,signal){this.profile=profile;this.transport=transport;this.signal=signal;this.closed=false;this.reads=0;this.documentChanges=0;this.started=performance.now();}
  #current(){if(this.closed||this.signal.aborted)throw fail('cancelled');return this.transport.snapshot();}
+ checkpoint(){
+  const s=this.#current();
+  if(s.loading||s.crashed||s.failure||!allowedNavigation(this.profile.id,s.url)||!siteById(this.profile.id).hosts.includes(new URL(s.url).hostname)||['login','provider'].includes(pageRole(s.url)))return null;
+  return {version:s.version,url:s.url};
+ }
+ async canContinue(mark){
+  const s=this.checkpoint();if(!s||!mark||s.version!==mark.version||s.url!==mark.url)return false;
+  return await this.#evaluate("document.readyState==='complete'&&!document.querySelector('input[type=password]')")===true;
+ }
  async open(){
   this.#current();
   try{await this.transport.load(this.profile.url,this.signal);}

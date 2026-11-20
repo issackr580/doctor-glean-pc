@@ -16,7 +16,7 @@ import {createEntryJob} from './entry-job.js';
 import {canonicalIdentity,identityRunnable,duplicateIdentityKeys,sameWorker,sameReceiptOwner,sameEntryTarget,priorIdentityKeys,rebookIdentity,nextIdentityEntry} from './entry-identity.js';
 const navigable=(site,raw)=>{try{const u=new URL(raw);return allowedNavigation(site,raw)&&!/(?:login|logout|regist|apply|enroll|payment|order|cart|token|auth|session|password|email|ticket|delete|withdraw)/i.test(decodeURIComponent(u.pathname+u.search));}catch{return false;}};
 export class EntryRunner{
- constructor({ledger,store,createPage,createInspectionPage,catalog=()=>({}),contextEpoch=()=>0,isManualOpen=()=>false,onChange=()=>{},onEvent=()=>{},now=Date.now,sleep=waitFor,traceEntry=()=>({}),observeEntry=()=>{},onSurvey=()=>{}}){Object.assign(this,{ledger,store,createPage,createInspectionPage,catalog,contextEpoch,isManualOpen,onChange,onEvent,now,sleep,traceEntry,observeEntry,onSurvey});this.active=null;this.revisions=new Map();this.revisionWaits=new Map();if('policyConsumed' in store)store.policyConsumed=job=>legacyHmpConsumed(ledger,job);store.migrateEntryPolicies?.();}
+ constructor({ledger,store,createPage,createInspectionPage,catalog=()=>({}),contextEpoch=()=>0,isManualOpen=()=>false,onChange=()=>{},onEvent=()=>{},now=Date.now,sleep=waitFor,traceEntry=()=>({}),observeEntry=()=>{}}){Object.assign(this,{ledger,store,createPage,createInspectionPage,catalog,contextEpoch,isManualOpen,onChange,onEvent,now,sleep,traceEntry,observeEntry});this.active=null;this.revisions=new Map();this.revisionWaits=new Map();if('policyConsumed' in store)store.policyConsumed=job=>legacyHmpConsumed(ledger,job);store.migrateEntryPolicies?.();}
  #trace(job,kind){let trace;try{trace=this.traceEntry(job,kind);}catch{}return {event:(phase,detail)=>{try{trace?.event?.(phase,{...detail,identityMode:canonicalIdentity(job)?'official':'legacy'});}catch{}},finish:(...args)=>{try{trace?.finish?.(...args);}catch{}}};}
  #observe(job,phase,detail){try{this.observeEntry(job,phase,detail);}catch{}}
  async #catalogDetail(job,page,trace,signal,reference){
@@ -366,7 +366,6 @@ export class EntryRunner{
       receipt.playback='navigation_unconfirmed';
       if(receipt.navigationObserved&&allowed()){const playback=await page.call('auto-entry.js',[nativeJob(),'playback_start']);receipt.playback=playback.status;await this.sleep(1200,controller.signal);if(allowed()){receipt.playback=(await page.call('auto-entry.js',[nativeJob(),'playback_probe'])).status;trace.event('playback_observed',{playback:receipt.playback});}}
      }
-     if(job.site==='doctorville'&&allowed()){try{this.onSurvey(page.url,await page.call('doctorville-survey.js',['']));}catch{}}
      break;
     }
     if(['login','blocked','ambiguous','invalid','lecture_ended','not_registered'].includes(reply.status))break;
