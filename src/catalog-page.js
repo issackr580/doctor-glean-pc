@@ -6,7 +6,7 @@ import {pageRole} from './page-role.js';
 import {ID_SITES,officialIdentity} from './entry-identity.js';
 
 const ASSETS=new Map();
-function asset(name,site){const family=site==='bluepharm'?'direction161':ID_SITES.includes(site)?'identity':'engine',key=family+'/'+name;if(!ASSETS.has(key))ASSETS.set(key,readFileSync(new URL('../vendor/'+key,import.meta.url),'utf8'));return ASSETS.get(key);}
+function asset(name,site){const family=site==='dtalks'&&name==='reader-additional.js'?'direction169':site==='bluepharm'?'direction161':ID_SITES.includes(site)?'identity':'engine',key=family+'/'+name;if(!ASSETS.has(key))ASSETS.set(key,readFileSync(new URL('../vendor/'+key,import.meta.url),'utf8'));return ASSETS.get(key);}
 const readerName=profile=>profile.id==='dtalks'?'reader-additional.js':profile.id==='ckd'?'reader-ckd.js':profile.id==='keymedi'?'reader-keymedi.js':['additional-catalog-v1','docple-live-v1'].includes(profile.crawler)?'reader-additional.js':'reader-catalog.js';
 const fail=code=>Object.assign(Error(code),{code});
 export function safeCatalogNavigation(profile,action,state){
@@ -32,6 +32,25 @@ function catalogNotice(nativeStatus,classify){
  }
  if(status==='login'&&([...document.querySelectorAll('iframe[src*="captcha" i],input[autocomplete="one-time-code"]')].some(visible)||/보안문자|추가 인증|접근 제한|access denied|too many requests/i.test(document.body?.innerText??'')))return 'blocked';
  return status;
+}
+
+// A card straddling two visible days can be unassigned for both dates.
+// Its DOM parent alone cannot authorize replacing either cached day.
+function dtalksCalendarCoverage(result){
+ const d=result?.diagnostics;
+ if(!result?.done||!d?.calendarChecked)return result;
+ const cells=[...document.querySelectorAll('.calendar_box.active .calendar_grid > .day')];
+ const bounds=cells.map(el=>el.getBoundingClientRect());
+ const crosses=cells.some(cell=>[...cell.querySelectorAll('.day_box')].some(card=>{
+  if(!card.checkVisibility({checkOpacity:true,checkVisibilityCSS:true}))return false;
+  const r=card.getBoundingClientRect();
+  return bounds.filter(b=>b.left<r.right&&r.left<b.right&&b.top<r.bottom&&r.top<b.bottom).length>1;
+ }));
+ if(crosses){
+  result.coverage=false;
+  d.calendarChecked=false;d.calendarStatus='unconfirmed';d.calendarEmpty=false;
+ }
+ return result;
 }
 
 /** An engine adapter shared by Electron and the real Chromium test boundary. */
@@ -76,7 +95,7 @@ export class CatalogPage{
   if(!allowedNavigation(this.profile.id,before.url))throw fail('navigation_changed');
   if(before.notice==='blocked')return {site:site.id,status:'blocked',done:true,events:[],coverage:false};
   if(!site.hosts.includes(new URL(before.url).hostname)||/\/login(?:\/|\.|$)|\/auth\/login|\/sign.?in/i.test(new URL(before.url).pathname))return {site:site.id,status:'login',done:true,events:[],coverage:false};
-  const source=`(()=>{if(document.readyState!=='complete')return JSON.stringify({status:'loading',done:false,events:[]});const notice=(${catalogNotice})(${JSON.stringify(before.notice??'')},${loginNoticeStatus});if(notice)return JSON.stringify({site:${JSON.stringify(site.id)},status:notice,done:true,events:[],coverage:false});const read=${asset(readerName(this.profile),this.profile.id)};const result=read(${JSON.stringify(this.profile)},${JSON.stringify(date)},${JSON.stringify(previous)});return JSON.stringify(result);})()`;
+  const source=`(()=>{if(document.readyState!=='complete')return JSON.stringify({status:'loading',done:false,events:[]});const notice=(${catalogNotice})(${JSON.stringify(before.notice??'')},${loginNoticeStatus});if(notice)return JSON.stringify({site:${JSON.stringify(site.id)},status:notice,done:true,events:[],coverage:false});const read=${asset(readerName(this.profile),this.profile.id)};const result=read(${JSON.stringify(this.profile)},${JSON.stringify(date)},${JSON.stringify(previous)});return JSON.stringify(${site.id==='dtalks'?`(${dtalksCalendarCoverage})(result)`:'result'});})()`;
   let encoded;
   try{resourceCount('domReads');encoded=await this.#evaluate(source);}catch(error){
    const after=this.#current();

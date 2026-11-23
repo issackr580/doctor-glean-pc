@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ko">
+<head><meta charset="UTF-8"><title>닥터빌 합성 채널 선택</title></head>
+<body>
+  <section id="chooser" role="dialog" aria-modal="true">
+    <h3>채널 선택</h3>
+    <p>안정적인 영상제공을 위해 <strong>2가지 채널을 제공</strong>합니다.</p>
+    <p>영상이 불안정하다면 채널을 변경해 보세요.</p>
+    <label><input type="radio" name="channel" value="1">채널1</label>
+    <label><input type="radio" name="channel" value="2" checked>채널2</label>
+    <button type="button" id="accept">확인</button>
+  </section>
+  <template id="room">
+    <header>라이브세미나</header>
+    <p>지금은 라이브세미나 <strong>방송 준비중</strong>입니다. 잠시만 기다려주세요</p>
+    <h2>Key Message</h2>
+    <h2>Q&amp;A</h2>
+  </template>
+  <script>
+    window.fixtureActions = { confirmClicks: 0, radioClicks: 0, selectedChannel: null };
+    const chooser = document.getElementById('chooser');
+    chooser.addEventListener('click', event => {
+      if (event.target.matches('input[type="radio"]')) window.fixtureActions.radioClicks++;
+    });
+    document.getElementById('accept').addEventListener('click', () => {
+      window.fixtureActions.confirmClicks++;
+      window.fixtureActions.selectedChannel = chooser.querySelector(':checked')?.value ?? null;
+      chooser.replaceWith(document.getElementById('room').content.cloneNode(true));
+    });
+  </script>
+</body>
+</html>

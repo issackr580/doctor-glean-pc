@@ -42,7 +42,7 @@ export function entryEvidenceLabel(job){
  const r=job.receipt;if(!r)return '실행 결과 없음 · 예약 생성과 실제 입장은 별개예요.';
  if(!r.attempted&&!r.navigationObserved&&r.status!=='clicked')return '';
  const click=r.status==='clicked'?'PC 클릭 확인':r.attempted?'PC 시도 · 클릭 결과 미확인':'PC 클릭 미확인';
- const navigation=r.navigationObserved===true?'강의창 이동 확인':'강의창 이동 미확인';
+ const navigation=job.doctorvilleArrival==='waiting_room'?'같은 강의 대기실 도달':job.doctorvilleArrival==='broadcast_room'?'같은 강의 방송 화면 도달':r.navigationObserved===true?'강의창 이동 확인':'강의창 이동 미확인';
  const video=r.playback==='playing_observed'?'영상 진행 관찰':r.playback==='inaccessible'?'영상 상태 관찰 불가':'재생 미확인';
  return click+' → '+navigation+' → '+video+' · 출석·적립 미확인';
 }

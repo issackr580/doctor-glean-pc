@@ -144,6 +144,27 @@ export class CatalogStore{
    if(['login','blocked','error','review'].includes(fresh.status)&&!fresh.coverage)fresh.lastFailure={reason:fresh.reason,checkedAt:fresh.checkedAt,inspection:fresh.inspection};
    else if(old?.lastFailure)fresh.lastFailure=clone(old.lastFailure);
   }
+  // A partial month grid may contain genuine rows while omitting other sessions.
+  // Only a completed, date-bound inventory can retire a cached Dtalks row.
+  if(site==='dtalks'&&old?.events.length){
+   const d=raw?.diagnostics,proof=d?.dtalksSchedule;
+   const starts=[...new Set(fresh.events.map(e=>e.time))].sort();
+   const authoritative=raw.done===true&&['ok','review'].includes(fresh.status)&&fresh.scope==='calendar_checked'&&fresh.coverage&&
+    d?.calendarDate===date&&d.calendarMonth===date.slice(0,7)&&d.stopReason==='selected_month_calendar'&&
+    d.calendarChecked===true&&d.calendarStatus==='checked'&&d.calendarEmpty===(fresh.events.length===0)&&
+    proof?.schemaVersion===1&&proof.targetDate===date&&proof.unresolvedRows===0&&Array.isArray(proof.starts)&&
+    starts.length===proof.starts.length&&starts.every((time,index)=>time===proof.starts[index]);
+   if(!authoritative){
+    const same=e=>JSON.stringify([e.time,e.title]),seen=new Set(fresh.events.map(same));
+    const retained=old.events.filter(e=>!seen.has(same(e)));
+    if(retained.length){
+     fresh.events=[...fresh.events,...clone(retained)].sort((a,b)=>a.time.localeCompare(b.time)||a.title.localeCompare(b.title));
+     if(fresh.events.length>500)fresh.events=clone(old.events);
+     fresh.stale=true;fresh.previousCheckedAt=old.previousCheckedAt??old.checkedAt;
+     fresh.coverage=false;fresh.scope='unconfirmed';
+    }
+   }
+  }
   const verifiedEmpty=fresh.events.length===0&&(fresh.scope==='ongoing_recruiting'||fresh.coverage&&(fresh.status==='ok'||fresh.status==='review'&&['list_checked','date_range_checked','calendar_checked'].includes(fresh.scope)));
   if(!fresh.events.length&&!verifiedEmpty&&old?.events.length){fresh.events=clone(old.events);fresh.stale=true;fresh.previousCheckedAt=old.previousCheckedAt??old.checkedAt;}
   const next=clone(this.#data);next.snapshots[date]??={date,results:{}};next.snapshots[date].results[site]=fresh;

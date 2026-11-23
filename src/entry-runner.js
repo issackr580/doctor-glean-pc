@@ -353,6 +353,16 @@ export class EntryRunner{
      trace.event('click_response',executed);
      receipt={...reply,status:executed.status==='clicked'?'clicked':'unknown',reason:executed.status==='clicked'?'clicked':'navigation_unconfirmed',attempted:true};
      await this.sleep(800,controller.signal);receipt.navigationObserved=(page.version!==before||page.url!==beforeUrl)&&(allowedNavigation(job.site,page.url)||page.allowsEntryNavigation?.(page.url)===true);
+     if(job.site==='doctorville'&&allowed()&&canonicalIdentity(job)&&page.doctorvilleArrival){
+      const currentAttempt=()=>allowed()&&this.now()<=job.deadline&&this.ledger.snapshot().jobs[ticket.key]?.state==='attempting';
+      try{
+       const arrival=await page.doctorvilleArrival(job,currentAttempt,()=>currentAttempt()&&this.store.consumeDoctorvilleChannel(job));
+       if(currentAttempt()&&['waiting_room','broadcast_room'].includes(arrival)){
+        this.store.updateEntry(job.key,{doctorvilleArrival:arrival});
+        receipt.navigationObserved=true;
+       }
+      }catch{/* The initial entry remains consumed even if its popup closed or changed. */}
+     }
      if(job.site==='docple'&&receipt.navigationObserved&&allowed())try{receipt.watchObserved=await page.observeDocpleArrival?.(job)===true;}catch{receipt.watchObserved=false;}
      trace.event('navigation_observed',{navigationObserved:receipt.navigationObserved,pageGeneration:page.version});
      if(job.repeatSchema===1&&receipt.navigationObserved&&allowed()){

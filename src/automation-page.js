@@ -45,8 +45,8 @@ export class AutomationPage{
   contents.on('render-process-gone',()=>this.#diagnostic('renderer_gone'));
   contents.on('did-fail-load',(_event,code,_description,_url,main)=>{if(main!==false&&code!==-3){this.runtime.mainFrameFailures=Math.min(1000,this.runtime.mainFrameFailures+1);this.#diagnostic('network_error',{mainFrame:true,networkKind:networkKind(code)});}});
   contents.on('console-message',(event,details)=>{const level=typeof details==='number'?details:details?.level??event.level;if(level==='error'||level===3)this.runtime.consoleErrors=Math.min(1000,this.runtime.consoleErrors+1);});
-  contents.setWindowOpenHandler(({url})=>{if((!this.traffic||this.traffic.allowed())&&this.popupAllowed&&this.windows.length<3&&(allowedPopup(this.site,url,contents.getURL())||this.entryDispatchArmed&&this.externalEntryAllowed(this.site,url)))return {action:'allow',overrideBrowserWindowOptions:{show:false,width:1100,height:1800,webPreferences:{...this.preferences,backgroundThrottling:false}}};this.runtime.popupDenied=Math.min(1000,this.runtime.popupDenied+1);return {action:'deny'};});
-  contents.on('did-create-window',child=>{try{this.#guard(child);if(this.focusPopup)this.current=child;this.#diagnostic('popup_opened',{popup:true});}catch{child.destroy();this.dialogResult={status:'unknown',reason:'worker_closed'};}});
+  contents.setWindowOpenHandler(({url})=>{if((!this.traffic||this.traffic.allowed())&&(!this.channelAuthorized||this.channelAuthorized()&&this.current===window)&&this.popupAllowed&&this.windows.length<3&&(allowedPopup(this.site,url,contents.getURL())||this.entryDispatchArmed&&this.externalEntryAllowed(this.site,url)))return {action:'allow',overrideBrowserWindowOptions:{show:false,width:1100,height:1800,webPreferences:{...this.preferences,backgroundThrottling:false}}};this.runtime.popupDenied=Math.min(1000,this.runtime.popupDenied+1);return {action:'deny'};});
+  contents.on('did-create-window',child=>{try{this.#guard(child);if(this.focusPopup&&(this.site!=='doctorville'||!this.entryDispatchArmed||this.current===window))this.current=child;this.#diagnostic('popup_opened',{popup:true});}catch{child.destroy();this.dialogResult={status:'unknown',reason:'worker_closed'};}});
   // Browser dialogs are read only to fixed classifications, never logged raw.
   // Unknown confirmations are dismissed; only a task-specific original claim
   // confirmation can be accepted by the host's callback.
@@ -123,8 +123,50 @@ export class AutomationPage{
   }finally{if(this.pendingLoads.get(contents)===context)this.pendingLoads.delete(contents);}
   await bounded(this.current.webContents.debugger.sendCommand('Page.enable'),this.signal,10000);
  }
- armEntryDispatch(){this.entryDispatchArmed=true;this.entryArmedAt??=Date.now();for(const w of this.windows)if(!w.isDestroyed())hiddenResources(w.webContents).entry();}
+ armEntryDispatch(){this.dispatchDocument=this.entryBinding();this.entryDispatchArmed=true;this.entryArmedAt??=Date.now();for(const w of this.windows)if(!w.isDestroyed())hiddenResources(w.webContents).entry();}
  allowsEntryNavigation(url){return allowedNavigation(this.site,url)||this.entryDispatchArmed&&this.externalEntryAllowed(this.site,url);}
+ async doctorvilleArrival(job,authorize,consume){
+  if(this.site!=='doctorville'||job.site!==this.site||!this.entryDispatchArmed||!officialIdentity(job)||this.channelFollowed)return;
+  this.channelFollowed=true;
+  const until=Math.min(this.entryArmedAt+10000,job.deadline);
+  const active=()=>!this.closed&&!this.signal.aborted&&Date.now()<until&&authorize()&&(!this.traffic||this.traffic.allowed())&&!this.dialogResult;
+  this.channelAuthorized=active;
+  const expectedId=officialIdentity(job).id;
+  const input={site:this.site,key:job.key,url:job.url,lectureIdentity:job.lectureIdentity,due:job.due,deadline:until};
+  const key='doctorville-channel.js';
+  if(!assets.has(key))assets.set(key,readFileSync(new URL('../vendor/direction169/doctorville-channel.js',import.meta.url),'utf8'));
+  let consumed=false;
+  while(active()){
+   const win=this.current,url=this.url,version=this.version;
+   if(!win||win.isDestroyed()||!this.windows.includes(win))return;
+   const bound=()=>active()&&this.current===win&&this.version===version&&this.url===url&&!win.isDestroyed();
+   const inspect=async mode=>{
+    if(!bound())return;
+    const script=`(()=>{if(location.href!==${JSON.stringify(url)}||Date.now()>=${until})return null;const state=(${assets.get(key)})(${JSON.stringify(input)},${JSON.stringify(mode)}).status;if(state==='unknown'&&[...document.querySelectorAll('[aria-modal="true"],[role="dialog"],[role="alertdialog"],dialog[open],input[type="password"]')].some(el=>el.checkVisibility({checkOpacity:true,checkVisibilityCSS:true})))return 'obstacle';return state;})()`;
+    return bounded(win.webContents.executeJavaScriptInIsolatedWorld(1003,[{code:script}]),this.signal,Math.max(1,until-Date.now()));
+   };
+   if(url!=='about:blank'&&!win.webContents.isLoadingMainFrame()){
+    if(!allowedNavigation(this.site,url))return;
+    const target=new URL(url);
+    if(!['/seminar/seminarDetail','/seminar/broadcastSeminarPopup'].includes(target.pathname)||
+       target.searchParams.getAll('seminarId').length!==1||target.searchParams.get('seminarId')!==expectedId){
+     if(this.dispatchDocument?.url!==url||this.dispatchDocument.version!==version)return;
+     await waitFor(Math.min(200,Math.max(1,until-Date.now())),this.signal);continue;
+    }
+    const outcome=await inspect('doctorville_channel_inspect');
+    if(!bound())continue;
+    if(outcome==='obstacle'&&!consumed)return;
+    if(outcome==='waiting_room'||outcome==='broadcast_room')return outcome;
+    if(outcome==='channel_ready'&&!consumed){
+     if(!consume()||!bound())return;
+     consumed=true;
+     await inspect('doctorville_channel_confirm');
+     continue;
+    }
+   }
+   await waitFor(Math.min(200,Math.max(1,until-Date.now())),this.signal);
+  }
+ }
  async observeDocpleArrival(job){
   if(this.site!=='docple'||!this.entryDispatchArmed)return false;
   const id=docpleId(job.url);if(!id)return false;await this.ready();

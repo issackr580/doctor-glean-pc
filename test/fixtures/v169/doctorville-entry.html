@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="ko">
+<head><meta charset="UTF-8"><title>닥터빌 합성 강의 상세</title></head>
+<body>
+  <article>
+    <h2>예제 강의</h2>
+    <p class="date">2026.11.23 18:30</p>
+    <span>신청완료</span>
+    <button type="button" id="entry">입장하기</button>
+  </article>
+  <script>
+    window.fixtureActions = { entryClicks: 0 };
+    document.getElementById('entry').addEventListener('click', () => {
+      window.fixtureActions.entryClicks++;
+      const popupPath = location.pathname.endsWith('/seminar/seminarDetail')
+        ? 'broadcastSeminarPopup'
+        : 'doctorville-popup.html';
+      window.open(popupPath + '?seminarId=901', '_blank');
+    });
+  </script>
+</body>
+</html>

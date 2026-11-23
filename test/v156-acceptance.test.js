@@ -161,3 +161,22 @@ test('v156 HMP permission and pause stop signals never become a continuation',()
  const job=createEntryJob(event,start);
  for(const status of ['permissions','automation_paused','login','blocked','not_registered','ambiguous','cancelled','manual_clicked','lecture_ended'])assert.equal(nextHmpCheckpoint(job,{status},start+1000,[]),null);
 });
+
+test('corrected Nov 23/26 Dtalks calendars never recreate the disabled 18:00 reservation on restart',t=>{
+ const s=setup(t);
+ const day='2026-11-23',thursday='2026-11-26',time='18:00';
+ const legacy={...createEntryJob(event,start),site:'dtalks',slot:0,date:day,time,
+  key:'c'.repeat(64),repeatSchema:1,start:kstInstant(day,time),status:'reserved',entryAttempted:false};
+ delete legacy.hmpTiming;delete legacy.hmpRepeatSchema;delete legacy.hmpAttempts;
+ const manual={...legacy,date:thursday,key:'d'.repeat(64),status:'manual_clicked',entryAttempted:true};
+ s.store.putEntry(legacy);s.store.putEntry(manual);
+ for(const date of [day,thursday]){
+  const now=kstInstant(date,'10:00'),runner=new EntryRunner({ledger:s.ledger,store:s.store,now:()=>now,createPage:()=>assert.fail('Dtalks automatic window')});
+  const times=date===day?['13:00']:['13:00','18:00'];
+  runner.reserveCatalog(date,{dtalks:{status:'review',coverage:true,events:times.map(time=>({site:'dtalks',date,time,title:'합성 강의'}))}});
+  assert.equal(runner.due(kstInstant(date,'18:00')),null);
+ }
+ const disk=new WorkflowStore(s.store.file,{now:()=>kstInstant(day,'18:00')});
+ assert.deepEqual(disk.entries(day).map(j=>j.status),['cancelled']);
+ assert.deepEqual(disk.entries(thursday).map(j=>[j.status,j.entryAttempted]),[['manual_clicked',true]]);
+});
