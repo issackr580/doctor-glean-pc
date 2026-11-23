@@ -1,0 +1,666 @@
+{
+  "schemaVersion": 1,
+  "title": "PC판 포팅용 합성 인수 사례",
+  "usage": [
+    "실제 사이트와 연결되지 않는 가짜 전송기·시계·문서·OS 연결 이벤트를 사용한다.",
+    "PC 구현의 실제 테스트 결과는 실행 뒤 별도로 기록한다. 여기의 값은 기대 결과다.",
+    "각 사례는 독립적으로 초기화하며, 한 사례 안에서 독립 입력을 열거한 경우에도 입력마다 초기화한다."
+  ],
+  "fixtureDefaults": {
+    "timezone": "Asia/Seoul",
+    "date": "2026-11-23",
+    "account": "합성 계정 A",
+    "transport": "허용된 합성 읽기는 하위 리소스 없는 단일 응답이다. 로그인 폼·달력·버튼 등은 메모리의 테스트 문서로 입력한다.",
+    "currentDocpleReceipt": "공식 HTTPS 원본과 정확한 출석 경로, 활성 문서와 계정, 한국 기준 오늘, 정확한 연월과 날짜 순서, 오늘 도장, 비활성 완료 버튼 1개가 모두 일치한다."
+  },
+  "counterDefinitions": {
+    "additionalReadRequests": "사례의 countingWindow에서 앱이 외부로 새로 발행한 읽기 요청 수의 [최소, 최대]. 차단된 새 탐색, 확인 조회, 업데이트 확인, 후속 리디렉션은 발행되지 않아야 할 때 0이다.",
+    "additionalWriteRequests": "같은 구간에서 앱이 새로 발행한 로그인 제출, 출석, 보상 등 상태 변경 요청 수의 [최소, 최대].",
+    "automaticReplayCount": "이미 보냈거나 종료되거나 기한이 지난 동일 작업을 앱이 자동으로 재실행한 횟수.",
+    "scope": "사전 조건 준비·이미 시작된 요청과 이미 수신한 페이지의 공급자 자체 리소스는 추가 요청 집계에서 제외한다. 앱이 시작·승인하는 탐색, 리디렉션, 후속 호출과 업데이트는 집계한다. 데이터 차단 사례는 관리 중인 페이지의 하위 리소스까지 가짜 전송기로 막았는지 따로 검증한다. 허용 수치는 합성 응답의 테스트 값이며 운영 상한이 아니다."
+  },
+  "cases": [
+    {
+      "id": "always_cellular",
+      "setup": [
+        "신규 프로필, 항상 허용, 모바일 기본 경로, 사용자 중지 해제"
+      ],
+      "events": [
+        "사용자가 목록 조회를 한 번 누른다. 테스트 어댑터가 응답 200과 목록 1건을 반환한다."
+      ],
+      "expected": {
+        "localState": "조회 완료",
+        "assert": [
+          "해당 목록을 1회 읽어 저장한다."
+        ],
+        "countingWindow": "클릭부터 목록 저장까지",
+        "additionalReadRequests": [
+          1,
+          1
+        ],
+        "additionalWriteRequests": [
+          0,
+          0
+        ],
+        "automaticReplayCount": 0
+      }
+    },
+    {
+      "id": "off_persistence",
+      "setup": [
+        "기존 사용자가 데이터 사용을 끄고 앱을 종료했다. 이미 예약된 작업이 있다."
+      ],
+      "events": [
+        "앱을 다시 열고 만료된 예약, 수동 조회, 로그인 창, 내장 업데이트 확인을 차례로 실행한다."
+      ],
+      "expected": {
+        "localState": "데이터 사용 꺼짐",
+        "assert": [
+          "정책이 재시작 후 유지된다.",
+          "기존 목록과 설정을 로컬에서 열 수 있다.",
+          "서버용 연결·웹뷰·외부 URL 실행을 시작하지 않는다."
+        ],
+        "countingWindow": "재시작부터 모든 작업 종료까지",
+        "additionalReadRequests": [
+          0,
+          0
+        ],
+        "additionalWriteRequests": [
+          0,
+          0
+        ],
+        "automaticReplayCount": 0
+      }
+    },
+    {
+      "id": "wifi_only_unverified",
+      "setup": [
+        "Wi-Fi에서만 허용, 사용자 중지 해제"
+      ],
+      "events": [
+        "각각 초기화한 프로필에서 셀룰러, 이더넷 단독, VPN 하부망 불명, 기본 경로 불명, 연결 단절을 입력하고 수동 조회를 누른다."
+      ],
+      "expected": {
+        "localState": "Wi-Fi 확인 대기",
+        "assert": [
+          "각 입력에서 동일하게 차단한다.",
+          "네트워크 판별을 위해 공급자 사이트나 외부 확인 주소로 접속하지 않는다."
+        ],
+        "countingWindow": "각 프로필의 경로 확인부터 조회 판정까지",
+        "additionalReadRequests": [
+          0,
+          0
+        ],
+        "additionalWriteRequests": [
+          0,
+          0
+        ],
+        "automaticReplayCount": 0
+      }
+    },
+    {
+      "id": "wifi_only_allowed",
+      "setup": [
+        "Wi-Fi에서만 허용, 기본 경로가 검증 가능한 Wi-Fi, 이전 만료 작업 1건"
+      ],
+      "events": [
+        "사용자가 현재 날짜 목록을 새로 요청한다."
+      ],
+      "expected": {
+        "localState": "현재 요청 조회 완료",
+        "assert": [
+          "수동 요청의 합성 응답 1건을 저장한다.",
+          "만료 작업은 실행되지 않는다."
+        ],
+        "countingWindow": "사용자의 새 요청부터 결과 저장까지",
+        "additionalReadRequests": [
+          1,
+          1
+        ],
+        "additionalWriteRequests": [
+          0,
+          0
+        ],
+        "automaticReplayCount": 0
+      }
+    },
+    {
+      "id": "wifi_switch_in_flight",
+      "setup": [
+        "Wi-Fi 전용, 검증된 Wi-Fi에서 페이지 읽기와 업데이트 다운로드가 이미 시작됐다. 청구 작업 1건은 이미 전송됐다."
+      ],
+      "events": [
+        "기본 경로가 셀룰러로 바뀐다.",
+        "기존 페이지가 리디렉션과 하위 리소스를 요청하고 업데이트가 다음 조각을 요청한다.",
+        "Wi-Fi가 돌아온다."
+      ],
+      "expected": {
+        "localState": "진행 중 통신 중단, 전송 건 결과 미확인",
+        "assert": [
+          "앱이 관리하는 연결과 페이지 로딩을 중단한다.",
+          "업데이트 이어받기와 청구 재전송을 자동 시작하지 않는다.",
+          "경로 변경 전 전송 여부를 보존한다."
+        ],
+        "countingWindow": "경로 변경을 처리한 뒤부터 Wi-Fi 복귀 직후까지",
+        "additionalReadRequests": [
+          0,
+          0
+        ],
+        "additionalWriteRequests": [
+          0,
+          0
+        ],
+        "automaticReplayCount": 0
+      }
+    },
+    {
+      "id": "missed_job_manual_pause",
+      "setup": [
+        "사용자가 자동화를 일시 중지했다. 네트워크 꺼짐 동안 예약 시각이 지났다."
+      ],
+      "events": [
+        "사용자가 Wi-Fi 전용으로 전환한다.",
+        "Wi-Fi가 연결되고 스케줄러가 절전에서 깨어난다."
+      ],
+      "expected": {
+        "localState": "일시 중지 유지",
+        "assert": [
+          "과거 예약을 소급 실행하지 않는다.",
+          "네트워크 허용 변경이 별도의 자동화 중지 설정을 해제하지 않는다."
+        ],
+        "countingWindow": "정책 변경부터 스케줄러 복귀까지",
+        "additionalReadRequests": [
+          0,
+          0
+        ],
+        "additionalWriteRequests": [
+          0,
+          0
+        ],
+        "automaticReplayCount": 0
+      }
+    },
+    {
+      "id": "updater_manual_browser",
+      "setup": [
+        "플랫폼의 업데이트 확인, 다운로드, 링크 열기를 가로챌 수 있다."
+      ],
+      "events": [
+        "꺼짐, Wi-Fi 전용의 두 모드에서 각각 외부 브라우저 열기를 선택한다.",
+        "꺼짐 또는 Wi-Fi 미확인 상태에서 업데이트 확인과 다운로드를 요청한다."
+      ],
+      "expected": {
+        "localState": "제한 사유 표시",
+        "assert": [
+          "외부 브라우저 실행 횟수 0회.",
+          "차단된 업데이트는 메타데이터 조회와 파일 전송 모두 0회."
+        ],
+        "countingWindow": "각 제한 모드에서 해당 기능을 누른 직후",
+        "additionalReadRequests": [
+          0,
+          0
+        ],
+        "additionalWriteRequests": [
+          0,
+          0
+        ],
+        "automaticReplayCount": 0
+      }
+    },
+    {
+      "id": "traffic_limit_retry_after",
+      "setup": [
+        "허용된 목록 조회 1회에 사이트가 429와 Retry-After를 반환했다. 숫자(초)와 유효한 미래 HTTP 날짜를 각각 시험한다."
+      ],
+      "events": [
+        "지정된 대기 중에 목록 새로고침, 출석, 로그인 복구, 업데이트된 타이머가 같은 사이트에 요청한다.",
+        "대기가 끝난 뒤 타이머를 유휴 상태로 한 번 진행한다."
+      ],
+      "expected": {
+        "localState": "사이트 대기 기록 보존",
+        "assert": [
+          "같은 사이트의 다른 진입점도 같은 기한을 따른다.",
+          "로그인 실패·보상 실패로 기록하지 않는다.",
+          "기한 만료만으로 앞선 요청을 재생하지 않는다."
+        ],
+        "countingWindow": "최초 429 수신 직후부터 대기 만료 직후까지",
+        "additionalReadRequests": [
+          0,
+          0
+        ],
+        "additionalWriteRequests": [
+          0,
+          0
+        ],
+        "automaticReplayCount": 0
+      }
+    },
+    {
+      "id": "traffic_limit_next_action",
+      "setup": [
+        "이전 429 대기 기한이 지났다. 사용자 및 데이터 정책이 허용한다. 이전 쓰기 작업은 이미 종료됐다."
+      ],
+      "events": [
+        "사용자가 새로운 목록 조회를 누른다. 목록 어댑터가 응답 200을 반환한다."
+      ],
+      "expected": {
+        "localState": "신규 목록 조회 완료",
+        "assert": [
+          "새 조회 1건만 허용한다.",
+          "과거 출석이나 보상 요청을 다시 보내지 않는다."
+        ],
+        "countingWindow": "새 조회 클릭부터 저장까지",
+        "additionalReadRequests": [
+          1,
+          1
+        ],
+        "additionalWriteRequests": [
+          0,
+          0
+        ],
+        "automaticReplayCount": 0
+      }
+    },
+    {
+      "id": "docple_positive_local_receipt",
+      "setup": [
+        "현재 로그인 계정의 닥플 출석 화면이 열려 있다. 당일 출석은 이미 서버에서 처리됐다. 앱에 과거 시도 여부와 429 대기 기록이 있다."
+      ],
+      "events": [
+        "현재 문서에서 정확한 월 표기, 날짜 순서가 맞는 달력, 오늘 칸의 출석 도장, 비활성 ‘오늘 출석 완료 ✓’ 버튼 1개를 함께 읽는다.",
+        "같은 문서의 관찰 결과를 한 번 더 전달한다."
+      ],
+      "expected": {
+        "localState": "당일 출석 완료",
+        "assert": [
+          "이미 열린 공식 출석 문서의 증거를 로컬 결과에 반영한다.",
+          "중복 관찰은 완료를 다시 기록하거나 버튼을 클릭하지 않는다.",
+          "기존 시도 정보와 사이트 대기 기한을 보존한다."
+        ],
+        "countingWindow": "현재 문서 읽기부터 두 번째 관찰 처리까지",
+        "additionalReadRequests": [
+          0,
+          0
+        ],
+        "additionalWriteRequests": [
+          0,
+          0
+        ],
+        "automaticReplayCount": 0
+      }
+    },
+    {
+      "id": "docple_weak_receipt",
+      "setup": [
+        "공식 출석 경로의 현재 문서이다. 월 누계와 목표 달성 문구가 있다."
+      ],
+      "events": [
+        "각각 독립적으로 오늘 도장 누락, 달력 일부 누락, 완료 버튼 누락, 오늘 칸이 비어 있고 어제만 도장이 있는 화면을 입력한다."
+      ],
+      "expected": {
+        "localState": "당일 출석 미확인",
+        "assert": [
+          "누계 또는 한 가지 단서만으로 오늘 완료를 만들지 않는다.",
+          "열린 페이지 관찰에서 청구·재조회·재로그인을 실행하지 않는다."
+        ],
+        "countingWindow": "각 문서의 수동 관찰 처리 동안",
+        "additionalReadRequests": [
+          0,
+          0
+        ],
+        "additionalWriteRequests": [
+          0,
+          0
+        ],
+        "automaticReplayCount": 0
+      }
+    },
+    {
+      "id": "docple_wrong_context",
+      "setup": [
+        "달력 모양과 완료 버튼만 보면 정상처럼 보인다. 현재 작업은 합성 계정 A의 당일 출석이다."
+      ],
+      "events": [
+        "독립적으로 다른 달, 다른 연도, 잘못된 경로, 다른 출처, 인증 도전 화면, 계정 B의 문서를 입력한다."
+      ],
+      "expected": {
+        "localState": "현재 계정 당일 출석 미확인",
+        "assert": [
+          "각 입력이 현재 작업의 완료 증거에서 제외된다."
+        ],
+        "countingWindow": "각 문서 수신부터 판정까지",
+        "additionalReadRequests": [
+          0,
+          0
+        ],
+        "additionalWriteRequests": [
+          0,
+          0
+        ],
+        "automaticReplayCount": 0
+      }
+    },
+    {
+      "id": "docple_stale_callback",
+      "setup": [
+        "오늘의 정확한 출석 화면 관찰이 진행 중이고 콜백이 지연됐다."
+      ],
+      "events": [
+        "독립적으로 새 문서로 이동하거나, 활성 계정을 바꾸거나, 한국 시간 자정을 넘긴 뒤 이전 콜백을 전달한다."
+      ],
+      "expected": {
+        "localState": "새 작업 상태 유지",
+        "assert": [
+          "종료된 문서·다른 계정·어제의 결과를 현재 작업에 쓰지 않는다.",
+          "이미 저장된 올바른 완료도 덮어쓰지 않는다."
+        ],
+        "countingWindow": "상태 변경 후 지연 콜백을 처리하는 동안",
+        "additionalReadRequests": [
+          0,
+          0
+        ],
+        "additionalWriteRequests": [
+          0,
+          0
+        ],
+        "automaticReplayCount": 0
+      }
+    },
+    {
+      "id": "docple_claim_limit_then_receipt",
+      "setup": [
+        "동일 계정의 오늘 출석 쓰기 1건이 이미 전송됐고 결과는 아직 확정되지 않았다."
+      ],
+      "events": [
+        "후속 확인에 대한 429를 입력한다.",
+        "같은 날 사용자가 직접 연 출석 페이지가 유효한 당일 완료 증거를 제공한다.",
+        "이전의 미확인 콜백을 늦게 전달한다."
+      ],
+      "expected": {
+        "localState": "완료 유지, 사이트 대기 유지",
+        "assert": [
+          "429 시점에는 시도 여부를 유지한 채 결과 미확인으로 둔다.",
+          "수동 화면의 유효한 증거로 완료를 저장하고 늦은 결과는 이를 강등시키지 않는다.",
+          "로그인 경고와 자동 재청구가 발생하지 않는다."
+        ],
+        "countingWindow": "이미 열린 문서의 관찰 및 응답 처리 동안. 사용자가 연 페이지의 로드는 제외",
+        "additionalReadRequests": [
+          0,
+          0
+        ],
+        "additionalWriteRequests": [
+          0,
+          0
+        ],
+        "automaticReplayCount": 0
+      }
+    },
+    {
+      "id": "hmp_no_saved_credential",
+      "setup": [
+        "한미 HMP 캡슐 경로가 로그인 화면을 표시한다. 저장 계정이 없다."
+      ],
+      "events": [
+        "로그인 화면을 로컬 판별하고 계정 복구 가능 여부를 검사한다."
+      ],
+      "expected": {
+        "localState": "로그인 필요, 캡슐 미시도",
+        "assert": [
+          "저장 정보 없음으로 복구를 건너뛴다.",
+          "로그인 입력 전송, 수령 클릭, 지급 실패 확정은 모두 0회.",
+          "사용자가 직접 로그인하거나 계정을 저장할 수 있음을 표시한다."
+        ],
+        "countingWindow": "로그인 화면이 이미 열린 뒤 판정이 끝날 때까지",
+        "additionalReadRequests": [
+          0,
+          0
+        ],
+        "additionalWriteRequests": [
+          0,
+          0
+        ],
+        "automaticReplayCount": 0
+      }
+    },
+    {
+      "id": "survey_local_lifecycle",
+      "setup": [
+        "설문 기능을 사용하는 프로필과 예약된 강의가 있다. 설문은 사용자가 직접 열 수 있다."
+      ],
+      "events": [
+        "강의가 시작되고 설문 시간이 지나도록 가상 시계를 진행한다.",
+        "사용자가 설문 미참여 종료를 선택하고 앱을 재시작한다."
+      ],
+      "expected": {
+        "localState": "설문 미참여 종료",
+        "assert": [
+          "설문 페이지 자동 열기, 시작 탐색, 주기 확인, 탐색에 의한 시작 알림이 없다.",
+          "미참여 종료를 로컬에 보존한다."
+        ],
+        "countingWindow": "예약 시각부터 재시작 직후까지",
+        "additionalReadRequests": [
+          0,
+          0
+        ],
+        "additionalWriteRequests": [
+          0,
+          0
+        ],
+        "automaticReplayCount": 0
+      }
+    },
+    {
+      "id": "survey_manual_open",
+      "setup": [
+        "네트워크 정책 허용, 사용자가 현재 강의의 인앱 설문을 직접 연다. 테스트 페이지는 리디렉션과 하위 리소스가 없다."
+      ],
+      "events": [
+        "메뉴를 한 번 눌러 설문을 연 뒤 창을 닫고 시계를 진행한다."
+      ],
+      "expected": {
+        "localState": "사용자 진입 종료",
+        "assert": [
+          "명시한 인앱 열기 1회만 수행한다.",
+          "창을 닫은 뒤 재열기와 폴링이 없다."
+        ],
+        "countingWindow": "메뉴 클릭부터 창 종료 후 다음 스케줄 판정까지",
+        "additionalReadRequests": [
+          1,
+          1
+        ],
+        "additionalWriteRequests": [
+          0,
+          0
+        ],
+        "automaticReplayCount": 0
+      }
+    },
+    {
+      "id": "same_operation_collision",
+      "setup": [
+        "같은 계정·사이트·한국 날짜·업무의 출석 작업이 두 경로에 동시에 도착한다. 모의 서버는 1회 쓰기에 답하기 전에 연결을 끝낸다."
+      ],
+      "events": [
+        "예약 실행과 사용자의 클릭을 같은 시점에 전달한다.",
+        "결과 미확인 상태에서 앱을 다시 시작한다."
+      ],
+      "expected": {
+        "localState": "한 건 시도, 처리 결과 미확인",
+        "assert": [
+          "단일 실행만 쓰기를 소유한다.",
+          "요청 전송 여부를 재시작 뒤에도 유지한다.",
+          "확인되지 않은 쓰기의 자동 재실행은 없다."
+        ],
+        "countingWindow": "동시 요청 전달부터 재시작 직후까지",
+        "additionalReadRequests": [
+          0,
+          0
+        ],
+        "additionalWriteRequests": [
+          1,
+          1
+        ],
+        "automaticReplayCount": 0
+      }
+    },
+    {
+      "id": "morning_quiz_handoff",
+      "setup": [
+        "한국 시간 평일 08시 전, 자동화와 네트워크 허용. 동일한 인터엠디 아침 작업을 깨울 수 있는 이벤트가 둘 있다."
+      ],
+      "events": [
+        "오전 8시 전에 자동 조회를 요청한다.",
+        "허용 시간대에 예약과 앱 복귀 신호를 겹치게 한다. 모의 페이지에 문항 없이 현 상태가 있다."
+      ],
+      "expected": {
+        "localState": "아침 확인 1회",
+        "assert": [
+          "개시 전 퀴즈용 조회 0회.",
+          "허용 시간대에 작업을 한 번만 넘겨받고 모의 페이지를 한 번만 읽는다.",
+          "중복 실행이나 퀴즈 제출은 없다."
+        ],
+        "countingWindow": "개시 전부터 아침 작업 종료까지",
+        "additionalReadRequests": [
+          1,
+          1
+        ],
+        "additionalWriteRequests": [
+          0,
+          0
+        ],
+        "automaticReplayCount": 0
+      }
+    },
+    {
+      "id": "morning_missed_window",
+      "setup": [
+        "앱이 한국 시간 평일 아침 실행 구간 전체에 걸쳐 오프라인이었다."
+      ],
+      "events": [
+        "구간이 끝난 뒤 앱을 열고 네트워크를 복구한다."
+      ],
+      "expected": {
+        "localState": "지난 자동 확인 종료",
+        "assert": [
+          "누락된 아침 조회와 쓰기 요청을 소급해서 실행하지 않는다."
+        ],
+        "countingWindow": "구간 종료 뒤 앱 및 네트워크 복귀 처리 동안",
+        "additionalReadRequests": [
+          0,
+          0
+        ],
+        "additionalWriteRequests": [
+          0,
+          0
+        ],
+        "automaticReplayCount": 0
+      }
+    },
+    {
+      "id": "redirect_loop",
+      "setup": [
+        "허용된 자동 목록의 최상위 GET 문서에서 리디렉션을 시작한다. 최초 일반 문서 로드는 이미 끝났고 현 연쇄 안에서는 중간 커밋이 없다."
+      ],
+      "events": [
+        "브라우저가 리디렉션이라고 확인한 목적지 A, B, A, B, A를 차례로 제시한다."
+      ],
+      "expected": {
+        "localState": "반복 이동 중단, 목록 미확인",
+        "assert": [
+          "첫 네 탐색만 승인하고 다섯 번째 A를 보내기 전에 멈춘다.",
+          "지연된 이전 문서 콜백으로 이동 예산이 초기화되지 않는다."
+        ],
+        "countingWindow": "첫 리디렉션 목적지 A를 따르기 직전부터 세 번째 A를 거부한 직후까지",
+        "additionalReadRequests": [
+          4,
+          4
+        ],
+        "additionalWriteRequests": [
+          0,
+          0
+        ],
+        "automaticReplayCount": 0
+      }
+    },
+    {
+      "id": "traffic_503_restart",
+      "setup": [
+        "공식 업무 API가 503과 Retry-After 120초를 반환했다."
+      ],
+      "events": [
+        "20초 뒤 재시작하고 같은 사이트의 수동 새로고침과 예약을 실행한다.",
+        "90초에 별도 창의 작업이 도착한다. 120초에 할 일 없이 시간을 진행한다."
+      ],
+      "expected": {
+        "localState": "기한 전 자동 접속 보류",
+        "assert": [
+          "창·예약 워커가 동일한 종료 시각을 읽는다.",
+          "대기가 끝났다는 이유로 요청을 재생하지 않는다."
+        ],
+        "countingWindow": "첫 응답 직후부터 기한 만료 처리까지",
+        "additionalReadRequests": [
+          0,
+          0
+        ],
+        "additionalWriteRequests": [
+          0,
+          0
+        ],
+        "automaticReplayCount": 0
+      }
+    },
+    {
+      "id": "traffic_403_manual",
+      "setup": [
+        "자동 목록의 공식 최상위 문서가 403을 반환했다. 사용자 직접 확인은 아직 없다."
+      ],
+      "events": [
+        "재시작하고 두 번째 창을 연 뒤 다음 날까지 가짜 시계를 진행한다. 같은 사이트에 자동 조회·로그인 복구 신호를 전달한다."
+      ],
+      "expected": {
+        "localState": "수동 확인 필요",
+        "assert": [
+          "시간 경과만으로 제한을 해제하지 않는다.",
+          "다른 전송 방식으로 후속 자동 요청을 발행하지 않는다."
+        ],
+        "countingWindow": "403 직후부터 다음 날 마지막 자동 신호 처리까지",
+        "additionalReadRequests": [
+          0,
+          0
+        ],
+        "additionalWriteRequests": [
+          0,
+          0
+        ],
+        "automaticReplayCount": 0
+      }
+    },
+    {
+      "id": "morning_service_receipt",
+      "setup": [
+        "실행 가능한 오전 일괄 작업에서 강의 조회 인계를 요청했다. 시작 콜백은 가로채 두었고 전송기는 연결하지 않았다."
+      ],
+      "events": [
+        "서비스 시작 없이 먼저 상태를 읽는다.",
+        "이전 작업의 시작 콜백과 현재 작업의 시작 콜백을 차례로 전달한다."
+      ],
+      "expected": {
+        "localState": "현재 작업 시작 확인",
+        "assert": [
+          "인계 요청 시각만으로 실행 성공을 기록하지 않는다.",
+          "조회 날짜와 실행 식별자가 맞는 시작 신호만 채택한다. 실제 조회 완료는 별도 기록이다."
+        ],
+        "countingWindow": "요청 기록 직후부터 동일 실행의 시작 신호 수락까지",
+        "additionalReadRequests": [
+          0,
+          0
+        ],
+        "additionalWriteRequests": [
+          0,
+          0
+        ],
+        "automaticReplayCount": 0
+      }
+    }
+  ]
+}

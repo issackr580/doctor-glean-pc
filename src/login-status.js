@@ -11,9 +11,9 @@ export function inspectLoginPage(){
  const logout=controls.some(element=>labels(element).some(value=>/^(로그아웃|logout|signout)$/i.test(value)));
  const login=controls.some(element=>labels(element).some(value=>/^(로그인|로그인하기|login|signin)$/i.test(value)));
  if(logout&&login)return 'not_confirmed';
- if(logout)return 'authenticated';
  if([...document.querySelectorAll('input[type="password"]')].some(visible))return 'login_required';
  if(/\/(?:login(?:View|Page|Confirm|Form)?|sign-?in)(?:\.(?:do|jsp|html?|hm))?\/?$/i.test(location.pathname))return 'login_required';
+ if(logout)return 'authenticated';
  return 'not_confirmed';
 }
 

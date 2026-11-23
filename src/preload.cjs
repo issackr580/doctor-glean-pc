@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('doctorGlean',Object.freeze({
   setDate:date=>ipcRenderer.invoke('pc:set-date',date),
   selectSites:ids=>ipcRenderer.invoke('pc:select-sites',ids),
   collect:()=>ipcRenderer.invoke('pc:collect'),
+  setDataMode:mode=>ipcRenderer.invoke('pc:data-mode',mode),
   usage:action=>ipcRenderer.invoke('pc:usage',action),
   confirmSiteWait:(id,at,revision)=>ipcRenderer.invoke('pc:confirm-site-wait',id,at,revision),
   collectSite:id=>ipcRenderer.invoke('pc:collect-site',id),

@@ -1,5 +1,9 @@
 import {bindPowerEvents} from './power-events.js';
-import {SiteWait,workerWait} from './site-wait.js';
+import {guardSession} from './hidden-resources.js';
+import {dailyTicket} from './task-ticket.js';
+import {docpleTodayReceipt} from './docple-receipt.js';
+import {DataAccess} from './data-access.js';
+import {SiteWait,workerWait,observeSiteResponse} from './site-wait.js';
 import {NativeCatalogRead} from './native-catalog.js';
 import {configureUsage,changeUsage,flushUsage,resourceUse,trackPage} from './resource-use.js';
 import {app,BrowserWindow,Menu,Tray,nativeImage,ipcMain,session,dialog,clipboard,powerMonitor,safeStorage,net,shell} from 'electron';
@@ -53,9 +57,41 @@ mkdirSync(browserDirectory,{recursive:true,mode:0o700});
 if(app.getPath('userData')!==dataDirectory)app.setPath('userData',dataDirectory);
 if(app.getPath('sessionData')!==browserDirectory)app.setPath('sessionData',browserDirectory);
 if(process.platform==='win32')app.setAppUserModelId(EDITION.appId);
+const dataAccess=new DataAccess(join(dataDirectory,'data-access-v1.json'));
+app.commandLine.appendSwitch('disable-background-networking');
+const requestSites=new Map(SITES.flatMap(site=>site.hosts.map(host=>[host,site.id])));
+requestSites.set('api.keymedi.com','keymedi');
+function requestSite(raw){
+ try{const url=new URL(raw);if(url.protocol==='https:')return requestSites.get(url.hostname)??(allowedNavigation('doctorville',raw)?'doctorville':undefined);}catch{}
+}
+const networkSessions=new Set(),registeredSessions=new WeakSet();
+function* liveNetworkSessions(){
+ for(const ref of networkSessions){const profile=ref.deref();if(profile)yield profile;else networkSessions.delete(ref);}
+}
+const configureNetwork=(profile,id)=>{
+ if(!registeredSessions.has(profile)){registeredSessions.add(profile);networkSessions.add(new WeakRef(profile));}
+ guardSession(profile,{
+  allowed:request=>{
+   if(!dataAccess.allowed())return false;
+   if(!siteWait)return true;
+   return [id,requestSite(request.url)].every(site=>{
+    if(!site||siteWait.allowed(site))return true;
+    const hold=siteWait.status(site);
+    return hold?.manual===true&&siteWait.clockTrusted(Date.now())&&Date.now()>=hold.until&&[...manualOwners].some(([w,owner])=>owner===site&&!w.isDestroyed()&&w.webContents.id===request.webContentsId);
+   });
+  },
+  response:(details,worker)=>{
+   const site=requestSite(details.url)??id;
+   if(site&&siteWait&&details.webContentsId>0&&(!worker||site!==id))observeSiteResponse(siteWait,site,details);
+  }
+ });
+ if(!dataAccess.allowed())profile.enableNetworkEmulation({offline:true});
+};
+app.on('session-created',profile=>configureNetwork(profile));
 const controlUrl=new URL('../ui/index.html',import.meta.url).href;
 let control,tray,state,catalog,collector,catalogQueue,automation,credentials,registration,developerTools,preload,updater,pcOptions,quitting=false,viewDate=kstDate();
 const reportPreview=new ReportPreview();
+const loginVisits=new WeakMap();
 const manualSurveyKeys=new WeakMap();
 const registrationWindows=new Map(),registrationConfirmed=new Map();
 const siteWindows=new Map(),remoteWindows=new Set(),configuredSessions=new Set();
@@ -85,14 +121,14 @@ const buildState=()=>({
   sites:SITES.map(({id,name,loginUrl})=>({id,name,serverWait:siteWait?.status(id),open:[...manualOwners.values()].includes(id),loginEntry:!!loginUrl,session:effectiveSession(id),catalog:true,selected:catalog.selected().includes(id)})),
   collection:collector.snapshot(),results:catalog.view(validQueryDate(viewDate)?viewDate:kstDate()).results,
   pendingQueries:catalogQueue?.snapshot()??[],
-  siteWaitUntrusted:!!siteWait&&!siteWait.clockTrusted(Date.now()),usage:resourceUse(),options:pcOptions?.snapshot(),credentials:credentials?.snapshot(),update:updater?.snapshot(),
+  siteWaitUntrusted:!!siteWait&&!siteWait.clockTrusted(Date.now()),dataAccess:dataAccess.snapshot(),usage:resourceUse(),options:pcOptions?.snapshot(),credentials:credentials?.snapshot(),update:updater?.snapshot(),
   automationAvailable:true,automation:automation?.snapshot(),registration:registrationState(),dailyTasks:DAILY_TASKS.map(({key,label,site})=>({key,label,site})),
 });
 
 function diagnosticSnapshot(){
  const snapshot=state.snapshot();
  return {appName:EDITION.name,applicationId:EDITION.appId,edition:EDITION.id,appVersion:VERSION,build:BUILD_INFO,exportedAt:Date.now(),processStartedAt:PROCESS_STARTED_AT,date:kstDate(),automationPaused:snapshot.paused,
-  runtime:{platform:process.platform,arch:process.arch,electron:process.versions.electron,chromium:process.versions.chrome,osRelease:release()},runtimeFaults:runtimeFaults.snapshot(),siteWaitUntrusted:!!siteWait&&!siteWait.clockTrusted(Date.now()),resourceUse:resourceUse(),
+  runtime:{platform:process.platform,arch:process.arch,electron:process.versions.electron,chromium:process.versions.chrome,osRelease:release()},runtimeFaults:runtimeFaults.snapshot(),dataAccess:dataAccess.snapshot(),siteWaitUntrusted:!!siteWait&&!siteWait.clockTrusted(Date.now()),resourceUse:resourceUse(),
   stage:'automation',automationAvailable:true,collection:collector.snapshot(),selectedCatalogSites:catalog.selected(),pendingQueries:catalogQueue?.snapshot()??[],sites:catalog.diagnostics(viewDate),automation:automation?.diagnostics(),
   siteSessions:SITES.map(({id})=>({site:id,open:[...manualOwners.values()].includes(id),...effectiveSession(id)})),credentials:credentials?.snapshot(),registration:registration?.store.snapshot(),browserEvents:[...browserEvents],developerDiagnostics:developerTools?.status(),
   attempts:Object.values(snapshot.jobs).map(({site,kind,date,slot,state,updatedAt})=>({site,kind,date,slot,state,updatedAt}))};
@@ -158,6 +194,21 @@ async function flushProfile(id){
  })();
  flushingSessions.set(id,work);try{return await work;}finally{flushingSessions.delete(id);}
 }
+function armLoginVisit(window,id){
+ if(!['doctorville','intermd'].includes(id)||!credentials.vault.enabled(id)||state.snapshot().paused||!catalog.selected().includes(id))return;
+ loginVisits.set(window,{selection:catalogSelectionEpoch,day:kstDate(),date:viewDate,account:credentials.vault.epoch(id),epoch:state.snapshot().epoch,expires:Date.now()+150000});
+}
+async function continueLoginVisit(window,id,url,version){
+ const visit=loginVisits.get(window);
+ const valid=()=>visit&&Date.now()<visit.expires&&visit.selection===catalogSelectionEpoch&&visit.day===kstDate()&&visit.date===viewDate&&validQueryDate(viewDate)&&state.snapshot().epoch===visit.epoch&&!state.snapshot().paused&&credentials.vault.epoch(id)===visit.account&&credentials.vault.enabled(id)&&dataAccess.allowed()&&siteWait.allowed(id)&&catalog.selected().includes(id)&&!window.isDestroyed()&&loginVisits.get(window)===visit&&window.webContents.getURL()===url&&navigationVersions.get(window)===version&&[...manualOwners].filter(([,owner])=>owner===id).every(([w])=>loginVisits.get(w)===visit);
+ if(!valid()||visit.pending||!siteById(id).hosts.includes(new URL(url).hostname)||['login','provider'].includes(pageRole(url)))return;
+ visit.pending=true;
+ try{
+  if(!await flushProfile(id)||!valid())return;
+  for(const [w,owner] of manualOwners)if(owner===id&&loginVisits.get(w)===visit){loginVisits.delete(w);closingWindows.add(w);w.destroy();}
+  catalogQueue.request(visit.date,[id]);showControl();
+ }finally{visit.pending=false;}
+}
 async function inspectSession(window,id){
  if(window.isDestroyed())return;
  const contents=window.webContents,url=contents.getURL(),version=navigationVersions.get(window);
@@ -165,7 +216,7 @@ async function inspectSession(window,id){
  let timer;try{
   const probe='(()=>{const state=('+inspectLoginPage.toString()+')();if('+JSON.stringify(id==='dtalks')+'&&state==="not_confirmed"){const reply=('+credentialPageState.toString()+')('+JSON.stringify({site:id,mode:'verify',expectedUrl:url,validation:false})+');if(reply.status==="authenticated")return "authenticated";}return state;})()';
   const value=await Promise.race([contents.executeJavaScript(probe,false),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('probe_timeout')),3000);})]);
-  if(!window.isDestroyed()&&contents.getURL()===url&&navigationVersions.get(window)===version){sessionChange(id,{login:safeLoginState(value),route:pageRole(url),checkedAt:Date.now()});}
+  if(!window.isDestroyed()&&contents.getURL()===url&&navigationVersions.get(window)===version){sessionChange(id,{login:safeLoginState(value),route:pageRole(url),checkedAt:Date.now()});if(value==='authenticated')await continueLoginVisit(window,id,url,version);}
  }catch{}finally{clearTimeout(timer);}
 }
 function navigateSite(window,id,url,allowLoginFallback=true){
@@ -186,7 +237,8 @@ function navigateSite(window,id,url,allowLoginFallback=true){
 async function finishSiteLogin(id){
  if(!siteById(id))return {ok:false,reason:'invalid_site'};
  const windows=[...manualOwners].filter(([,owner])=>owner===id).map(([window])=>window);
- await Promise.all(windows.map(window=>inspectSession(window,id)));
+ for(const window of windows)loginVisits.delete(window);
+ await Promise.all(windows.map(async window=>{await observeDocple(window,id);await inspectSession(window,id);}));
  // The action acknowledges the user's login step; it is not authentication proof.
  const saved=await flushProfile(id);
  if(!saved)return {ok:false,reason:'session_storage_error'};
@@ -228,13 +280,15 @@ function showControl(){
   window.loadURL(controlUrl).catch(error=>{if(!quitting&&control===window&&!window.isDestroyed())operationError(error,'control');});
 }
 let siteWait;
-function workerTraffic(id,signal){return workerWait(siteWait,id,signal,()=>credentials?.vault.epoch(id)??0);}
+function workerTraffic(id,signal){dataAccess.require();return workerWait(siteWait,id,signal,()=>credentials?.vault.epoch(id)??0);}
 const profileEpochs=new Map();
 app.on('web-contents-created',(_event,contents)=>trackPage(contents,'all'));
 function prepareSession(id){
+  dataAccess.require();
   const preferences=remotePreferences(id,EDITION.id);
   const profile=session.fromPartition(preferences.partition);
   if(!configuredSessions.has(id)){
+    configureNetwork(profile,id);
     profile.setPermissionRequestHandler((_contents,_permission,callback)=>callback(false));
     profile.setPermissionCheckHandler(()=>false);
     profile.on('will-download',event=>event.preventDefault());
@@ -244,6 +298,20 @@ function prepareSession(id){
   }
   return preferences;
 }
+async function observeDocple(window,id){
+ const permitted=()=>id==='docple'&&!window.isDestroyed()&&dataAccess.allowed()&&!state.snapshot().paused&&pcOptions.snapshot().dailyKeys.includes('docple:attendance')&&manualOwners.get(window)===id;
+ if(!permitted())return;
+ const contents=window.webContents,url=contents.getURL(),version=navigationVersions.get(window),date=kstDate(),profile=profileEpochs.get(id),account=credentials.vault.epoch(id),epoch=state.snapshot().epoch,selection=attendanceSelectionEpoch;
+ if(!/^https:\/\/docple-plus\.com\/offerwall\/attendance\/?$/.test(url))return;
+ try{
+  const ok=await boundedWork(contents.executeJavaScriptInIsolatedWorld(1003,[{code:'('+docpleTodayReceipt+')('+JSON.stringify(date)+')'}]),new AbortController().signal,3000);
+  if(ok!==true||!permitted()||kstDate()!==date||contents.getURL()!==url||navigationVersions.get(window)!==version||profileEpochs.get(id)!==profile||credentials.vault.epoch(id)!==account||state.snapshot().epoch!==epoch||selection!==attendanceSelectionEpoch)return;
+  const old=automation.store.day(date).daily['docple:attendance'];
+  if(old?.status!=='complete')automation.store.record(date,'docple:attendance',{status:'complete',reason:'docple_visible_receipt',attempted:old?.attempted===true||state.consumed(dailyTicket({site:id,kind:'attendance'},date,0))});
+  notify();
+ }catch{}
+}
+let attendanceSelectionEpoch=0,catalogSelectionEpoch=0;
 function hardenSiteWindow(window,id){
   if(remoteWindows.has(window))return;
   remoteWindows.add(window);manualOwners.set(window,id);notify();
@@ -253,8 +321,9 @@ function hardenSiteWindow(window,id){
   contents.on('page-title-updated',event=>event.preventDefault());
   window.setAutoHideMenuBar(false);
   window.setMenu(Menu.buildFromTemplate([
+    ...(id==='docple'?[{label:'지금 열린 달력에서 오늘 출석 확인',click:()=>observeDocple(window,id)}]:[]),
     {id:'finish-login',label:'로그인 마침 · 선택한 사이트 조회',click:()=>finishSiteLogin(id).then(result=>{if(!result.ok)dialog.showMessageBox(window,{type:'error',message:'사이트의 세션 저장 요청을 마치지 못했어요. 이 창을 유지하고 다시 시도해 주세요.'});}).catch(()=>{})},
-    {id:'open-login',label:'로그인 화면',enabled:!!siteById(id).loginUrl,click:()=>navigateSite(window,id,siteById(id).loginUrl)},
+    {id:'open-login',label:'로그인 화면',enabled:!!siteById(id).loginUrl,click:()=>{armLoginVisit(window,id);navigateSite(window,id,siteById(id).loginUrl);}},
     {label:'다시 열기',click:()=>navigateSite(window,id,siteById(id).url)},
   ]));
   contents.on('did-start-navigation',(event,_url,inPlace,main)=>{
@@ -264,9 +333,12 @@ function hardenSiteWindow(window,id){
     const target=typeof url==='string'?url:event.url;
     if(!allowedNavigation(id,target)){event.preventDefault();sessionChange(id,{lastError:'navigation_blocked'});browserEvent(id,'navigation_blocked');}
   };
+  contents.on('did-navigate-in-page',()=>{if(loginVisits.has(window))void inspectSession(window,id);});
   contents.on('did-finish-load',()=>{
     if(!allowedNavigation(id,contents.getURL()))return;
-    sessionChange(id,{load:'ready'});browserEvent(id,'document_ready');inspectSession(window,id);
+    sessionChange(id,{load:'ready'});browserEvent(id,'document_ready');void observeDocple(window,id);void inspectSession(window,id);
+    const visit=loginVisits.get(window),version=navigationVersions.get(window);
+    if(visit)for(const delay of [600,2000])setTimeout(()=>{if(!window.isDestroyed()&&loginVisits.get(window)===visit&&navigationVersions.get(window)===version)void inspectSession(window,id);},delay).unref();
   });
   contents.on('did-fail-load',(_event,code,_description,_url,main)=>{
     if(main!==false&&code!==-3){sessionChange(id,{load:'failed',login:'not_confirmed',lastError:loadFailure(code)});browserEvent(id,'document_load_failed');}
@@ -280,14 +352,14 @@ function hardenSiteWindow(window,id){
   });
   contents.on('will-attach-webview',event=>event.preventDefault());
   contents.setWindowOpenHandler(({url})=>{
-    if(!allowedPopup(id,url,contents.getURL())||remoteWindows.size>=12){sessionChange(id,{lastError:'popup_blocked'});browserEvent(id,'popup_blocked');return {action:'deny'};}
+    if(!dataAccess.allowed()||siteWait.status(id)?.until>Date.now()||!allowedPopup(id,url,contents.getURL())||remoteWindows.size>=12){sessionChange(id,{lastError:'popup_blocked'});browserEvent(id,'popup_blocked');return {action:'deny'};}
     return {action:'allow',overrideBrowserWindowOptions:{show:true,width:1100,height:820,autoHideMenuBar:false,webPreferences:prepareSession(id)}};
   });
-  contents.on('did-create-window',child=>{if(manualSurveyKeys.has(window))manualSurveyKeys.set(child,manualSurveyKeys.get(window));hardenSiteWindow(child,id);child.show();child.focus();});
+  contents.on('did-create-window',child=>{if(loginVisits.has(window))loginVisits.set(child,loginVisits.get(window));if(manualSurveyKeys.has(window))manualSurveyKeys.set(child,manualSurveyKeys.get(window));hardenSiteWindow(child,id);child.show();child.focus();});
   window.on('close',event=>{
     if(quitting||closingWindows.has(window))return;
     event.preventDefault();
-    inspectSession(window,id).finally(()=>flushProfile(id)).finally(()=>{if(!window.isDestroyed()){closingWindows.add(window);window.close();}});
+    observeDocple(window,id).then(()=>inspectSession(window,id)).finally(()=>flushProfile(id)).finally(()=>{if(!window.isDestroyed()){closingWindows.add(window);window.close();}});
   });
   window.on('closed',()=>{
     remoteWindows.delete(window);
@@ -297,6 +369,7 @@ function hardenSiteWindow(window,id){
   });
 }
 function openSite(id,login=false,survey){
+  dataAccess.require();if(siteWait.status(id)?.until>Date.now())throw Error('site_wait');
   const site=siteById(id);if(!site)throw Error('invalid_site');
   if(collector.snapshot().running&&collector.snapshot().site===id)collector.cancel();
   automation?.manualOpened(id);
@@ -305,25 +378,47 @@ function openSite(id,login=false,survey){
   if(existing&&!existing.isDestroyed()){
     if(existing.isMinimized())existing.restore();existing.show();existing.focus();
     if(survey){manualSurveyKeys.set(existing,survey.key);navigateSite(existing,id,survey.url);}
-    else if(login&&site.loginUrl)navigateSite(existing,id,site.loginUrl);
+    else if(login&&site.loginUrl){armLoginVisit(existing,id);navigateSite(existing,id,site.loginUrl);}
     return;
   }
   let window;try{window=new BrowserWindow({width:1100,height:820,show:false,parent:control,title:site.name,autoHideMenuBar:false,webPreferences:prepareSession(id)});}
   catch{sessionChange(id,{load:'failed',login:'not_confirmed',lastError:'window_unavailable'});browserEvent(id,'window_open_failed');throw Error('window_unavailable');}
   siteWindows.set(id,window);hardenSiteWindow(window,id);
   browserEvent(id,'window_opened');
+  if(login)armLoginVisit(window,id);
   if(survey)manualSurveyKeys.set(window,survey.key);
   navigateSite(window,id,survey?.url??(login&&site.loginUrl?site.loginUrl:site.url));
 }
 function registerIPC(channel,handler){
   ipcMain.handle(channel,async(event,...args)=>{
     if(!trustedControl(event,control,controlUrl))throw Error('not_allowed');
+    if(remoteChannels.has(channel)&&!dataAccess.allowed())return {ok:false,reason:'data_blocked'};
     if(updater?.guarded&&!['pc:state','pc:quit','pc:update-check','pc:update-install','pc:update-ready'].includes(channel))return {ok:false,reason:'busy'};
     try{return await handler(...args);}
-    catch(error){if(pcOptions?.failed){try{state.setPaused(true);automation?.cancel();notify();}catch{}}return {ok:false,reason:['invalid_selection','invalid_date','collection_busy','window_unavailable'].includes(error.message)?error.message:'operation_unavailable'};}
+    catch(error){if(pcOptions?.failed){try{state.setPaused(true);automation?.cancel();notify();}catch{}}return {ok:false,reason:['invalid_selection','invalid_date','collection_busy','window_unavailable','data_blocked','site_wait'].includes(error.message)?error.message:'operation_unavailable'};}
   });
 }
+const remoteChannels=new Set('update-check update-install update-page collect collect-site daily quick-run survey-open credential-save credential-recover entry-preflight entry-preflight-upcoming registration-request open-site open-login finish-login'.split(' ').map(k=>'pc:'+k));
 function ipc(){
+  registerIPC('pc:data-mode',mode=>{
+   const before=dataAccess.allowed();
+   try{dataAccess.set(mode);}
+   finally{
+    if(before&&!dataAccess.allowed()){
+     for(const profile of liveNetworkSessions()){profile.enableNetworkEmulation({offline:true});void profile.closeAllConnections().catch(()=>{});}
+     catalogQueue.clear();collector.cancel();automation.cancel();credentials.cancel();registration.cancel();
+     for(const window of BrowserWindow.getAllWindows())if(window!==control&&!window.isDestroyed())window.destroy();
+     // Terminate existing network-service sockets, service workers and downloads.
+     if(!dataAccess.failed){app.relaunch();setImmediate(()=>app.quit());}
+    }
+    if(!before&&dataAccess.allowed()){
+     for(const profile of liveNetworkSessions())profile.disableNetworkEmulation();
+     automation.rearm();catalogQueue.pump();
+    }
+    notify();
+   }
+   return {ok:true};
+  });
   registerIPC('pc:update-check',()=>updater.check());
   registerIPC('pc:update-install',()=>updater.install());
   registerIPC('pc:update-ready',()=>{updater.acknowledgeBoot().catch(()=>{});return {ok:true};});
@@ -337,10 +432,10 @@ function ipc(){
   registerIPC('pc:state',()=>buildState());
   registerIPC('pc:set-date',date=>{
     if(!validQueryDate(date))return {ok:false,reason:'invalid_date'};
-    catalogQueue.clear();collector.cancel();viewDate=date;notify();return {ok:true,state:buildState()};
+    catalogSelectionEpoch++;catalogQueue.clear();collector.cancel();viewDate=date;notify();return {ok:true,state:buildState()};
   });
   registerIPC('pc:select-sites',ids=>{
-    catalogQueue.clear();collector.cancel();catalog.select(ids);notify();return {ok:true,state:buildState()};
+    catalogSelectionEpoch++;catalogQueue.clear();collector.cancel();catalog.select(ids);notify();return {ok:true,state:buildState()};
   });
   registerIPC('pc:collect',()=>{
     if(!validQueryDate(viewDate))return {ok:false,reason:'invalid_date'};
@@ -356,7 +451,7 @@ function ipc(){
     catalogQueue.request(viewDate,[id]);return {ok:true};
   });
   registerIPC('pc:cancel-collection',()=>{catalogQueue.clear();collector.cancel();return {ok:true};});
-  registerIPC('pc:daily-selection',keys=>{catalogQueue.invalidateAutomatic();automation.daily.cancel();pcOptions.selectDaily(keys);notify();return {ok:true};});
+  registerIPC('pc:daily-selection',keys=>{attendanceSelectionEpoch++;catalogQueue.invalidateAutomatic();automation.daily.cancel();pcOptions.selectDaily(keys);notify();return {ok:true};});
   registerIPC('pc:memo',(date,text)=>{if(!validQueryDate(date))return {ok:false};pcOptions.memo(date,text);notify();return {ok:true};});
   registerIPC('pc:entry-hosts',rows=>{if(automation.busy||remoteWindows.size||credentials.busy||collector.snapshot().running)return {ok:false,reason:'busy'};pcOptions.hosts(rows);notify();return {ok:true};});
   registerIPC('pc:survey-skip',(key,value)=>({ok:automation.survey.skip(key,value)}));
@@ -375,8 +470,9 @@ function ipc(){
    if(result.status!=='authenticated')return;
    sessionChange(site,{login:'authenticated',authSource:'verified_profile',checkedAt:Date.now(),lastError:''});
    await flushProfile(site);
-   automation?.requestDaily({readOnly:true,keys:DAILY_TASKS.filter(task=>task.site===site&&pcOptions.snapshot().dailyKeys.includes(task.key)&&automation.store.day().daily[task.key]?.status==='login').map(task=>task.key)});
    if(catalog.selected().includes(site)){if(!validQueryDate(viewDate))viewDate=kstDate();catalogQueue.request(viewDate,[site]);}
+   const keys=DAILY_TASKS.filter(task=>task.site===site&&pcOptions.snapshot().dailyKeys.includes(task.key)&&automation.store.day().daily[task.key]?.status==='login').map(task=>task.key);
+   if(keys.length)automation.requestDaily({readOnly:true,keys});
   };
   const prepareCredential=id=>{if(!credentialSite(id))throw Error('invalid_site');if(collector.snapshot().running&&collector.snapshot().site===id)collector.cancel();automation.manualOpened(id);registration?.cancel(id);};
   registerIPC('pc:credential-save',async(site,id,password,automatic)=>{
@@ -427,12 +523,12 @@ else{
   app.on('quit',()=>runtimeFaults.close());
   app.whenReady().then(()=>{
     try{
-      snapshotIdentityState(join(app.getPath('userData'),'workflows-v1.json'));snapshotIdentityState(join(app.getPath('userData'),'workflows-v1.json'),'before-entry-policy-v156');
+      snapshotIdentityState(join(app.getPath('userData'),'workflows-v1.json'));snapshotIdentityState(join(app.getPath('userData'),'workflows-v1.json'),'before-entry-policy-v156');snapshotIdentityState(join(app.getPath('userData'),'workflows-v1.json'),'before-network-v168');
       configureUsage(join(dataDirectory,'usage-v1.json'));siteWait=new SiteWait(join(dataDirectory,'site-wait-v1.json'));
       state=new LocalState(join(app.getPath('userData'),'state-v1.json'));
       updater=new PcUpdater({context:{appPath:app.getAppPath(),executable:process.execPath,edition:EDITION.id,currentVersion:VERSION,electronVersion:process.versions.electron,platform:process.platform,arch:process.arch,channel:VERSION.includes('-preview.')?'preview':'stable'},
-       fetch:(...args)=>net.fetch(...args),publicDownload:electronPatchDownload,privateDownload:(target,progress)=>downloadPrivateUpdate(target,progress,{parent:control}),
-       isBusy:()=>!!automation?.busy||!!credentials?.busy||!!registration?.active||!!collector?.snapshot().running||manualOwners.size>0||remoteWindows.size>0||!state.snapshot().paused&&automation?.store.features().entry&&!!automation?.store.entries().some(job=>job.status==='reserved'&&job.deadline>=Date.now()&&(job.nextAt??job.due)<=Date.now()+120000),
+       fetch:(url,options)=>{dataAccess.require();return net.fetch(url,{...options,signal:AbortSignal.any([options.signal,dataAccess.controller.signal])});},publicDownload:(target,progress)=>{dataAccess.require();return electronPatchDownload(target,progress,dataAccess.controller.signal);},privateDownload:(target,progress)=>{dataAccess.require();return downloadPrivateUpdate(target,progress,{parent:control});},
+       isBusy:()=>!dataAccess.allowed()||!!automation?.busy||!!credentials?.busy||!!registration?.active||!!collector?.snapshot().running||manualOwners.size>0||remoteWindows.size>0||!state.snapshot().paused&&automation?.store.features().entry&&!!automation?.store.entries().some(job=>job.status==='reserved'&&job.deadline>=Date.now()&&(job.nextAt??job.due)<=Date.now()+120000),
        onChange:()=>{notify();if(!updater?.guarded){catalogQueue?.pump();automation?.tick();}},quit:()=>app.quit()});
       if(updater.waitForHelper){app.quit();return;}
       pcOptions=new PcOptions(join(dataDirectory,'pc-options-v1.json'));
@@ -449,11 +545,11 @@ else{
       preload=fileURLToPath(new URL('./'+developerTools.preloadName,import.meta.url));
       credentials=new CredentialManager({directory:dataDirectory,applicationId:EDITION.appId,developer:EDITION.developer,
        protect:{available:()=>process.platform==='win32'&&safeStorage.isEncryptionAvailable(),encrypt:text=>safeStorage.encryptString(text),decrypt:bytes=>safeStorage.decryptString(bytes)},
-       automaticAllowed:id=>(!id||siteWait.allowed(id))&&!state.snapshot().paused&&!updater.guarded,isManualOpen:id=>[...manualOwners.values()].includes(id),
+       automaticAllowed:id=>dataAccess.allowed()&&(!id||siteWait.allowed(id))&&!state.snapshot().paused&&!updater.guarded,isManualOpen:id=>[...manualOwners.values()].includes(id),
        createPage:async(id,signal,{validation,partition}={})=>{
-        const prefs=validation?{...remotePreferences(id,EDITION.id),partition}:prepareSession(id);
-        if(validation){const profile=session.fromPartition(partition);profile.setPermissionRequestHandler((_c,_p,callback)=>callback(false));profile.setPermissionCheckHandler(()=>false);profile.on('will-download',event=>event.preventDefault());}
-        const page=new AutomationPage(id,signal,prefs,{traffic:workerTraffic(id,signal)});
+        dataAccess.require();const prefs=validation?{...remotePreferences(id,EDITION.id),partition}:prepareSession(id);
+        if(validation){const profile=session.fromPartition(partition);configureNetwork(profile,id);profile.setPermissionRequestHandler((_c,_p,callback)=>callback(false));profile.setPermissionCheckHandler(()=>false);profile.on('will-download',event=>event.preventDefault());}
+        const page=new AutomationPage(id,signal,{...prefs,disableDialogs:true},{traffic:workerTraffic(id,signal)});
         if(validation){const close=page.close.bind(page),profile=session.fromPartition(partition);let cleaned=false;page.close=()=>{close();if(!cleaned){cleaned=true;profile.clearStorageData().catch(()=>{});profile.clearCache().catch(()=>{});}};}
         return page;
        },onChange:()=>{notify();if(!credentials?.busy)queueMicrotask(()=>{catalogQueue?.pump();automation?.tick();});}});
@@ -462,14 +558,20 @@ else{
         prepareCollection:async(id,signal)=>{const admission=await credentials.prepareCollection(id,signal);if(id==='ckd')nativeCatalog.admitCkd(admission);},nativeRead:(...args)=>nativeCatalog.read(...args),
         recoverLogin:async(id,signal)=>(await credentials.recover(id,{automatic:true,signal})).status==='authenticated',
         isManualOpen:id=>[...manualOwners.values()].includes(id)||credentials.active?.site===id,onChange:snapshot=>{developerTools.observe(snapshot);notify();if(!snapshot.running)queueMicrotask(()=>catalogQueue?.pump());}});
-      catalogQueue=new CatalogQueue({context:id=>credentials.vault.epoch(id)+':'+(profileEpochs.get(id)??0),resultValid:(date,id)=>{const row=catalog.view(date).results[id];return row?.coverage===true&&!row.stale&&row.status==='ok';},start:async(date,ids)=>{await collector.start(date,ids);automation?.catalogFinished(date,ids,collector.snapshot());},busy:()=>updater.guarded||collector.sleeping||collector.snapshot().running||!!automation?.busy||credentials.busy,validDate:validQueryDate,onChange:notify});
-      automation=new AutomationController({file:join(dataDirectory,'workflows-v1.json'),options:pcOptions,followupAllowed:()=>net.isOnline()&&siteWait.allowed('intermd')&&!credentials.busy&&![...manualOwners.values()].includes('intermd'),ledger:state,executionAllowed:()=>!updater.guarded,
+      catalogQueue=new CatalogQueue({context:id=>credentials.vault.epoch(id)+':'+(profileEpochs.get(id)??0),resultValid:(date,id)=>{const row=catalog.view(date).results[id];return row?.coverage===true&&!row.stale&&row.status==='ok';},start:async(date,ids,morningAt)=>{const run=collector.start(date,ids);if(collector.snapshot().running)automation?.catalogStarted(date,morningAt);await run;automation?.catalogFinished(date,ids,collector.snapshot(),morningAt);},busy:()=>!dataAccess.allowed()||updater.guarded||collector.sleeping||collector.snapshot().running||!!automation?.busy||credentials.busy,validDate:validQueryDate,onChange:notify});
+      automation=new AutomationController({file:join(dataDirectory,'workflows-v1.json'),dataEnabledAt:()=>dataAccess.enabledAt??0,options:pcOptions,followupAllowed:()=>net.isOnline()&&siteWait.allowed('intermd')&&!credentials.busy&&![...manualOwners.values()].includes('intermd'),ledger:state,executionAllowed:()=>dataAccess.allowed()&&!updater.guarded,
        entryContextEpoch:site=>credentials.vault.epoch(site),createPage:(site,signal,options)=>credentials.wrapPage(site,new AutomationPage(site,signal,prepareSession(site),{...options,traffic:workerTraffic(site,signal),externalEntryAllowed:(id,url)=>pcOptions.allowsEntry(id,url)}),options),
        createInspectionPage:(site,signal,options)=>new AutomationPage(site,signal,prepareSession(site),{...options,traffic:workerTraffic(site,signal),externalEntryAllowed:(id,url)=>pcOptions.allowsEntry(id,url)}),onEvent:event=>developerTools.event(event),traceEntry:(job,kind)=>developerTools.traceEntry(job,kind),observeEntry:(...args)=>developerTools.observeEntry(...args),
        isManualOpen:id=>[...manualOwners.values()].includes(id)||credentials.active?.site===id,catalog:date=>catalog.view(date).results,catalogBusy:()=>collector.snapshot().running||credentials.busy,
-       queueCatalog:date=>{viewDate=date;catalogQueue.request(date,catalog.selected(),{automatic:true});},
+       queueCatalog:(date,morningAt)=>{
+        viewDate=date;const ids=catalog.selected(),queued=catalogQueue.request(date,ids,{automatic:true,morningAt});
+        const row=automation.store.day(date).morning;
+        if(!queued&&morningAt&&row?.catalogRequestedAt===morningAt)automation.store.record(date,'morning',{...row,status:ids.length?'unknown':'none',reason:ids.length?'collection_in_progress_or_cached':'no_target'});
+       },
        yieldCatalog:()=>{const current=collector.snapshot();if(current.running){catalogQueue.request(current.date,catalog.selected());collector.cancel('entry_priority');}},
        onChange:()=>{notify();if(!automation?.busy)queueMicrotask(()=>catalogQueue?.pump());},onError:operationError});
+      automation.daily.siteWait=siteWait;
+      automation.daily.receiptContext=site=>[credentials.vault.epoch(site),profileEpochs.get(site)??0,state.snapshot().epoch,attendanceSelectionEpoch].join('/');
       registration=new RegistrationController({store:new RegistrationStore(join(dataDirectory,'registration-attempts-v1.json')),
        resolve:(source,key)=>{
         if(source==='entry'){const job=automation.store.entries().find(row=>row.key===key);return canRegisterEntry(job)?job:null;}

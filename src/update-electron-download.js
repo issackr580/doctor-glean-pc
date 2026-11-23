@@ -2,12 +2,14 @@ import {net} from 'electron';
 
 // Electron net.fetch cancels manual redirects. Its native request API lets us
 // validate every redirect before following, with session cookies disabled.
-export function electronPatchDownload(target,onProgress=()=>{}){
+export function electronPatchDownload(target,onProgress=()=>{},signal){
+  if(signal?.aborted)return Promise.reject(Error('update_cancelled'));
   if(target.edition!=='distribution')return Promise.reject(Error('update_private'));
   return new Promise((resolve,reject)=>{
     const request=net.request({method:'GET',url:target.patch.url,redirect:'manual',credentials:'omit',useSessionCookies:false});let done=false,size=0,redirects=0;const chunks=[];
     const timer=setTimeout(()=>finish(Error('update_network')),120000);
-    function finish(error){if(done)return;done=true;clearTimeout(timer);if(error){request.abort();reject(error);}else resolve(Buffer.concat(chunks));}
+    const cancel=()=>finish(Error('update_cancelled'));signal?.addEventListener('abort',cancel,{once:true});
+    function finish(error){if(done)return;done=true;signal?.removeEventListener('abort',cancel);clearTimeout(timer);if(error){request.abort();reject(error);}else resolve(Buffer.concat(chunks));}
     request.on('redirect',(_status,method,raw)=>{
       try{
         const url=new URL(raw);

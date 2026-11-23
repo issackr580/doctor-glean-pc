@@ -39,7 +39,7 @@ export class DailyRunner{
       this.store.record(date,key,{status:ended?'ended':limit?'none':'unknown',reason:ended?'brand_previous_no_banner':limit?'brand_daily_limit':'brand_previous_unconfirmed',attempted:false});completed++;continue;
      }
     }
-    let receipt={status:'unknown',reason:'unknown_result'},taskBegan=this.now(),reads=0,navigations=0,tickets=[],claimAt=0;
+    let receipt={status:'unknown',reason:'unknown_result'},taskBegan=this.now(),staleReceipt=false,reads=0,navigations=0,tickets=[],claimAt=0;
     const runId=randomUUID().replace(/-/g,''),emit=(phase,detail={})=>executionEvent(this.onEvent,{area:'automation',phase,site:task.site,kind:task.kind,runId,readOnly,...detail});emit('start');
     const mayAct=()=>!readOnly&&this.taskSelected(key)&&!this.ledger.snapshot().paused&&(task.kind.startsWith('brand')?this.store.features().brand:this.store.features().dailyClaim)&&allowed();
     publish(task.label+' 확인 중');
@@ -57,7 +57,10 @@ export class DailyRunner{
        if(['login','provider'].includes(page.route)){receipt={status:'login',reason:'login_required'};break;}
        const brandSlot=task.kind==='brand2'?1:0,primary=dailyTicket(task,date,brandSlot,this.now()),confirmation=dailyTicket(task,date,1,this.now());
        const request={site:task.site,kind:task.kind,date,autoClaim:mayAct(),attempted:this.ledger.consumed(primary),confirmationAttempted:task.key==='keymedi:attendance'&&this.ledger.consumed(confirmation),checkId:date+':'+taskBegan};
-       reads++;const reply=await page.call('daily.js',[request]);receipt={...reply,reason:safeReason(reply.reason)};
+       const context=this.receiptContext?.(task.site);
+       reads++;const reply=await page.call('daily.js',[request]);
+       if(reply.reason==='docple_visible_receipt'&&(!allowed()||!this.taskSelected(key)||this.ledger.snapshot().paused||context!==this.receiptContext?.(task.site))){staleReceipt=true;receipt={status:'unknown',reason:'scope_changed'};break;}
+       receipt={...reply,reason:safeReason(reply.reason)};
        if(reply.status==='action'){
         if(!actionAllowed(task,page.url,reply.action)){receipt={status:'unknown',reason:'policy_rejected'};break;}
         const claim=reply.action.type!=='navigate';let ticket=null;
@@ -89,7 +92,9 @@ export class DailyRunner{
      for(const ticket of tickets)this.ledger.finish(ticket,receipt.status==='complete'?'confirmed':'unknown',this.now());
      emit('result',{...cleanReceipt(receipt,this.now()),attempted:receipt.submitted===true||tickets.length>0,elapsedMs:Math.max(0,this.now()-taskBegan),evidence:receipt.status==='complete'?receipt.submitted===true||tickets.length>0?'observed_after_pc_action':'existing_observed':'unconfirmed'});
      receipt={...receipt,attempted:receipt.submitted===true||tickets.length>0||old?.attempted===true,reads,navigations,elapsedMs:Math.max(0,this.now()-taskBegan)};
-     this.store.record(date,key,receipt);run.claimSent=false;run.page?.close();run.page=null;completed++;publish(task.label+' 확인 종료');
+     if(key==='docple:attendance'&&receipt.reason==='site_wait')receipt.waitUntil=this.siteWait?.status('docple')?.until??0;
+     if(key==='hmp:capsule'&&receipt.status==='login'&&!receipt.attempted&&!this.ledger.consumed(dailyTicket(task,date,0,this.now())))receipt.reason='hmp_login_before_claim';
+     if(!staleReceipt)this.store.record(date,key,receipt,this.now());run.claimSent=false;run.page?.close();run.page=null;completed++;publish(task.label+' 확인 종료');
     }
    }
   }finally{

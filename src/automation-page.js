@@ -1,3 +1,4 @@
+import {docpleTodayReceipt} from './docple-receipt.js';
 import {hiddenResources,observeResourceBytes} from './hidden-resources.js';
 import {resourceCount} from './resource-use.js';
 import {hmpEntrySource} from './hmp-browser.js';
@@ -51,6 +52,7 @@ export class AutomationPage{
   // confirmation can be accepted by the host's callback.
   contents.debugger.attach('1.3');contents.debugger.sendCommand('Page.enable').catch(()=>{});observeResourceBytes(contents);
   if(this.credentialNetwork)contents.debugger.sendCommand('Network.enable',{maxPostDataSize:0}).catch(()=>{this.runtime.credentialNetworkEnabled=false;});
+  let topFrame='';
   const requests=new Set(),response=status=>{this.runtime.credentialResponses=Math.min(1000,this.runtime.credentialResponses+1);if(Number.isInteger(status)&&status>=100&&status<=599)this.runtime.credentialHttpStatus=status;};
   contents.debugger.on('message',(_event,method,params)=>{
    if(this.credentialDialog&&this.credentialNetwork){
@@ -60,13 +62,15 @@ export class AutomationPage{
     }else if(method==='Network.responseReceived'&&requests.has(params.requestId)){response(params.response?.status);requests.delete(params.requestId);}
     else if(method==='Network.loadingFailed'&&requests.has(params.requestId)){this.runtime.credentialNetworkFailures=Math.min(1000,this.runtime.credentialNetworkFailures+1);requests.delete(params.requestId);}
    }
+   if(method==='Page.frameNavigated'&&!params.frame.parentId)topFrame=params.frame.id;
    if(method!=='Page.javascriptDialogOpening')return;
    const obstacle=params.url===contents.getURL()&&allowedNavigation(this.site,params.url)?entryDialogObstacle(params.message):{status:'blocked',reason:'manual_confirmation'};
    this.lastEntryDialog={...obstacle,generation:this.generation};
    this.#diagnostic('dialog_observed',obstacle);
    this.dialogs++;let decision={accept:false,status:'unknown',reason:'manual_confirmation'};
    if((!this.traffic||this.traffic.allowed())&&!this.closed&&!this.signal.aborted&&this.dialogs<=5&&allowedNavigation(this.site,contents.getURL()))try{
-    decision=this.credentialDialog?{accept:false,status:/비밀번호.*(?:틀|오류|일치하지)|아이디.*(?:틀|오류|일치하지)|invalid.*(?:password|credential)/i.test(params.message)?'rejected':/captcha|보안문자|인증번호|추가인증/i.test(params.message)?'challenge':'manual',reason:'site_dialog'}:this.onDialog(params.message,params.type)??decision;
+    if(this.credentialDialog&&this.waitingForLoginForm&&params.frameId===topFrame&&['alert','confirm'].includes(params.type)&&obstacle.status==='login')decision={accept:false};
+    else decision=this.credentialDialog?{accept:false,status:/비밀번호.*(?:틀|오류|일치하지)|아이디.*(?:틀|오류|일치하지)|invalid.*(?:password|credential)/i.test(params.message)?'rejected':/captcha|보안문자|인증번호|추가인증/i.test(params.message)?'challenge':'manual',reason:'site_dialog'}:this.onDialog(params.message,params.type)??decision;
    }catch{}
    if(decision.status)this.dialogResult={status:decision.status,reason:decision.reason};
    contents.debugger.sendCommand('Page.handleJavaScriptDialog',{accept:decision.accept===true}).catch(()=>{});
@@ -83,6 +87,12 @@ export class AutomationPage{
  }
  #alive(){if(this.traffic&&!this.traffic.allowed())throw failure('site_wait');if(this.closed||this.signal.aborted||!this.current||this.current.isDestroyed())throw failure('cancelled');}
  async load(url){
+  if(this.waitingForLoginForm&&!this.url){
+   this.#alive();
+   // Start observing the top frame before the login form's first inline alert.
+   await bounded(this.current.loadURL('about:blank'),this.signal,5000);
+   await bounded(this.current.webContents.debugger.sendCommand('Page.enable'),this.signal,5000);
+  }
   if(this.site==='keymedi'&&url==='https://www.keymedi.com/drlounge'&&!this.loungeObserverInstalled){
    this.#alive();
    const source=readFileSync(new URL('../vendor/direction161/keymedi-lounge.js',import.meta.url),'utf8');
@@ -131,7 +141,15 @@ export class AutomationPage{
   return {url:this.url,version:this.version};
  }
  entryBinding(){return this.lastEntryBinding?{...this.lastEntryBinding}:undefined;}
+ async hasDocpleReceipt(date){
+  if(this.site!=='docple'||this.closed||this.signal.aborted||this.current?.isDestroyed())return false;
+  const contents=this.current.webContents,url=this.url,version=this.version;
+  if(!/^https:\/\/docple-plus\.com\/offerwall\/attendance\/?$/.test(url))return false;
+  const ok=await bounded(contents.executeJavaScriptInIsolatedWorld(1003,[{code:'('+docpleTodayReceipt+')('+JSON.stringify(date)+')'}]),this.signal,3000);
+  return ok===true&&!this.closed&&!this.signal.aborted&&this.url===url&&this.version===version;
+ }
  async call(name,args,{navigation=false,expectedDocument,authorize=()=>true}={}){
+  if(name==='daily.js'&&this.site==='docple'&&args[0]?.kind==='attendance'&&!args[0].phase&&!args[0].action&&await this.hasDocpleReceipt(args[0].date))return {status:'complete',reason:'docple_visible_receipt'};
   await this.ready();
   const landing=name==='credential-provider-landing.js';
   if(landing){

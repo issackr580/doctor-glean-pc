@@ -11,7 +11,7 @@ const renderUpdate=setupUpdates(api);
 const renderPortOptions=setupPortOptions(api,perform);
 function say(text){message.textContent=text;}
 function node(tag,text,className){const el=document.createElement(tag);if(text!==undefined)el.textContent=text;if(className)el.className=className;return el;}
-async function perform(action,success){try{const r=await action();say(typeof success==='function'?success(r):r?.ok?success:r?.reason==='busy'?'진행 중인 작업이나 직접 사용하는 사이트 창을 마친 뒤 다시 확인해 주세요.':r?.reason==='paused'?'자동 실행을 허용한 뒤 실행해 주세요. 상태만 확인은 중지 중에도 사용할 수 있어요.':r?.reason==='invalid_selection'?'조회할 사이트를 하나 이상 선택해 주세요.':r?.reason==='window_unavailable'?'사이트 창을 만들지 못했어요. 오류보고를 저장해 주세요.':r?.reason==='session_storage_error'?'세션 저장 요청을 마치지 못했어요. 사이트 창을 유지하고 다시 시도해 주세요.':'작업을 완료하지 못했어요.');await refresh();return r;}catch{say('프로그램 상태를 확인하지 못했어요.');}}
+async function perform(action,success){try{const r=await action();say(typeof success==='function'?success(r):r?.ok?success:r?.reason==='data_blocked'?'앱 데이터 사용 설정으로 접속을 보류했어요.':r?.reason==='site_wait'?'사이트의 대기 기한 뒤 다시 열어 주세요.':r?.reason==='busy'?'진행 중인 작업이나 직접 사용하는 사이트 창을 마친 뒤 다시 확인해 주세요.':r?.reason==='paused'?'자동 실행을 허용한 뒤 실행해 주세요. 상태만 확인은 중지 중에도 사용할 수 있어요.':r?.reason==='invalid_selection'?'조회할 사이트를 하나 이상 선택해 주세요.':r?.reason==='window_unavailable'?'사이트 창을 만들지 못했어요. 오류보고를 저장해 주세요.':r?.reason==='session_storage_error'?'세션 저장 요청을 마치지 못했어요. 사이트 창을 유지하고 다시 시도해 주세요.':'작업을 완료하지 못했어요.');await refresh();return r;}catch{say('프로그램 상태를 확인하지 못했어요.');}}
 function sessionLabel(site){
  const s=site.session;if(!s||s.load==='not_opened'&&!s.authSource)return '';
  const errors={window_unavailable:'사이트 창을 만들지 못했어요. 오류보고를 저장해 주세요.',dns_error:'사이트 주소에 연결하지 못했어요.',offline:'인터넷 연결을 확인해 주세요.',time_limit:'사이트 연결 시간이 지났어요.',certificate_error:'인증서를 확인하지 못했어요.',load_failed:'사이트 화면을 불러오지 못했어요.',renderer_stopped:'사이트 창이 중단됐어요.',popup_blocked:'새 창 열기가 차단됐어요. 「로그인 화면」을 이용해 주세요.',navigation_blocked:'허용하지 않은 화면 이동을 막았어요.'};
@@ -26,7 +26,10 @@ async function refresh(){
   if(!api){say('프로그램에서 이 화면을 열어 주세요.');return;}
   const state=await api.state();if(!state?.sites){say('프로그램 상태를 확인하지 못했어요.');return;}
   renderUpdate(state.update);
-  const usage=state.usage,toggle=document.getElementById('usage-toggle');
+  const dataMode=document.getElementById('data-mode');dataMode.value=state.dataAccess.mode;
+ dataMode.onchange=()=>perform(()=>api.setDataMode(dataMode.value),'데이터 사용 설정을 적용했어요.');
+ document.getElementById('data-mode-status').textContent=({wifi_route_unverified:'PC 브라우저와 업데이트의 Wi-Fi 경로를 고정할 수 없어 접속을 보류해요.',storage_error:'데이터 설정 저장소를 확인할 수 없어 접속을 보류해요.',data_off:'예약·사이트 열기·업데이트 통신이 꺼져 있어요.'})[state.dataAccess.reason]??'';
+ const usage=state.usage,toggle=document.getElementById('usage-toggle');
   document.getElementById('usage-status').textContent=(usage.enabled?'기록 중 · '+new Date(usage.until).toLocaleString('ko-KR')+' 종료':'기록 꺼짐')+' · API 요청 '+usage.apiRequests+'회 / 본문 '+usage.apiBodyBytes+'바이트 · 브라우저 관측 '+usage.browserEncodedBytes+'바이트 · 목록 DOM 판독 '+usage.domReads+'회 · 전체 범위 확인 '+usage.catalogComplete+'/'+usage.catalogResults+'건 · Windows 전체 사용량 미측정';
   toggle.textContent=usage.enabled?'기록 중지':'7일간 기록';
   toggle.onclick=()=>perform(()=>api.usage(usage.enabled?'stop':'start'),'기록 설정을 저장했어요.');

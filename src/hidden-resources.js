@@ -7,9 +7,13 @@ export function blockHiddenMedia(request,role){
  if(!['https:','http:'].includes(url.protocol)||/\/(?:api|captcha)(?:\/|$)/i.test(url.pathname))return false;
  return request.resourceType==='media'||/\.(?:mp4|webm|m4v|mov|mp3|m4a|aac|ogg|oga|wav|flac|m4s|m3u8|mpd)$/i.test(url.pathname);
 }
-export function hiddenResources(contents,traffic,redirects){
- const profile=contents.session,id=contents.id;let owners=profiles.get(profile);
+const sessionRules=new WeakMap();
+const external=url=>/^(?:https?|wss?|ftp):/i.test(url);
+export function guardSession(profile,policy){
+ if(policy)sessionRules.set(profile,policy);
+ let owners=profiles.get(profile);
  if(!owners){owners=new Map();profiles.set(profile,owners);profile.webRequest.onBeforeRequest((request,done)=>{
+  const rule=sessionRules.get(profile);if(external(request.url)&&rule&&!rule.allowed(request))return done({cancel:true});
   const owner=owners.get(request.webContentsId);if(owner?.redirects?.block(request)||owner?.traffic&&!owner.traffic.allowed())return done({cancel:true});const cancel=!!owner&&blockHiddenMedia(request,owner.role);if(cancel)resourceCount('mediaGetBlocked');done({cancel});
  });
  profile.webRequest.onBeforeRedirect(details=>owners.get(details.webContentsId)?.redirects?.redirect(details));
@@ -17,10 +21,14 @@ export function hiddenResources(contents,traffic,redirects){
  profile.webRequest.onCompleted(finished);profile.webRequest.onErrorOccurred(finished);
  profile.webRequest.onHeadersReceived((details,done)=>{
   const policy=owners.get(details.webContentsId)?.traffic;
-  if(!policy)return done({});
-  try{policy.response(details);done({cancel:!policy.allowed()});}catch{done({cancel:true});}
+  if(!policy){try{sessionRules.get(profile)?.response?.(details);done({});}catch{done({cancel:true});}return;}
+  try{sessionRules.get(profile)?.response?.(details,true);policy.response(details);done({cancel:!policy.allowed()});}catch{done({cancel:true});}
  });
  }
+ return owners;
+}
+export function hiddenResources(contents,traffic,redirects){
+ const id=contents.id,owners=guardSession(contents.session);
  if(owners.has(contents.id))return owners.get(contents.id).controller;
  const owner={role:'hidden_read',traffic,redirects};owners.set(contents.id,owner);trackPage(contents,'hidden');
  const close=()=>owners.delete(id);contents.once('destroyed',close);

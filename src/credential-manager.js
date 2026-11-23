@@ -84,6 +84,7 @@ export class CredentialManager{
   page.load=async url=>{
    if(purpose==='entry'&&!automaticEntrySite(site))throw Error('disabled');target=url;await load(url);
    if(purpose==='entry'&&!automaticEntrySite(site)||recovering||tried||!this.automaticAllowed(site)||!this.vault.enabled(site))return;
+   if(site==='docple'&&await page.hasDocpleReceipt?.(kstDate(this.now())))return;
    const state=await this.verifyPage(site,page);if(state!=='login_required')return;
    await recover();
   };
