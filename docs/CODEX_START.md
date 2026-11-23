@@ -1,6 +1,6 @@
 # PC판 Codex 작업 시작
 
-현재 공개 배포용은 **0.1.0-preview.35**입니다. 실행 소스는 `48976e402c274ffee47a03677b5407de066ceef9`입니다. [배포용](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.35) · [검증 및 게시 기록](releases/0.1.0-preview.35.md) · [개발자용 preview.34 Draft](https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-1e24228e53bb2423b492)
+현재 공개 배포용과 협업자용 Draft는 **0.1.0-preview.37**입니다. 실행 소스는 `61eaa4b75dd78b15cc659054c7d0386c64ed8e35`입니다. [배포용](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.37) · [개발자용 Draft](https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-44f4be447802e12dcb19) · [검증 및 게시 기록](releases/0.1.0-preview.37.md)
 
 이 작업은 의사 이삭 줍기 **Windows PC판만** 다룬다. 모바일판은 별도 Codex 작업이다. 사용자 지시가 이 문서보다 우선한다.
 
