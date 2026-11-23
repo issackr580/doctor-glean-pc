@@ -1,6 +1,6 @@
 # PC판 현재 상태와 다음 작업
 
-현재 공개 배포용과 협업자용 Draft는 **0.1.0-preview.37**입니다. 실행 소스는 `61eaa4b75dd78b15cc659054c7d0386c64ed8e35`입니다. [배포용](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.37) · [개발자용 Draft](https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-44f4be447802e12dcb19) · [검증 및 게시 기록](releases/0.1.0-preview.37.md)
+현재 공개 배포용과 협업자용 Draft는 **0.1.0-preview.38**입니다. 실행 소스는 `724f86b163443f8f214ff01f5d911e74d3ffd8eb`입니다. [배포용](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.38) · [개발자용 Draft](https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-39f072b589bd529186e1) · [검증 및 게시 기록](releases/0.1.0-preview.38.md)
 
 ## PC-023 — v156 자동입장 정책·읽기 API·숨은 미디어 제한 (게시 완료)
 
@@ -192,7 +192,7 @@ preview.35 기준으로 전역 데이터 설정, 직접 연 창까지 공유하�
 
 숨은 강의 목록 창에서 세션 만료 alert·confirm이 떠도 사용자 응답을 기다리지 않는다. 현재 공식 문서의 만료 안내와 화면 안의 로그인 모달은 저장 계정 복구로 인계한다. 인증이 확인되면 선택한 날짜의 목록을 다시 읽으며 같은 조회에서 재로그인은 한 번으로 제한한다. 복구용 숨은 로그인 폼의 제출 전 만료 안내도 조용히 처리한다. 직접 열어 사용 중인 창과 인증 도전·거절·이미 전송된 작업은 기존 절차를 따른다.
 
-## 0.1.0-preview.38 후보 · v169 합성 사례
+## 0.1.0-preview.38 게시 · v169 합성 사례
 
 preview.37의 디톡스 편성표 판독에서 목요일 저녁 카드의 HTML 부모가 월요일이면 23일에 18시가 추가되고 26일에서 누락되는 현상을 재현했다. 두 창 너비에서 같은 주의 표시 열과 카드 자체의 시각·제목을 확인한다. 읽기를 마친 날짜의 시각 근거가 결과와 일치하면 그날의 저장 목록을 교체한다. 일부만 읽거나 열 경계에 걸친 경우 이전 강의는 재확인 대상으로 보존한다. 디톡스 자동 예약은 기존 비활성 정책을 따른다.
 
