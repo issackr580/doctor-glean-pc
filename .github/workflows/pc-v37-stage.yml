@@ -110,6 +110,7 @@ jobs:
               TEMP.mkdir(parents=True)
               initial = {edition: draft(edition) for edition in RELEASES}
               run(['npm', 'ci'])
+              run(['npm', 'ci', '--ignore-scripts', '--prefix', str(ROOT.parent / 'previous')])
               run(['npm', 'test'])
               run(['npm', 'run', 'check'])
               paths = {}
