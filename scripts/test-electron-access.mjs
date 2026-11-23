@@ -96,6 +96,32 @@ async function popup(){
   }
  }
 }
+async function expiredSessionDialogs(){
+ const {electronCatalogPage}=await load('electron-catalog-page'),{CatalogRunner}=await load('catalog-runner'),{kstInstant}=await load('schedule');
+ const {initialSettings}=await import(pathToFileURL(join(root,'vendor/engine/core.js')));
+ const stale='장시간 이용하지 않아 로그인 세션이 만료되었습니다. 다시 로그인해 주세요.';
+ const fixtures=[
+  ['doctorville','alert','<script>alert('+JSON.stringify(stale)+')</script>'],
+  ['intermd','confirm','<script>if(confirm('+JSON.stringify(stale)+'))fetch("/unexpected",{method:"POST"})</script>'],
+  ['intermd','modal','<dialog open>로그인이 되어 있지 않습니다.</dialog>'],
+ ];
+ for(const [site,kind,notice] of fixtures){
+  const partition='expired-'+kind,profile=session.fromPartition(partition);let gets=0,posts=0,recovered=0,last;
+  const cards=site==='intermd'?'<div class="webinarItem--live"><h3 class="webinarItem__topic">합성 강의</h3><p class="webinarItem__date">'+date+' 13:00 ~ 15:00</p></div>':'<main><h1>라이브세미나</h1><a class="list_detail" href="/seminar/seminarDetail?seminarId=17"><strong class="tit">합성 강의</strong><span>'+date+'</span><div class="time"><span class="start">13:00</span> ~ 15:00</div></a></main>';
+  await profile.protocol.handle('https',req=>{if(req.method==='GET')gets++;else posts++;return html('<meta charset="utf-8">'+cards+(recovered?'':notice));});
+  const runner=new CatalogRunner({now:()=>kstInstant(date,'09:00'),sleep:()=>sleep(75),
+   store:{record:(_id,_day,row)=>{last=row;}},
+   createPage:async(p,signal)=>electronCatalogPage(p,signal,{partition,sandbox:true}),
+   recoverLogin:async()=>{recovered++;return true;}});
+  await runner.start(date,[site]);equal(recovered,1,kind);equal(gets,2,kind);equal(posts,0,kind);equal(last.events.length,1,kind);
+  report.network[site][kind]={recovered,listReads:gets,posts,events:last.events.length};
+ }
+ const site='doctorville',partition='expired-barrier',profile=session.fromPartition(partition);
+ await profile.protocol.handle('https',()=>html('<script>alert("추가 인증이 필요합니다. 다시 로그인하세요.")</script><div role="dialog">로그인이 필요합니다.</div>'));
+ const page=electronCatalogPage(initialSettings().profiles[site],new AbortController().signal,{partition,sandbox:true});
+ try{await page.open();const reply=await until(async()=>{const row=await page.read(date,null);return row.done&&row;});equal(reply.status,'blocked');}finally{page.close();}
+}
+
 async function sharedWait(){
  const {SiteWait,workerWait}=await load('site-wait'),resources=await load('hidden-resources');
  const file=join(temp,'wait');let now=Date.now(),gate=new SiteWait(file,{now:()=>now});
@@ -166,7 +192,7 @@ app.on('window-all-closed',()=>{});
 async function run(){
  try{
   await app.whenReady();
-  await attendance();await popup();await sharedWait();await mainIpc();
+  await attendance();await popup();if(!baseline&&metadata.version!=='0.1.0-preview.36')await expiredSessionDialogs();await sharedWait();await mainIpc();
   report.checks=checks;
   const dir=join(here,'verification');mkdirSync(dir,{recursive:true});
   writeFileSync(join(dir,baseline?'access-baseline.json':'electron-access.json'),JSON.stringify(report,null,2)+'\n');

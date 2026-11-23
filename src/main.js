@@ -549,7 +549,7 @@ else{
        createPage:async(id,signal,{validation,partition}={})=>{
         dataAccess.require();const prefs=validation?{...remotePreferences(id,EDITION.id),partition}:prepareSession(id);
         if(validation){const profile=session.fromPartition(partition);configureNetwork(profile,id);profile.setPermissionRequestHandler((_c,_p,callback)=>callback(false));profile.setPermissionCheckHandler(()=>false);profile.on('will-download',event=>event.preventDefault());}
-        const page=new AutomationPage(id,signal,prefs,{traffic:workerTraffic(id,signal)});
+        const page=new AutomationPage(id,signal,{...prefs,disableDialogs:true},{traffic:workerTraffic(id,signal)});
         if(validation){const close=page.close.bind(page),profile=session.fromPartition(partition);let cleaned=false;page.close=()=>{close();if(!cleaned){cleaned=true;profile.clearStorageData().catch(()=>{});profile.clearCache().catch(()=>{});}};}
         return page;
        },onChange:()=>{notify();if(!credentials?.busy)queueMicrotask(()=>{catalogQueue?.pump();automation?.tick();});}});

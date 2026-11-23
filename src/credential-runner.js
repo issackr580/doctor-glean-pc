@@ -48,7 +48,7 @@ export class CredentialRunner{
    observe(phase,reply);
    return reply;
   };
-  page.credentialDialog=true;
+  page.credentialDialog=true;page.waitingForLoginForm=automatic&&!validation;
   try{
    if(!policy||!live())return {status:'cancelled',attempted:false,submitted:false};
    // Use the same reviewed, encoded provider entry as the working manual
@@ -131,7 +131,7 @@ export class CredentialRunner{
      if(ready<2){await this.sleep(250,signal);continue;}
      if(!live()){status='cancelled';break;}
      const permit=this.attempts.reserve(site,this.now(),{validation,automatic});if(permit!=='ready'){status=permit;break;}
-     attempted=true;at=this.now();submittedVersion=page.version;onChange('submitted');
+     page.waitingForLoginForm=false;attempted=true;at=this.now();submittedVersion=page.version;onChange('submitted');
      page.allowPopups?.(true);
      // Secrets are decrypted only after a current ready probe and durable lease.
      let credentials=null;
@@ -154,7 +154,7 @@ export class CredentialRunner{
    if(!live())status=signal.aborted||!allowed()?'cancelled':'time_limit';
   }catch(error){failureCode=signal.aborted?'cancelled':error.code??error.message;status=!attempted&&failureCode==='policy_rejected'?'blocked':safeCredentialStatus(failureCode);}
   finally{
-   page.credentialDialog=false;
+   page.waitingForLoginForm=false;page.credentialDialog=false;
    // Candidate authentication cannot unlock an older saved account. Only the
    // manager's successful encrypted replacement changes this to "saved".
    if(attempted)this.attempts.finish(site,validation&&status==='authenticated'?'pending':status,this.now());

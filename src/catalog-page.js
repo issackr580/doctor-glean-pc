@@ -1,6 +1,7 @@
 import {resourceCount} from './resource-use.js';
 import {readFileSync} from 'node:fs';
 import {allowedNavigation,siteById} from './security.js';
+import {loginNoticeStatus} from './entry-dialog.js';
 import {pageRole} from './page-role.js';
 import {ID_SITES,officialIdentity} from './entry-identity.js';
 
@@ -19,13 +20,27 @@ export function safeCatalogNavigation(profile,action,state){
  }catch{return false;}
 }
 
+// A stale list can remain visible underneath a session-expiry dialog.
+function catalogNotice(nativeStatus,classify){
+ const visible=e=>e.getClientRects().length>0&&e.checkVisibility({checkOpacity:true,checkVisibilityCSS:true});
+ let status=nativeStatus;
+ for(const dialog of document.querySelectorAll('dialog[open],[role="alertdialog"],[role="dialog"],[aria-modal="true"],.swal2-popup,.ui-dialog,.modal.show')){
+  if(!visible(dialog))continue;
+  const result=classify(dialog.innerText);
+  if(result==='blocked')return 'blocked';
+  if(result==='login')status||='login';
+ }
+ if(status==='login'&&([...document.querySelectorAll('iframe[src*="captcha" i],input[autocomplete="one-time-code"]')].some(visible)||/보안문자|추가 인증|접근 제한|access denied|too many requests/i.test(document.body?.innerText??'')))return 'blocked';
+ return status;
+}
+
 /** An engine adapter shared by Electron and the real Chromium test boundary. */
 export class CatalogPage{
  constructor(profile,transport,signal){this.profile=profile;this.transport=transport;this.signal=signal;this.closed=false;this.reads=0;this.documentChanges=0;this.started=performance.now();}
  #current(){if(this.closed||this.signal.aborted)throw fail('cancelled');return this.transport.snapshot();}
  checkpoint(){
   const s=this.#current();
-  if(s.loading||s.crashed||s.failure||!allowedNavigation(this.profile.id,s.url)||!siteById(this.profile.id).hosts.includes(new URL(s.url).hostname)||['login','provider'].includes(pageRole(s.url)))return null;
+  if(s.notice||s.loading||s.crashed||s.failure||!allowedNavigation(this.profile.id,s.url)||!siteById(this.profile.id).hosts.includes(new URL(s.url).hostname)||['login','provider'].includes(pageRole(s.url)))return null;
   return {version:s.version,url:s.url};
  }
  async canContinue(mark){
@@ -59,8 +74,9 @@ export class CatalogPage{
   const before=this.#current(),site=siteById(this.profile.id);
   if(before.loading)return {status:'loading',done:false,events:[]};
   if(!allowedNavigation(this.profile.id,before.url))throw fail('navigation_changed');
+  if(before.notice==='blocked')return {site:site.id,status:'blocked',done:true,events:[],coverage:false};
   if(!site.hosts.includes(new URL(before.url).hostname)||/\/login(?:\/|\.|$)|\/auth\/login|\/sign.?in/i.test(new URL(before.url).pathname))return {site:site.id,status:'login',done:true,events:[],coverage:false};
-  const source=`(()=>{if(document.readyState!=='complete')return JSON.stringify({status:'loading',done:false,events:[]});const read=${asset(readerName(this.profile),this.profile.id)};const result=read(${JSON.stringify(this.profile)},${JSON.stringify(date)},${JSON.stringify(previous)});return JSON.stringify(result);})()`;
+  const source=`(()=>{if(document.readyState!=='complete')return JSON.stringify({status:'loading',done:false,events:[]});const notice=(${catalogNotice})(${JSON.stringify(before.notice??'')},${loginNoticeStatus});if(notice)return JSON.stringify({site:${JSON.stringify(site.id)},status:notice,done:true,events:[],coverage:false});const read=${asset(readerName(this.profile),this.profile.id)};const result=read(${JSON.stringify(this.profile)},${JSON.stringify(date)},${JSON.stringify(previous)});return JSON.stringify(result);})()`;
   let encoded;
   try{resourceCount('domReads');encoded=await this.#evaluate(source);}catch(error){
    const after=this.#current();
