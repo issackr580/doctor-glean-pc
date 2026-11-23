@@ -85,6 +85,9 @@ export function observeSiteResponse(gate,site,details){
  if(details.fromCache)return false;
  const retry=Object.entries(details.responseHeaders??{}).find(([name])=>name.toLowerCase()==='retry-after')?.[1];
  const pathname=new URL(details.url).pathname;
- const api=site==='keymedi'&&details.url==='https://api.keymedi.com/api/drlounge/getMainInfo'||site==='docple'&&['/api/season2/webinar/list','/api/season2/mission/attendance/calendar'].includes(pathname)||site==='ckd'&&['/hcpapp/webinar/webinarCalAjax.do','/hcpapp/webinar/webinarCalDtlAjax.do'].includes(pathname);
+ // A first-party data read may also carry an explicit Retry-After outside
+ // the native API allowlist. This grants no permission to call that route.
+ const directedRead=['xhr','fetch'].includes(details.resourceType)&&[429,503].includes(details.statusCode)&&!!retry&&!/\.(?:png|jpe?g|gif|webp|avif|svg|ico|css|js|woff2?|mp[34])$|\/(?:ad[s]?|advertising|analytics|static|assets)\//i.test(pathname);
+ const api=directedRead||site==='keymedi'&&details.url==='https://api.keymedi.com/api/drlounge/getMainInfo'||site==='docple'&&['/api/season2/webinar/list','/api/season2/mission/attendance/calendar'].includes(pathname)||site==='ckd'&&['/hcpapp/webinar/webinarCalAjax.do','/hcpapp/webinar/webinarCalDtlAjax.do'].includes(pathname);
  return gate.observe(site,{url:details.url,status:details.statusCode,retryAfter:Array.isArray(retry)?retry[0]:retry,document:['mainFrame','subFrame'].includes(details.resourceType),api});
 }

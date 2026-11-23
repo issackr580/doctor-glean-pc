@@ -19,6 +19,9 @@ test('Docple visible completion preserves prior attempt and first limit across l
  const opts={now:()=>now},s=new WorkflowStore(file,opts),gate=new SiteWait(join(root,'wait'),opts),url='https://docple-plus.com/api/season2/mission/attendance/calendar';
  const res={url,statusCode:429,resourceType:'xhr',responseHeaders:{'Retry-After':['120']}};
  assert.equal(observeSiteResponse(gate,'docple',{...res,url:'https://docple-plus.com/icon.png',resourceType:'image'}),false);observeSiteResponse(gate,'docple',res);
+ const extra=new SiteWait(join(root,'other-wait'),opts);
+ assert.equal(observeSiteResponse(extra,'keymedi',{...res,url:'https://www.keymedi.com/assets/banner.svg'}),false);
+ assert.equal(observeSiteResponse(extra,'keymedi',{...res,url:'https://www.keymedi.com/task/status'}),true);
  s.record(date,key,{status:'unknown',reason:'site_wait',waitUntil:gate.status('docple').until,attempted:true},now);
  s.record(date,key,{status:'complete',reason:'docple_visible_receipt'},now+1);s.record(date,key,{status:'login',reason:'login_required'},now+2);
  const stored=new WorkflowStore(file,opts).day(date).daily[key];assert.equal(stored.status,'complete');assert.equal(stored.attempted,true);assert.equal(stored.firstIssue.until,now+120000);assert.equal(gate.allowed('docple'),false);
