@@ -76,7 +76,9 @@ export class AutomationController{
  }
  catalogFinished(date,ids,state,requestedAt){
   if(this.closed||date!==kstDate(this.now())||state.reason!=='finished')return;
-  this.entry.reserveCatalog(date,this.catalog(date));this.survey.seed(date,this.catalog(date).doctorville);
+  const results=this.catalog(date);
+  this.entry.reserveCatalog(date,Object.fromEntries(ids.filter(id=>results[id]).map(id=>[id,results[id]])));
+  if(ids.includes('doctorville'))this.survey.seed(date,results.doctorville);
   const morning=this.store.day(date).morning;
   if(morning?.status==='running'&&(!morning.catalogRequestedAt||morning.catalogRequestedAt===requestedAt&&morning.catalogStartedAt))this.store.record(date,'morning',{...morning,catalogFinishedAt:this.now(),catalogChecked:true,status:morning.dailyChecked?'complete':'running',reason:'finished'});
   if(ids.includes('doctorville')&&this.allowed()&&this.store.features().quizAuto&&!this.ledger.consumed(dailyTicket({site:'doctorville',kind:'quiz'},date,0,this.now()))&&!['complete','wrong'].includes(this.store.day(date).quizAuto?.status)&&!this.pendingDaily.includes('doctorville:quiz'))this.requestDaily({keys:['doctorville:quiz']});

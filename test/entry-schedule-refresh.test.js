@@ -207,3 +207,17 @@ test('an obsolete expired timer is rebooked for a verified future lecture before
  const s=setup(t,{now:'12:31'});s.store.updateEntry(s.key,{status:'expired'});s.propose('13:30');s.page.call=async()=>({...exact,status:'not_open',reason:'opens_later',entryControls:0,observedTime:'13:30',endsAt:at('15:00')});
  assert.equal((await s.runner.reviseSchedule(s.key)).ok,true);const row=s.store.entries()[0];assert.equal(row.time,'13:30');assert.equal(row.nextAt,at('12:40'));assert.equal(row.status,'reserved');assert.equal(s.actionPages,0);
 });
+
+test('refreshing Docple alone never queues Doctorville detail reconciliation',t=>{
+ const s=setup(t);
+ const controller=new AutomationController({...s.options,file:s.file,catalogBusy:()=>false,queueCatalog(){},yieldCatalog(){}});
+ clearInterval(controller.timer);t.after(()=>controller.close());
+ let sites,seeded=0;
+ controller.entry.reserveCatalog=(_date,rows)=>{sites=Object.keys(rows);};
+ controller.survey.seed=()=>{seeded++;};controller.tick=()=>{};
+ controller.catalog=()=>({doctorville:{},docple:{}});
+ controller.catalogFinished(date,['docple'],{reason:'finished'});
+ assert.deepEqual(sites,['docple']);assert.equal(seeded,0);
+ controller.catalogFinished(date,['doctorville'],{reason:'finished'});
+ assert.deepEqual(sites,['doctorville']);assert.equal(seeded,1);
+});

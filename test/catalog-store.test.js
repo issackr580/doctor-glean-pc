@@ -93,3 +93,19 @@ test('Bluepharm selected-day calendar proof remains scoped to that checked date 
  const row=sanitiseResult('bluepharm',date,{status:'review',coverage:true,events:[],diagnostics},now);assert.equal(row.scope,'calendar_checked');
  assert.equal(sanitiseResult('bluepharm',date,{status:'review',coverage:true,events:[],diagnostics:{...diagnostics,calendarDate:'2026-10-27'}},now).scope,'unconfirmed');
 });
+
+test('partial Dtalks day and contradictory time proof preserve missing cached events across restart',t=>{
+ const {store,file}=setup(t),day='2026-11-23';
+ const noon={site:'dtalks',date:day,time:'13:00',title:'월요일 점심'},evening={...noon,time:'18:00',title:'이전 저녁'};
+ const diagnostics={calendarChecked:true,calendarStatus:'checked',calendarDate:day,calendarMonth:'2026-11',calendarEmpty:false,stopReason:'selected_month_calendar',
+  dtalksSchedule:{schemaVersion:1,targetDate:day,starts:['13:00'],unresolvedRows:0}};
+ store.record('dtalks',day,{events:[evening],status:'review'});
+ for(const change of [{coverage:false},{status:'error'},{events:[]},{diagnostics:{...diagnostics,dtalksSchedule:{...diagnostics.dtalksSchedule,starts:['18:00']}}}]){
+  store.record('dtalks',day,{done:true,events:[noon],status:'review',coverage:true,diagnostics,...change});
+  const row=new CatalogStore(file).view(day).results.dtalks;
+  assert.equal(row.stale,true);assert.equal(row.coverage,false);
+  assert.deepEqual(row.events.map(e=>e.time),['13:00','18:00']);
+ }
+ store.record('dtalks',day,{done:true,status:'review',coverage:true,events:[noon],diagnostics});
+ assert.deepEqual(new CatalogStore(file).view(day).results.dtalks.events.map(e=>e.time),['13:00']);
+});

@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="ko">
+<head><meta charset="UTF-8"><title>닥터빌 합성 일반 확인창</title></head>
+<body>
+  <section role="dialog" aria-modal="true">
+    <h3>개인정보 제공 동의</h3>
+    <button type="button" id="accept">확인</button>
+  </section>
+  <script>
+    window.fixtureActions = { confirmClicks: 0 };
+    document.getElementById('accept').addEventListener('click', () => window.fixtureActions.confirmClicks++);
+  </script>
+</body>
+</html>
