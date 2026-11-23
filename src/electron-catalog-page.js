@@ -2,7 +2,7 @@ import {hiddenResources,observeResourceBytes} from './hidden-resources.js';
 import {CatalogRedirects} from './catalog-redirects.js';
 import {BrowserWindow} from 'electron';
 import {CatalogPage} from './catalog-page.js';
-import {allowedNavigation} from './security.js';
+import {allowedNavigation,siteById} from './security.js';
 import {loadFailure} from './login-status.js';
 import {waitFor,boundedWork} from './async-work.js';
 
@@ -21,12 +21,19 @@ export function electronCatalogPage(profile,signal,preferences,traffic){
  const navigation=(event,url)=>{if(!allowedNavigation(profile.id,typeof url==='string'?url:event.url))event.preventDefault();};
  contents.on('will-navigate',navigation);
  contents.on('will-redirect',(event,url,_inPlace,isMainFrame)=>{if((typeof isMainFrame==='boolean'?isMainFrame:event.isMainFrame)!==false)navigation(event,url);});
- contents.setWindowOpenHandler(()=>({action:'deny'}));
+ let loginPopupVersion=-1;
+ contents.setWindowOpenHandler(({url,referrer})=>{
+  const site=siteById(profile.id);
+  let sameOrigin=!referrer?.url;
+  if(referrer?.url)try{sameOrigin=new URL(referrer.url).origin===new URL(contents.getURL()).origin;}catch{}
+  if(['doctorville','intermd'].includes(profile.id)&&sameOrigin&&allowedNavigation(profile.id,contents.getURL())&&url===site.loginUrl)loginPopupVersion=version;
+  return {action:'deny'};
+ });
  contents.on('will-attach-webview',event=>event.preventDefault());
  const close=()=>{if(!window.isDestroyed())window.destroy();signal.removeEventListener('abort',close);};
  signal.addEventListener('abort',close,{once:true});
  return new CatalogPage(profile,{
-  snapshot:()=>{checkRedirect();return {url:contents.isDestroyed()?'':contents.getURL(),version,loading:!contents.isDestroyed()&&contents.isLoadingMainFrame(),failure:lastFailure,crashed:contents.isDestroyed()||contents.isCrashed()};},
+  snapshot:()=>{checkRedirect();return {loginPopup:loginPopupVersion===version,url:contents.isDestroyed()?'':contents.getURL(),version,loading:!contents.isDestroyed()&&contents.isLoadingMainFrame(),failure:lastFailure,crashed:contents.isDestroyed()||contents.isCrashed()};},
   load:async url=>{
    if(traffic&&!traffic.allowed())throw Error('site_wait');
    if(!allowedNavigation(profile.id,url))throw Object.assign(Error(),{code:'navigation_changed'});

@@ -37,6 +37,7 @@
     <section class="control"><h2>날짜 메모</h2><textarea id="date-memo" maxlength="2000" rows="3" aria-label="선택 날짜 메모"></textarea><button id="save-memo" type="button">메모 저장</button></section>
     <section class="control"><h2>설문 직접 참여</h2><div id="survey-results"></div></section>
     <details class="control"><summary>메디게이트 외부 입장 서버</summary><p>사이트에서 안내받은 정확한 서버 이름만 한 줄씩 입력해 주세요. HTTP가 필요한 서버에만 http://를 붙여 주세요. 인증서 검증은 유지하며, 로그인 정보를 여기에 넣지 마세요.</p><textarea id="entry-host-list" rows="4" aria-label="허용할 외부 입장 서버"></textarea><button id="save-entry-hosts" type="button">입장 서버 저장</button></details>
+    <label>앱 데이터 사용 <select id="data-mode"><option value="always">항상 허용</option><option value="wifi">Wi-Fi에서만 허용</option><option value="off">모두 끄기</option></select></label><p id="data-mode-status" role="status"></p>
     <details><summary>로컬 사용량 진단</summary><p id="usage-status"></p><button id="usage-toggle" type="button">7일간 기록</button> <button id="usage-delete" type="button">기록 삭제</button></details>
     <footer><span id="version"></span><button id="report" class="text-button" type="button">오류보고 저장</button><button id="update-check" type="button">PC 업데이트 확인</button><button id="update-install" type="button" hidden>다운로드·업데이트</button><button id="update-page" type="button" hidden>공식 배포 페이지 열기</button><p id="update-result" role="status"></p><button id="quit" type="button">프로그램 종료</button><p>X는 트레이에 숨기기예요. 업데이트는 버튼을 누를 때만 진행해요.</p></footer>
   </main>

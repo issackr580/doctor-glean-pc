@@ -2,7 +2,7 @@
 // observe responses here synchronously before another request is admitted.
 import {existsSync,unlinkSync} from 'node:fs';
 import {atomicJson,readJson} from './atomic-json.js';
-import {siteById} from './security.js';
+import {siteById,allowedNavigation} from './security.js';
 
 const integer=n=>Number.isSafeInteger(n)&&n>=0;
 const max=Number.MAX_SAFE_INTEGER;
@@ -43,10 +43,10 @@ export class SiteWait{
   try{atomicJson(this.marker,{pending:true});this.write(this.file,next);unlinkSync(this.marker);this.data=next;this.high=next.observedAt;}
   catch{this.failed=true;return false;}return true;
  }
- observe(site,{url,status,retryAfter,document=false,api=false}){
+ observe(site,{url,status,retryAfter,resourceType,document=false,api=false}){
   const provider=siteById(site);let address;try{address=new URL(url);}catch{return false;}
-  if(!provider||address.protocol!=='https:'||address.port||address.username||address.password||!(provider.hosts.includes(address.hostname)||site==='keymedi'&&address.hostname==='api.keymedi.com'))return false;
-  if(status!==429&&!(status===403&&(document||api))&&!(status===503&&(document||api||retryAfter)))return false;
+  if(!provider||address.protocol!=='https:'||address.port||address.username||address.password||!(allowedNavigation(site,url)||site==='keymedi'&&address.hostname==='api.keymedi.com'))return false;
+  if(!(document||api||['mainFrame','subFrame'].includes(resourceType))||![403,429,503].includes(status))return false;
   const at=this.now();if(!this.clockTrusted(at)){
    // A restriction received during rollback is timed from the last trusted instant.
    if(!this.failed&&integer(this.high))return this.observeAt(site,status,retryAfter,this.high);
@@ -56,7 +56,7 @@ export class SiteWait{
  }
  observeAt(site,status,retryAfter,at){
   const old=this.status(site);
-  this.save(site,{at,revision:(old?.revision??0)+1,manual:status===403||old?.manual===true,
+  this.save(site,{at,revision:(old?.revision??0)+1,status,manual:status===403||old?.manual===true,
    until:Math.max(old?.until??0,status===403?0:waitUntil(retryAfter,at,status===429?300000:60000))});return true;
  }
  acknowledge(site,at,revision){
@@ -76,10 +76,15 @@ export function workerWait(gate,site,signal,epoch){
   allowed:()=>!stopped&&current()&&(gate.status(site)?.revision??0)===revision&&gate.allowed(site),
   response(details){
    if(!current()||details.fromCache)return;
-   const retry=Object.entries(details.responseHeaders??{}).find(([name])=>name.toLowerCase()==='retry-after')?.[1];
-   const pathname=new URL(details.url).pathname;
-   const api=site==='keymedi'&&details.url==='https://api.keymedi.com/api/drlounge/getMainInfo'||site==='docple'&&pathname==='/api/season2/webinar/list'||site==='ckd'&&['/hcpapp/webinar/webinarCalAjax.do','/hcpapp/webinar/webinarCalDtlAjax.do'].includes(pathname);
-   if(gate.observe(site,{url:details.url,status:details.statusCode,retryAfter:Array.isArray(retry)?retry[0]:retry,document:['mainFrame','subFrame'].includes(details.resourceType),api}))stopped=true;
+   if(observeSiteResponse(gate,site,details))stopped=true;
   }
  };
+}
+
+export function observeSiteResponse(gate,site,details){
+ if(details.fromCache)return false;
+ const retry=Object.entries(details.responseHeaders??{}).find(([name])=>name.toLowerCase()==='retry-after')?.[1];
+ const pathname=new URL(details.url).pathname;
+ const api=site==='keymedi'&&details.url==='https://api.keymedi.com/api/drlounge/getMainInfo'||site==='docple'&&['/api/season2/webinar/list','/api/season2/mission/attendance/calendar'].includes(pathname)||site==='ckd'&&['/hcpapp/webinar/webinarCalAjax.do','/hcpapp/webinar/webinarCalDtlAjax.do'].includes(pathname);
+ return gate.observe(site,{url:details.url,status:details.statusCode,retryAfter:Array.isArray(retry)?retry[0]:retry,document:['mainFrame','subFrame'].includes(details.resourceType),api});
 }

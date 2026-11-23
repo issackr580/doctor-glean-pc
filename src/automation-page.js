@@ -1,3 +1,4 @@
+import {docpleTodayReceipt} from './docple-receipt.js';
 import {hiddenResources,observeResourceBytes} from './hidden-resources.js';
 import {resourceCount} from './resource-use.js';
 import {hmpEntrySource} from './hmp-browser.js';
@@ -131,7 +132,15 @@ export class AutomationPage{
   return {url:this.url,version:this.version};
  }
  entryBinding(){return this.lastEntryBinding?{...this.lastEntryBinding}:undefined;}
+ async hasDocpleReceipt(date){
+  if(this.site!=='docple'||this.closed||this.signal.aborted||this.current?.isDestroyed())return false;
+  const contents=this.current.webContents,url=this.url,version=this.version;
+  if(!/^https:\/\/docple-plus\.com\/offerwall\/attendance\/?$/.test(url))return false;
+  const ok=await bounded(contents.executeJavaScriptInIsolatedWorld(1003,[{code:'('+docpleTodayReceipt+')('+JSON.stringify(date)+')'}]),this.signal,3000);
+  return ok===true&&!this.closed&&!this.signal.aborted&&this.url===url&&this.version===version;
+ }
  async call(name,args,{navigation=false,expectedDocument,authorize=()=>true}={}){
+  if(name==='daily.js'&&this.site==='docple'&&args[0]?.kind==='attendance'&&!args[0].phase&&!args[0].action&&await this.hasDocpleReceipt(args[0].date))return {status:'complete',reason:'docple_visible_receipt'};
   await this.ready();
   const landing=name==='credential-provider-landing.js';
   if(landing){

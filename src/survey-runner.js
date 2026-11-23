@@ -29,14 +29,17 @@ export class SurveyRunner{
    // This fixed read-only route is the reviewed DoctorvilleSurveyPolicy route,
    // bound to the catalog's observed seminar ID, never an answer/claim endpoint.
    const target=surveyTarget('https://www.doctorville.co.kr/seminar/broadcastSeminarPopup?viewType=2&seminarId='+id,date);
-   if(!target||next.rows[target.key]||Object.keys(next.rows).length>=200)continue;
+   if(!target)continue;
+   const existing=next.rows[target.key];
+   if(existing){if(existing.detail!==event.url){existing.detail=event.url;changed=true;}continue;}
+   if(Object.keys(next.rows).length>=200)continue;
    next.rows[target.key]={...target,detail:event.url,title:typeof event.title==='string'?event.title:'닥터빌 강의',firstAt:now,checkedAt:0,nextAt:0,closesAt:0,reads:0,status:'unknown',notified:false,alertMask:0,discoveryUntil:0};changed=true;
   }if(changed)this.save(next);
  }
  // Only the user's selected manual window can supply a completion observation.
  observe(url,raw,selected){
   const target=surveyTarget(url,kstDate(this.now())),row=this.data.rows[selected];
-  if(!target||row?.key!==target.key||row.status==='complete'||raw?.site!=='doctorville'||raw.seminarId!==row.id||raw.status!=='complete')return;
+  if(!target||row?.key!==target.key||['complete','skipped'].includes(row.status)||raw?.site!=='doctorville'||raw.seminarId!==row.id||raw.status!=='complete')return;
   this.save({...this.data,rows:{...this.data.rows,[row.key]:{...row,status:'complete',checkedAt:this.now()}}});
  }
  skip(key,value){

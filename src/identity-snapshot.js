@@ -6,7 +6,7 @@ const FILES=['state-v1.json','workflows-v1.json','catalog-v1.json','credentials-
 // Local opaque backup only. Never exported, decrypted or automatically restored.
 // Restoring an old action ledger over newer attempts would permit a replay.
 export function snapshotIdentityState(file,marker='before-official-id-v1'){
- if(!['before-official-id-v1','before-entry-policy-v156'].includes(marker))throw Error('storage_error');
+ if(!['before-official-id-v1','before-entry-policy-v156','before-network-v168'].includes(marker))throw Error('storage_error');
  const directory=dirname(file),target=join(directory,'identity-state-snapshots',marker);
  if(existsSync(target)){
   if(!lstatSync(target).isDirectory()||lstatSync(target).isSymbolicLink()||lstatSync(join(target,'SNAPSHOT.json')).isSymbolicLink())throw Error('storage_error');

@@ -16,6 +16,9 @@ export function cleanReceipt(raw,now=Date.now()){
  const out={status:STATUSES.has(raw?.status)?raw.status:'unknown',reason:safeReason(raw?.reason),checkedAt:now};
  for(const key of ['attempted','confirmationAttempted','submitted','targetMatched','navigationObserved','dailyChecked','catalogChecked','playerObserved','watchObserved'])if(typeof raw?.[key]==='boolean')out[key]=raw[key];
  for(const key of ['slot','due','retryCount','reads','elapsedMs','navigations','candidateCards','titleMatches','scheduleMatches','matchedTargets','entryControls','attemptMask','sentMask','successMask','providerComplete','startedAt','opensAt','firstPageReadyAt','firstMissionReadAt','firstEligibleAt','firstClaimAt','lastClaimAt','finishedAt','alarmDelayMs','observedAt','missionTotal','missionMask'])if(number(raw?.[key]))out[key]=raw[key];
+ const first=raw?.firstIssue;
+ if(first&&number(first.at)&&number(first.until)&&typeof first.attempted==='boolean')out.firstIssue={at:first.at,until:first.until,attempted:first.attempted,reason:safeReason(first.reason)};
+ for(const key of ['catalogRequestedAt','catalogStartedAt','catalogFinishedAt','waitUntil'])if(number(raw?.[key]))out[key]=raw[key];
  const observed=raw?.providerObservation;
  if(observed?.status==='observed'&&number(observed.requestAt)&&number(observed.responseAt)&&observed.responseAt>=observed.requestAt){
   const filtered={status:'observed',requestAt:observed.requestAt,responseAt:observed.responseAt};
@@ -82,7 +85,14 @@ export class WorkflowStore{
  }
  record(day,key,raw,now=Date.now()){
   if(!validDate(day)||!number(now)||!DAILY_TASKS.some(task=>task.key===key)&&!['morning','lounge','quizAuto','survey'].includes(key))throw Error('invalid_task');
-  const next=clone(this.data);next.days[day]??={daily:{}};const row=cleanReceipt(raw,now);
+  const next=clone(this.data);next.days[day]??={daily:{}};if(key==='docple:attendance'){
+   const old=next.days[day].daily[key];
+   if(old?.status==='complete'&&(raw.status!=='complete'||raw.reason==='docple_visible_receipt'))return old;
+   const priorIssue=old&&!old.firstIssue&&old.reason!=='claim_started'&&['unknown','login','blocked','network','busy'].includes(old.status)?{at:old.checkedAt,until:old.waitUntil??0,attempted:old.attempted===true,reason:old.reason}:undefined;
+   const firstIssue=old?.firstIssue??priorIssue??(raw.reason!=='claim_started'&&['unknown','login','blocked','network','busy'].includes(raw.status)?{at:now,until:raw.waitUntil??0,attempted:!!raw.attempted,reason:raw.reason}:undefined);
+   raw={...raw,attempted:old?.attempted===true||raw.attempted===true,firstIssue};
+  }
+  const row=cleanReceipt(raw,now);
   if(DAILY_TASKS.some(task=>task.key===key))next.days[day].daily[key]=row;else next.days[day][key]=row;
   this.#save(next);return row;
  }
@@ -91,5 +101,8 @@ export class WorkflowStore{
  bindIdentities(site,date,events){const bound=bindIdentityCatalog(this.entries(date),events,site,date),next=clone(this.data);for(const row of bound.rows)next.entries[row.key]=row;if(JSON.stringify(next)!==JSON.stringify(this.data))this.#save(next);return bound.targets;}
  putEntry(row){const next=clone(this.data);next.entries[row.key]=clone(row);this.#save(next);}
  updateEntry(key,change){const row=this.data.entries[key];if(!row)return false;const next=clone(this.data);next.entries[key]={...next.entries[key],...clone(change)};this.#save(next);return true;}
- diagnostics(){return {features:this.features(),entrySites:this.entrySites(),automaticEntrySites:this.entrySites().filter(automaticEntrySite),today:this.day(),entries:this.entries().map(({key,site,date,time,status,due,deadline,nextAt,slot,retries,attempts,receipt,preflight,inspection,lastStartedAt,executionFinishedAt,executionVersion,sourceCommit,scheduleChanges,entryClosesAt,hmpRepeatSchema,hmpTiming,hmpAttempts,repeatSchema,repeatFirstEntryAt,schedulePairSchema,schedulePlan,scheduleSlot,scheduleConsumed})=>({key,site,date,time,status,due,deadline,nextAt,slot,retries,attempts:attempts?.map(item=>cleanReceipt(item,item.checkedAt)),receipt:receipt?cleanReceipt(receipt,receipt.checkedAt):undefined,...(preflight?{preflight:cleanReceipt(preflight,preflight.checkedAt)}:{}),...(inspection?{inspection:cleanEntryInspection(inspection,inspection.checkedAt)}:{}),...(lastStartedAt!==undefined?{lastStartedAt,executionFinishedAt,executionVersion,...(sourceCommit?{sourceCommit}:{})}:{}),...(hmpRepeatSchema?{hmpRepeatSchema,hmpTiming,hmpAttempts:hmpAttempts?.map(r=>({hmpRepeatSchema:r.hmpRepeatSchema,slot:r.slot,due:r.due,at:r.at,entryAttempted:typeof r.entryAttempted==='boolean'?r.entryAttempted:undefined,status:STATUSES.has(r.status)?r.status:'unknown',playback:r.playback}))}:{}),...(repeatSchema?{repeatSchema,repeatFirstEntryAt}:{}),...(schedulePairSchema?{schedulePairSchema,schedulePlan:clone(schedulePlan),scheduleSlot,scheduleConsumed:[...scheduleConsumed]}:{}),...(scheduleChanges?{scheduleChanges:clone(scheduleChanges)}:{}),...(entryClosesAt?{entryClosesAt}:{})})),storageUnavailable:this.failed};}
+ diagnostics(){const from=kstDate(this.now()-6*86400000),through=kstDate(this.now());
+  const docpleIssues=Object.entries(this.data.days).filter(([day,row])=>day>=from&&day<=through&&row.daily['docple:attendance']?.firstIssue).map(([date,row])=>({date,...row.daily['docple:attendance'].firstIssue}));
+  const morningHandoffs=Object.entries(this.data.days).filter(([day,row])=>day>=from&&day<=through&&row.morning).map(([date,row])=>({date,...cleanReceipt(row.morning,row.morning.checkedAt)}));
+  return {docpleIssues,morningHandoffs,features:this.features(),entrySites:this.entrySites(),automaticEntrySites:this.entrySites().filter(automaticEntrySite),today:this.day(),entries:this.entries().map(({key,site,date,time,status,due,deadline,nextAt,slot,retries,attempts,receipt,preflight,inspection,lastStartedAt,executionFinishedAt,executionVersion,sourceCommit,scheduleChanges,entryClosesAt,hmpRepeatSchema,hmpTiming,hmpAttempts,repeatSchema,repeatFirstEntryAt,schedulePairSchema,schedulePlan,scheduleSlot,scheduleConsumed})=>({key,site,date,time,status,due,deadline,nextAt,slot,retries,attempts:attempts?.map(item=>cleanReceipt(item,item.checkedAt)),receipt:receipt?cleanReceipt(receipt,receipt.checkedAt):undefined,...(preflight?{preflight:cleanReceipt(preflight,preflight.checkedAt)}:{}),...(inspection?{inspection:cleanEntryInspection(inspection,inspection.checkedAt)}:{}),...(lastStartedAt!==undefined?{lastStartedAt,executionFinishedAt,executionVersion,...(sourceCommit?{sourceCommit}:{})}:{}),...(hmpRepeatSchema?{hmpRepeatSchema,hmpTiming,hmpAttempts:hmpAttempts?.map(r=>({hmpRepeatSchema:r.hmpRepeatSchema,slot:r.slot,due:r.due,at:r.at,entryAttempted:typeof r.entryAttempted==='boolean'?r.entryAttempted:undefined,status:STATUSES.has(r.status)?r.status:'unknown',playback:r.playback}))}:{}),...(repeatSchema?{repeatSchema,repeatFirstEntryAt}:{}),...(schedulePairSchema?{schedulePairSchema,schedulePlan:clone(schedulePlan),scheduleSlot,scheduleConsumed:[...scheduleConsumed]}:{}),...(scheduleChanges?{scheduleChanges:clone(scheduleChanges)}:{}),...(entryClosesAt?{entryClosesAt}:{})})),storageUnavailable:this.failed};}
 }

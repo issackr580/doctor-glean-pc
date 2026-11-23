@@ -69,6 +69,11 @@ export class CatalogPage{
   }
   if(typeof encoded!=='string'||encoded.length>2_000_000)throw fail('invalid_response');
   let result;try{result=JSON.parse(encoded);}catch{throw fail('invalid_response');}
+  if(before.loginPopup&&!result.coverage&&!result.events?.length&&!['blocked','login'].includes(result.status)){
+   const challenge=await this.#evaluate("!!document.querySelector('iframe[src*=captcha i], input[autocomplete=one-time-code]') || /보안문자|추가 인증|접근 제한|access denied|too many requests/i.test(document.body.innerText)");
+   if(challenge===true)return {site:site.id,status:'blocked',done:true,events:[],coverage:false};
+   if(challenge===false)return {site:site.id,status:'login',done:true,events:[],coverage:false};
+  }
   if(Array.isArray(result.events))result.events=result.events.map(event=>{const id=event?.site===this.profile.id&&officialIdentity(event);return id?{...event,lectureIdentity:id}:event;});
   result.diagnostics={...(result.diagnostics??result.state?.diagnostics??{}),reads:this.reads,elapsedMs:Math.max(0,Math.round(performance.now()-this.started)),pageRole:pageRole(this.#current().url)};
   return result;

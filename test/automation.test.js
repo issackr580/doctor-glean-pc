@@ -209,7 +209,7 @@ test('morning completion waits for both the daily run and its queued catalog',as
  const c=new AutomationController({file:join(root,'workflows.json'),ledger,createPage:async()=>{throw Error('unexpected_page');},isManualOpen:()=>false,catalog:()=>({}),catalogBusy:()=>false,queueCatalog:()=>queries++,yieldCatalog:()=>{},now:clock.now});t.after(()=>c.close());clearInterval(c.timer);
  c.daily.run=async()=>({reason:'finished'});clock.set(c.morningAt);c.tick();await new Promise(resolve=>setImmediate(resolve));
  assert.equal(queries,1);assert.equal(c.store.day().morning.status,'running');assert.equal(c.store.day().morning.dailyChecked,true);
- c.catalogFinished(date,[],{reason:'finished'});assert.equal(c.store.day().morning.status,'complete');assert.equal(c.store.day().morning.catalogChecked,true);
+ const at=c.store.day().morning.catalogRequestedAt;assert.ok(at);c.catalogStarted(date,at-1);assert.equal(c.store.day().morning.catalogStartedAt,undefined);c.catalogFinished(date,[],{reason:'finished'},at);assert.equal(c.store.day().morning.status,'running');c.catalogStarted(date,at);c.catalogFinished(date,[],{reason:'finished'},at);assert.equal(c.store.day().morning.status,'complete');assert.equal(c.store.day().morning.catalogChecked,true);
 });
 test('controller pauses dispatch and preserves the original non-storage error for reporting',t=>{
  const {root,clock,ledger}=setup(t),error=TypeError('synthetic scheduling failure'),observed=[];ledger.setPaused(false);

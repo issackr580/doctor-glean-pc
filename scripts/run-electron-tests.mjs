@@ -5,7 +5,7 @@ import {resolve,dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..'),args=process.argv.slice(2);
 const option=name=>args.find(value=>value.startsWith('--'+name+'='))?.slice(name.length+3);
-const suite=option('suite')??'all',known={traffic:'test-electron-traffic.mjs',catalog:'test-electron-catalog.mjs',automation:'test-electron-automation.mjs',credentials:'test-electron-credentials.mjs',entry:'test-electron-entry.mjs',replay:'test-electron-replay.mjs',registration:'test-electron-registration.mjs',update:'test-electron-update.mjs'};
+const suite=option('suite')??'all',known={access:'test-electron-access.mjs',traffic:'test-electron-traffic.mjs',catalog:'test-electron-catalog.mjs',automation:'test-electron-automation.mjs',credentials:'test-electron-credentials.mjs',entry:'test-electron-entry.mjs',replay:'test-electron-replay.mjs',registration:'test-electron-registration.mjs',update:'test-electron-update.mjs'};
 if(suite!=='all'&&!Object.hasOwn(known,suite))throw Error('Use --suite=all|traffic|catalog|automation|credentials|entry|replay|registration|update');
 const noSandbox=args.includes('--container-no-sandbox');if(noSandbox&&process.platform!=='linux')throw Error('The container test flag is Linux-only');
 const env={...process.env};delete env.ELECTRON_RUN_AS_NODE;

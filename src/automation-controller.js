@@ -12,8 +12,8 @@ import {DAILY_TASKS} from './automation-policy.js';
 import {kstDate,kstInstant,nextLoungePreparation} from './schedule.js';
 import {MorningSchedule} from './morning-schedule.js';
 export class AutomationController{
- constructor({file,ledger,createPage,createInspectionPage,isManualOpen,catalog,catalogBusy,queueCatalog,yieldCatalog,onChange=()=>{},onEvent=()=>{},onError=()=>{},now=Date.now,traceEntry,observeEntry,entryContextEpoch=()=>0,executionAllowed=()=>true,followupAllowed=()=>true,options=new PcOptions(join(dirname(file),'pc-options-v1.json'))}){
-  Object.assign(this,{ledger,createPage,isManualOpen,catalog,catalogBusy,queueCatalog,yieldCatalog,onChange,onError,now,executionAllowed,followupAllowed});this.store=new WorkflowStore(file,{now,policyConsumed:j=>Object.values(ledger.snapshot().jobs).some(r=>r.site==='hmp'&&r.target===j.key&&r.slot===j.slot&&r.dueAt===j.due)});this.options=options;this.active=null;this.pendingDaily=[];this.followupReads=[];this.pendingReadOnly=true;this.closed=false;
+ constructor({file,ledger,createPage,createInspectionPage,isManualOpen,catalog,catalogBusy,queueCatalog,yieldCatalog,onChange=()=>{},onEvent=()=>{},onError=()=>{},now=Date.now,traceEntry,observeEntry,entryContextEpoch=()=>0,dataEnabledAt=()=>0,executionAllowed=()=>true,followupAllowed=()=>true,options=new PcOptions(join(dirname(file),'pc-options-v1.json'))}){
+  Object.assign(this,{ledger,createPage,isManualOpen,catalog,catalogBusy,queueCatalog,yieldCatalog,onChange,onError,now,dataEnabledAt,executionAllowed,followupAllowed});this.store=new WorkflowStore(file,{now,policyConsumed:j=>Object.values(ledger.snapshot().jobs).some(r=>r.site==='hmp'&&r.target===j.key&&r.slot===j.slot&&r.dueAt===j.due)});this.options=options;this.active=null;this.pendingDaily=[];this.followupReads=[];this.pendingReadOnly=true;this.closed=false;
   this.morning=new MorningSchedule(join(dirname(file),'morning-schedule-v1.json'));this.store.recover();
   const common={ledger,store:this.store,createPage,createInspectionPage,isManualOpen,onChange:()=>{onChange();},onEvent,now};
   this.quiz=new DoctorvilleQuizRunner(common);
@@ -69,12 +69,16 @@ export class AutomationController{
   if(!readOnly&&this.pendingDaily.length&&this.pendingReadOnly){this.followupReads=[...new Set([...this.followupReads,...this.pendingDaily])];this.pendingDaily=[];}
   this.pendingDaily=[...new Set([...this.pendingDaily,...keys])];this.pendingReadOnly=readOnly;this.onChange();this.tick();return {ok:true};
  }
- quick(){if(!this.allowed())return {ok:false,reason:'paused'};this.requestDaily();this.queueCatalog(kstDate(this.now()));return {ok:true};}
- catalogFinished(date,ids,state){
+ quick(morningAt){if(!this.allowed())return {ok:false,reason:'paused'};this.requestDaily();this.queueCatalog(kstDate(this.now()),morningAt);return {ok:true};}
+ catalogStarted(date,requestedAt){
+  const row=this.store.day(date).morning;
+  if(requestedAt&&row?.status==='running'&&row.catalogRequestedAt===requestedAt&&!row.catalogStartedAt)this.store.record(date,'morning',{...row,catalogStartedAt:this.now()});
+ }
+ catalogFinished(date,ids,state,requestedAt){
   if(this.closed||date!==kstDate(this.now())||state.reason!=='finished')return;
   this.entry.reserveCatalog(date,this.catalog(date));this.survey.seed(date,this.catalog(date).doctorville);
   const morning=this.store.day(date).morning;
-  if(morning?.status==='running')this.store.record(date,'morning',{...morning,catalogChecked:true,status:morning.dailyChecked?'complete':'running',reason:'finished'});
+  if(morning?.status==='running'&&(!morning.catalogRequestedAt||morning.catalogRequestedAt===requestedAt&&morning.catalogStartedAt))this.store.record(date,'morning',{...morning,catalogFinishedAt:this.now(),catalogChecked:true,status:morning.dailyChecked?'complete':'running',reason:'finished'});
   if(ids.includes('doctorville')&&this.allowed()&&this.store.features().quizAuto&&!this.ledger.consumed(dailyTicket({site:'doctorville',kind:'quiz'},date,0,this.now()))&&!['complete','wrong'].includes(this.store.day(date).quizAuto?.status)&&!this.pendingDaily.includes('doctorville:quiz'))this.requestDaily({keys:['doctorville:quiz']});
   this.onChange();this.tick();
  }
@@ -108,8 +112,8 @@ export class AutomationController{
    if(loungeDue){const at=this.loungeAt;this.loungeAt=nextLoungePreparation(now+1000);this.#work('lounge',()=>this.lounge.run(kstDate(at),at),{priority:true});return;}
    if(features.lounge&&now>this.loungeAt+80000)this.loungeAt=nextLoungePreparation(now);
    if(this.allowed()&&features.morning&&this.morningAt&&now>=this.morningAt){
-    const date=kstDate(this.morningAt),missed=now>=kstInstant(date,'08:40');this.morningAt=this.morning.next(Math.max(now,kstInstant(date,'08:40')));
-    if(!this.store.day(date).morning){this.store.record(date,'morning',{status:missed?'missed':'running',reason:missed?'missed':'scheduled'});if(!missed)this.quick();}
+    const date=kstDate(this.morningAt),missed=this.morningAt<=this.dataEnabledAt()||now>=kstInstant(date,'08:40');this.morningAt=this.morning.next(Math.max(now,kstInstant(date,'08:40')));
+    if(!this.store.day(date).morning){this.store.record(date,'morning',{status:missed?'missed':'running',reason:missed?'missed':'scheduled',...(!missed?{catalogRequestedAt:now}:{})});if(!missed)this.quick(now);}
    }
    if(this.catalogBusy())return;
    const prep=this.allowed()&&features.entry?this.entry.prepareDue(now):null;
@@ -118,7 +122,7 @@ export class AutomationController{
    if(revision){this.#work('schedule',()=>this.entry.reviseSchedule(revision.key));return;}
    if(!this.pendingDaily.length&&!this.followupReads.length&&this.allowed()&&features.dailyClaim&&this.options.snapshot().dailyKeys.includes('intermd:quiz')){
     const date=kstDate(now),quiz=this.store.day(date).daily['intermd:quiz'],due=this.morning.quizDue(date);
-    if(due&&now>=due&&now<kstInstant(date,'08:20')&&quiz?.status==='scheduled'&&quiz.checkedAt<kstInstant(date,'08:00')&&this.followupAllowed()){
+    if(due>this.dataEnabledAt()&&now>=due&&now<kstInstant(date,'08:20')&&quiz?.status==='scheduled'&&quiz.checkedAt<kstInstant(date,'08:00')&&this.followupAllowed()){
      const job={...dailyTicket({site:'intermd',kind:'quiz'},date,96,now),dueAt:due,deadline:kstInstant(date,'08:20')-1};
      if(!this.ledger.consumed(job)){
       const ticket=this.ledger.reserve(job,now);
