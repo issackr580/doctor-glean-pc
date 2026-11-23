@@ -87,6 +87,12 @@ export class AutomationPage{
  }
  #alive(){if(this.traffic&&!this.traffic.allowed())throw failure('site_wait');if(this.closed||this.signal.aborted||!this.current||this.current.isDestroyed())throw failure('cancelled');}
  async load(url){
+  if(this.waitingForLoginForm&&!this.url){
+   this.#alive();
+   // Start observing the top frame before the login form's first inline alert.
+   await bounded(this.current.loadURL('about:blank'),this.signal,5000);
+   await bounded(this.current.webContents.debugger.sendCommand('Page.enable'),this.signal,5000);
+  }
   if(this.site==='keymedi'&&url==='https://www.keymedi.com/drlounge'&&!this.loungeObserverInstalled){
    this.#alive();
    const source=readFileSync(new URL('../vendor/direction161/keymedi-lounge.js',import.meta.url),'utf8');
