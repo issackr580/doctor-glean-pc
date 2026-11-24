@@ -1,6 +1,6 @@
 # PC판 현재 상태와 다음 작업
 
-현재 공개 배포용과 협업자용 Draft는 **0.1.0-preview.39**입니다. 실행 소스는 `59cdd70a24f15064877c45df97a0ee89090b8564`입니다. [배포용](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.39) · [개발자용 Draft](https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-fc9044fcd882696ec19f) · [검증 및 게시 기록](releases/0.1.0-preview.39.md)
+현재 공개 배포용과 협업자용 Draft는 **0.1.0-preview.40**입니다. 실행 소스는 `562378713e10014cdc7850535b5a1bee5e46e6b4`입니다. [배포용](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.40) · [개발자용 Draft](https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-87c59a9b8d09dcc579f2) · [검증 및 게시 기록](releases/0.1.0-preview.40.md)
 
 ## PC-023 — v156 자동입장 정책·읽기 API·숨은 미디어 제한 (게시 완료)
 
@@ -214,8 +214,10 @@ Linux Electron 45의 합성 서버 비교에서 이미 출석한 날에는 브�
 
 [10개 사이트의 읽기 경로와 남은 계약](PC_NETWORK_PATHS.md)을 확인했다. 진행 중인 동일 사이트 조회를 합치고, 입장이 조회를 선점하면 완료된 사이트를 다시 읽지 않는다. 메디게이트는 같은 월의 원래 집계 응답과 행사 화면의 수치가 일치할 때만 입장 전후를 비교한다. 외부 강의 주소를 자동으로 허용하지 않는다. 이동이 차단돼도 수강 집계 증가를 확인하면 종료하고 불명확한 결과에 입장을 반복하지 않는다. 월별 주소를 설정할 수 있고 공식 화면의 해당 월 링크도 사용한다. 실제 Windows 회원 집계와 네트워크 사용량은 별도 확인 대상이다.
 
-## 오늘 강의 화면 작업본
+## preview.40 오늘 강의 화면 게시
 
 첫 탭에서 날짜, 시작 시각, 강의명과 사이트를 바로 볼 수 있다. 같은 시각의 강의는 묶고 저장된 목록에는 표식을 붙인다. 자동 입장 예약, 출석·퀴즈와 계정·설정은 전용 탭에서 관리한다. 사용자 설정과 예약 저장 형식은 기존과 같다.
 
 Node 466개와 구문 검사, Linux Electron 45 합성 HTTPS 조회 검사 개발자용 162개·배포용 148개를 통과했다. 기본 780×760 화면에 같은 시각의 두 강의가 모두 보였고, 600×500 화면에 가로 스크롤 없이 강의가 표시됐다. 키보드 탭 이동과 오늘 날짜 복귀도 확인했다. Windows 실제 화면과 배율은 확인이 남았다.
+
+두 에디션의 Windows 묶음과 실제 서버 패치는 [preview.40 릴리스 검증](releases/0.1.0-preview.40.md)에 기록했다.
