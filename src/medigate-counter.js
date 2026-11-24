@@ -112,7 +112,11 @@ export async function readMedigateCounter(page,url,month,signal,allowed,limitMs=
   const request=requests.get(p.requestId);if(!request)return;
   if(method==='Network.responseReceived'){
    const r=p.response;
-   request.accepted=r.status===200&&r.url===request.url&&!r.fromDiskCache&&!r.fromServiceWorker&&!r.fromPrefetchCache&&/^(?:application\/json|text\/json)$/.test(r.mimeType);
+   const fresh=r.url===request.url&&!r.fromDiskCache&&!r.fromServiceWorker&&!r.fromPrefetchCache;
+   if(fresh&&[403,429,503].includes(r.status)&&page.traffic?.allowed()){
+    page.traffic.response({url:r.url,statusCode:r.status,resourceType:'xhr',responseHeaders:r.headers});
+   }
+   request.accepted=fresh&&r.status===200&&/^(?:application\/json|text\/json)$/.test(r.mimeType);
    if(!request.accepted)requests.delete(p.requestId);
   }
   if(method==='Network.loadingFailed')requests.delete(p.requestId);

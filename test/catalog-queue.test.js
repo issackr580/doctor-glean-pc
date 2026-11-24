@@ -42,8 +42,8 @@ test('same-date manual refresh shares the running site but an interrupted site c
  }});
  const date='2026-11-24';
  queue.request(date,['docple','keymedi']);
- assert.equal(queue.request(date,['keymedi']),false);
- assert.equal(queue.request(date,['keymedi'],{interrupted:true}),true);
+ assert.equal(queue.request(date,['keymedi'],{joinRunning:true}),false);
+ assert.equal(queue.request(date,['keymedi']),true);
  release();await new Promise(resolve=>setImmediate(resolve));queue.pump();queue.close();
  assert.deepEqual(calls,[['docple','keymedi'],['keymedi']]);
 });

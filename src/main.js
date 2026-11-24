@@ -450,7 +450,7 @@ function ipc(){
   registerIPC('pc:collect-site',id=>{
     if(!SITES.some(site=>site.id===id))return {ok:false,reason:'invalid_site'};
     if(!validQueryDate(viewDate))return {ok:false,reason:'invalid_date'};
-    catalogQueue.request(viewDate,[id]);return {ok:true};
+    catalogQueue.request(viewDate,[id],{joinRunning:true});return {ok:true};
   });
   registerIPC('pc:cancel-collection',()=>{catalogQueue.clear();collector.cancel();return {ok:true};});
   registerIPC('pc:daily-selection',keys=>{attendanceSelectionEpoch++;catalogQueue.invalidateAutomatic();automation.daily.cancel();pcOptions.selectDaily(keys);notify();return {ok:true};});
@@ -577,7 +577,7 @@ else{
         const row=automation.store.day(date).morning;
         if(!queued&&morningAt&&row?.catalogRequestedAt===morningAt)automation.store.record(date,'morning',{...row,status:ids.length?'unknown':'none',reason:ids.length?'collection_in_progress_or_cached':'no_target'});
        },
-       yieldCatalog:()=>{const current=collector.snapshot();if(current.running){catalogQueue.request(current.date,collector.remainingSites(),{interrupted:true});collector.cancel('entry_priority');}},
+       yieldCatalog:()=>{const current=collector.snapshot();if(current.running){catalogQueue.request(current.date,collector.remainingSites());collector.cancel('entry_priority');}},
        onChange:()=>{notify();if(!automation?.busy)queueMicrotask(()=>catalogQueue?.pump());},onError:operationError});
       automation.daily.readDocpleAttendance=(date,signal,options)=>{
        if(!dataAccess.allowed()||updater.guarded||!net.isOnline())return {abandoned:true};
