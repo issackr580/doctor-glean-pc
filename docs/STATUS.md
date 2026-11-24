@@ -1,6 +1,6 @@
 # PC판 현재 상태와 다음 작업
 
-현재 공개 배포용과 협업자용 Draft는 **0.1.0-preview.38**입니다. 실행 소스는 `724f86b163443f8f214ff01f5d911e74d3ffd8eb`입니다. [배포용](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.38) · [개발자용 Draft](https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-39f072b589bd529186e1) · [검증 및 게시 기록](releases/0.1.0-preview.38.md)
+현재 공개 배포용과 협업자용 Draft는 **0.1.0-preview.39**입니다. 실행 소스는 `59cdd70a24f15064877c45df97a0ee89090b8564`입니다. [배포용](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.39) · [개발자용 Draft](https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-fc9044fcd882696ec19f) · [검증 및 게시 기록](releases/0.1.0-preview.39.md)
 
 ## PC-023 — v156 자동입장 정책·읽기 API·숨은 미디어 제한 (게시 완료)
 
