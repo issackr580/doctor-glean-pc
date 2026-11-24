@@ -17,7 +17,7 @@ export function entrySummary(entries){
  const summary={reservations:entries.length,waiting:0,pcClickedJobs:0,pcClicks:0,needsAttention:0,manual:0};
  for(const job of entries){
   const attempts=job.attempts?.length?job.attempts:job.receipt?[job.receipt]:[];
-  const clicks=attempts.filter(row=>row.status==='clicked').length;
+  const clicks=attempts.filter(row=>row.status==='clicked'||row.reason==='medigate_count_increased').length;
   summary.pcClicks+=clicks;if(clicks)summary.pcClickedJobs++;
   if(job.status==='reserved'&&automaticEntrySite(job.site))summary.waiting++;
   if(job.status==='manual_clicked')summary.manual++;
@@ -35,11 +35,13 @@ export function entryFailureLabel(job){
  if(r.targetMatched&&r.entryControls===0)return '대상 강의 확인 · 입장 버튼 미확인'+suffix;
  if(r.reason==='manual_view_open')return '직접 사용하는 사이트 창 때문에 양보함'+suffix;
  if(r.status==='login')return '로그인 필요 · 저장 계정 복구 결과를 확인해 주세요.';
+ if(r.reason==='medigate_count_unconfirmed')return '월간 수강 집계 증가를 확인하지 못했어요.';
  if(r.status==='unknown'&&r.attempted)return 'PC 입장 시도 후 결과 불확실 · 자동 재제출 안 함';
  return '';
 }
 export function entryEvidenceLabel(job){
  const r=job.receipt;if(!r)return '실행 결과 없음 · 예약 생성과 실제 입장은 별개예요.';
+ if(r.reason==='medigate_count_increased')return '월간 수강 집계 증가 확인';
  if(!r.attempted&&!r.navigationObserved&&r.status!=='clicked')return '';
  const click=r.status==='clicked'?'PC 클릭 확인':r.attempted?'PC 시도 · 클릭 결과 미확인':'PC 클릭 미확인';
  const navigation=job.doctorvilleArrival==='waiting_room'?'같은 강의 대기실 도달':job.doctorvilleArrival==='broadcast_room'?'같은 강의 방송 화면 도달':r.navigationObserved===true?'강의창 이동 확인':'강의창 이동 미확인';
@@ -49,7 +51,7 @@ export function entryEvidenceLabel(job){
 export function entryRunVersion(job){return job.receipt?.checkedAt===job.executionFinishedAt?job.executionVersion??'':'';}
 export function entrySessionSummary(entries,startedAt){
  const counts={currentClicks:0,previousClicks:0,undatedClicks:0};
- for(const job of entries)for(const r of job.attempts?.length?job.attempts:job.receipt?[job.receipt]:[])if(r.status==='clicked'){
+ for(const job of entries)for(const r of job.attempts?.length?job.attempts:job.receipt?[job.receipt]:[])if(r.status==='clicked'||r.reason==='medigate_count_increased'){
   if(!Number.isSafeInteger(startedAt)||!Number.isSafeInteger(r.checkedAt))counts.undatedClicks++;
   else if(r.checkedAt>=startedAt)counts.currentClicks++;else counts.previousClicks++;
  }return counts;

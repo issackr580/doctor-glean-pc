@@ -1,3 +1,4 @@
+import {MedigateCountPages} from './medigate-counter.js';
 import {bindPowerEvents} from './power-events.js';
 import {guardSession} from './hidden-resources.js';
 import {dailyTicket} from './task-ticket.js';
@@ -89,6 +90,7 @@ const configureNetwork=(profile,id)=>{
 };
 app.on('session-created',profile=>configureNetwork(profile));
 const controlUrl=new URL('../ui/index.html',import.meta.url).href;
+let medigateCountPages;
 let control,tray,state,catalog,collector,catalogQueue,automation,credentials,registration,developerTools,preload,updater,pcOptions,quitting=false,viewDate=kstDate();
 const reportPreview=new ReportPreview();
 const loginVisits=new WeakMap();
@@ -122,7 +124,7 @@ const buildState=()=>({
   collection:collector.snapshot(),results:catalog.view(validQueryDate(viewDate)?viewDate:kstDate()).results,
   pendingQueries:catalogQueue?.snapshot()??[],
   siteWaitUntrusted:!!siteWait&&!siteWait.clockTrusted(Date.now()),dataAccess:dataAccess.snapshot(),usage:resourceUse(),options:pcOptions?.snapshot(),credentials:credentials?.snapshot(),update:updater?.snapshot(),
-  automationAvailable:true,automation:automation?.snapshot(),registration:registrationState(),dailyTasks:DAILY_TASKS.map(({key,label,site})=>({key,label,site})),
+  medigateCounterPage:medigateCountPages?.get(kstDate().slice(0,7)),automationAvailable:true,automation:automation?.snapshot(),registration:registrationState(),dailyTasks:DAILY_TASKS.map(({key,label,site})=>({key,label,site})),
 });
 
 function diagnosticSnapshot(){
@@ -453,6 +455,9 @@ function ipc(){
   registerIPC('pc:cancel-collection',()=>{catalogQueue.clear();collector.cancel();return {ok:true};});
   registerIPC('pc:daily-selection',keys=>{attendanceSelectionEpoch++;catalogQueue.invalidateAutomatic();automation.daily.cancel();pcOptions.selectDaily(keys);notify();return {ok:true};});
   registerIPC('pc:memo',(date,text)=>{if(!validQueryDate(date))return {ok:false};pcOptions.memo(date,text);notify();return {ok:true};});
+  registerIPC('pc:medigate-counter-page',url=>{
+    medigateCountPages.set(kstDate().slice(0,7),url);automation.manualOpened('medigate');notify();return {ok:true};
+  });
   registerIPC('pc:entry-hosts',rows=>{if(automation.busy||remoteWindows.size||credentials.busy||collector.snapshot().running)return {ok:false,reason:'busy'};pcOptions.hosts(rows);notify();return {ok:true};});
   registerIPC('pc:survey-skip',(key,value)=>({ok:automation.survey.skip(key,value)}));
   registerIPC('pc:survey-open',key=>{const url=automation.survey.target(key);if(!url)return {ok:false};openSite('doctorville',false,{key,url});return {ok:true};});
@@ -528,7 +533,7 @@ else{
       state=new LocalState(join(app.getPath('userData'),'state-v1.json'));
       updater=new PcUpdater({context:{appPath:app.getAppPath(),executable:process.execPath,edition:EDITION.id,currentVersion:VERSION,electronVersion:process.versions.electron,platform:process.platform,arch:process.arch,channel:VERSION.includes('-preview.')?'preview':'stable'},
        fetch:(url,options)=>{dataAccess.require();return net.fetch(url,{...options,signal:AbortSignal.any([options.signal,dataAccess.controller.signal])});},publicDownload:(target,progress)=>{dataAccess.require();return electronPatchDownload(target,progress,dataAccess.controller.signal);},privateDownload:(target,progress)=>{dataAccess.require();return downloadPrivateUpdate(target,progress,{parent:control});},
-       isBusy:()=>!dataAccess.allowed()||!!automation?.busy||!!credentials?.busy||!!registration?.active||!!collector?.snapshot().running||manualOwners.size>0||remoteWindows.size>0||!state.snapshot().paused&&automation?.store.features().entry&&!!automation?.store.entries().some(job=>job.status==='reserved'&&job.deadline>=Date.now()&&(job.nextAt??job.due)<=Date.now()+120000),
+       isBusy:()=>!dataAccess.allowed()||!!automation?.busy||!!automation?.entry.medigateWatch||!!credentials?.busy||!!registration?.active||!!collector?.snapshot().running||manualOwners.size>0||remoteWindows.size>0||!state.snapshot().paused&&automation?.store.features().entry&&!!automation?.store.entries().some(job=>job.status==='reserved'&&job.deadline>=Date.now()&&(job.nextAt??job.due)<=Date.now()+120000),
        onChange:()=>{notify();if(!updater?.guarded){catalogQueue?.pump();automation?.tick();}},quit:()=>app.quit()});
       if(updater.waitForHelper){app.quit();return;}
       pcOptions=new PcOptions(join(dataDirectory,'pc-options-v1.json'));
@@ -559,8 +564,12 @@ else{
         recoverLogin:async(id,signal)=>(await credentials.recover(id,{automatic:true,signal})).status==='authenticated',
         isManualOpen:id=>[...manualOwners.values()].includes(id)||credentials.active?.site===id,onChange:snapshot=>{developerTools.observe(snapshot);notify();if(!snapshot.running)queueMicrotask(()=>catalogQueue?.pump());}});
       catalogQueue=new CatalogQueue({context:id=>credentials.vault.epoch(id)+':'+(profileEpochs.get(id)??0),resultValid:(date,id)=>{const row=catalog.view(date).results[id];return row?.coverage===true&&!row.stale&&row.status==='ok';},start:async(date,ids,morningAt)=>{const run=collector.start(date,ids);if(collector.snapshot().running)automation?.catalogStarted(date,morningAt);await run;automation?.catalogFinished(date,ids,collector.snapshot(),morningAt);},busy:()=>!dataAccess.allowed()||updater.guarded||collector.sleeping||collector.snapshot().running||!!automation?.busy||credentials.busy,validDate:validQueryDate,onChange:notify});
+      medigateCountPages=new MedigateCountPages(join(dataDirectory,'medigate-counter-pages-v1.json'));
       automation=new AutomationController({file:join(dataDirectory,'workflows-v1.json'),dataEnabledAt:()=>dataAccess.enabledAt??0,options:pcOptions,followupAllowed:()=>net.isOnline()&&siteWait.allowed('intermd')&&!credentials.busy&&![...manualOwners.values()].includes('intermd'),ledger:state,executionAllowed:()=>dataAccess.allowed()&&!updater.guarded,
-       entryContextEpoch:site=>credentials.vault.epoch(site),createPage:(site,signal,options)=>credentials.wrapPage(site,new AutomationPage(site,signal,prepareSession(site),{...options,traffic:workerTraffic(site,signal),externalEntryAllowed:(id,url)=>pcOptions.allowsEntry(id,url)}),options),
+       entryContextEpoch:site=>credentials.vault.epoch(site),medigateCounter:{
+        allowed:()=>dataAccess.allowed()&&!updater.guarded&&net.isOnline()&&siteWait.allowed('medigate'),
+        epoch:()=>credentials.vault.epoch('medigate')+':'+(profileEpochs.get('medigate')??0),page:month=>medigateCountPages.get(month),
+       },createPage:(site,signal,options)=>credentials.wrapPage(site,new AutomationPage(site,signal,prepareSession(site),{...options,traffic:workerTraffic(site,signal),externalEntryAllowed:(id,url)=>pcOptions.allowsEntry(id,url)}),options),
        createInspectionPage:(site,signal,options)=>new AutomationPage(site,signal,prepareSession(site),{...options,traffic:workerTraffic(site,signal),externalEntryAllowed:(id,url)=>pcOptions.allowsEntry(id,url)}),onEvent:event=>developerTools.event(event),traceEntry:(job,kind)=>developerTools.traceEntry(job,kind),observeEntry:(...args)=>developerTools.observeEntry(...args),
        isManualOpen:id=>[...manualOwners.values()].includes(id)||credentials.active?.site===id,catalog:date=>catalog.view(date).results,catalogBusy:()=>collector.snapshot().running||credentials.busy,
        queueCatalog:(date,morningAt)=>{
@@ -568,7 +577,7 @@ else{
         const row=automation.store.day(date).morning;
         if(!queued&&morningAt&&row?.catalogRequestedAt===morningAt)automation.store.record(date,'morning',{...row,status:ids.length?'unknown':'none',reason:ids.length?'collection_in_progress_or_cached':'no_target'});
        },
-       yieldCatalog:()=>{const current=collector.snapshot();if(current.running){catalogQueue.request(current.date,catalog.selected());collector.cancel('entry_priority');}},
+       yieldCatalog:()=>{const current=collector.snapshot();if(current.running){catalogQueue.request(current.date,collector.remainingSites(),{interrupted:true});collector.cancel('entry_priority');}},
        onChange:()=>{notify();if(!automation?.busy)queueMicrotask(()=>catalogQueue?.pump());},onError:operationError});
       automation.daily.readDocpleAttendance=(date,signal,options)=>{
        if(!dataAccess.allowed()||updater.guarded||!net.isOnline())return {abandoned:true};

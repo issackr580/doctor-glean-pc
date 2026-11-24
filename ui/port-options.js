@@ -1,7 +1,8 @@
 const el=(tag,text)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;return n;};
 export function setupPortOptions(api,perform){
  let current;
- const memo=document.getElementById('date-memo'),hosts=document.getElementById('entry-host-list');
+ const memo=document.getElementById('date-memo'),hosts=document.getElementById('entry-host-list'),counter=document.getElementById('medigate-counter-page');
+ document.getElementById('save-medigate-counter-page').onclick=()=>perform(()=>api.setMedigateCounterPage(counter.value.trim()),'이번 달 집계 주소를 저장했어요.');
  document.getElementById('save-memo').onclick=()=>perform(()=>api.saveMemo(current.date,memo.value),'메모를 저장했어요.');
  document.getElementById('save-entry-hosts').onclick=()=>{
   const rows=hosts.value.split('\n').map(s=>s.trim()).filter(Boolean).map(s=>({host:s.replace(/^https?:\/\//,''),http:s.startsWith('http://')}));
@@ -9,6 +10,7 @@ export function setupPortOptions(api,perform){
  };
  return state=>{
   current=state;if(!state.options)return;
+  if(document.activeElement!==counter)counter.value=state.medigateCounterPage??'';
   if(document.activeElement!==memo){memo.value=state.options.memos[state.date]??'';}
   if(document.activeElement!==hosts)hosts.value=state.options.entryHosts.map(r=>(r.http?'http://':'https://')+r.host).join('\n');
   document.getElementById('daily-selection').replaceChildren(...state.dailyTasks.map(task=>{

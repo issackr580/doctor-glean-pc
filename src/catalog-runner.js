@@ -23,6 +23,7 @@ export class CatalogRunner{
  suspend(){this.sleeping=true;if(this.active)this.active.interrupted=true;}
  resume(){this.sleeping=false;}
  snapshot(){return structuredClone(this.last);}
+ remainingSites(){return this.active?.ids.slice(this.active.completed)??[];}
  #publish(run,extra={}){
   if(this.active!==run)return;
   this.last={running:true,date:run.date,site:run.site,completed:run.completed,total:run.ids.length,reason:'reading',...extra};

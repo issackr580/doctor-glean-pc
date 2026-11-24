@@ -26,7 +26,7 @@ export function renderAutomation(state,api,perform){
  }));
  const entries=a.entries.map(job=>{
   const row=el('article',undefined,'lecture entry-row'),content=el('div'),site=state.sites.find(s=>s.id===job.site)?.name??'';
-  content.append(el('p',site+' · '+job.time,'lecture-site'),el('p',job.title,'lecture-title'),el('p',LABELS[job.status]??'확인 필요','site-status'));
+  content.append(el('p',site+' · '+job.time,'lecture-site'),el('p',job.title,'lecture-title'),el('p',job.site==='medigate'&&job.status==='attempting'?'월간 수강 집계 확인 중':LABELS[job.status]??'확인 필요','site-status'));
   if(job.schedulePairSchema===1)content.append(el('p','일정 두 회차 · '+job.schedulePlan.map(p=>p.time).join(' / ')+' · 현재 '+(job.scheduleSlot+1)+'회차','muted'));
   if(job.receipt?.watchObserved===true)content.append(el('p','해당 닥플 watch 문서 로드 확인 · 영상·적립은 별도 확인','muted'));
   if(job.status==='reserved')content.append(el('p','다음 확인 '+clock(job.nextAt??job.due),'muted'));

@@ -12,7 +12,7 @@ import {DAILY_TASKS} from './automation-policy.js';
 import {kstDate,kstInstant,nextLoungePreparation} from './schedule.js';
 import {MorningSchedule} from './morning-schedule.js';
 export class AutomationController{
- constructor({file,ledger,createPage,createInspectionPage,isManualOpen,catalog,catalogBusy,queueCatalog,yieldCatalog,onChange=()=>{},onEvent=()=>{},onError=()=>{},now=Date.now,traceEntry,observeEntry,entryContextEpoch=()=>0,dataEnabledAt=()=>0,executionAllowed=()=>true,followupAllowed=()=>true,options=new PcOptions(join(dirname(file),'pc-options-v1.json'))}){
+ constructor({file,ledger,createPage,createInspectionPage,isManualOpen,catalog,catalogBusy,queueCatalog,yieldCatalog,onChange=()=>{},onEvent=()=>{},onError=()=>{},now=Date.now,traceEntry,observeEntry,medigateCounter,entryContextEpoch=()=>0,dataEnabledAt=()=>0,executionAllowed=()=>true,followupAllowed=()=>true,options=new PcOptions(join(dirname(file),'pc-options-v1.json'))}){
   Object.assign(this,{ledger,createPage,isManualOpen,catalog,catalogBusy,queueCatalog,yieldCatalog,onChange,onError,now,dataEnabledAt,executionAllowed,followupAllowed});this.store=new WorkflowStore(file,{now,policyConsumed:j=>Object.values(ledger.snapshot().jobs).some(r=>r.site==='hmp'&&r.target===j.key&&r.slot===j.slot&&r.dueAt===j.due)});this.options=options;this.active=null;this.pendingDaily=[];this.followupReads=[];this.pendingReadOnly=true;this.closed=false;
   this.morning=new MorningSchedule(join(dirname(file),'morning-schedule-v1.json'));this.store.recover();
   const common={ledger,store:this.store,createPage,createInspectionPage,isManualOpen,onChange:()=>{onChange();},onEvent,now};
@@ -20,7 +20,7 @@ export class AutomationController{
   this.daily=new DailyRunner({...common,quiz:this.quiz,shouldYield:()=>this.allowed()&&!!(this.entry.due(this.now())||this.entry.revisionDue())});
   this.survey=new SurveyRunner({file:join(dirname(file),'surveys-v1.json'),options,allowed:()=>this.store.features().survey,onChange,now});
   this.daily.taskSelected=key=>this.options.snapshot().dailyKeys.includes(key);
-  this.entry=new EntryRunner({...common,catalog,traceEntry,observeEntry,contextEpoch:entryContextEpoch});this.entry.recover();this.lounge=new LoungeRunner(common);
+  this.entry=new EntryRunner({...common,catalog,traceEntry,observeEntry,medigateCounter,contextEpoch:entryContextEpoch});this.entry.recover();this.lounge=new LoungeRunner(common);
   this.rearm();this.timer=setInterval(()=>this.tick(),250);this.timer.unref();
  }
  allowed(){return !this.closed&&this.executionAllowed()&&!this.ledger.snapshot().paused&&!this.store.failed&&!this.options.failed;}

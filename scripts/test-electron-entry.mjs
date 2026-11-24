@@ -1,3 +1,4 @@
+import {medigateCountCases} from './electron-medigate-count.mjs';
 // Real Chromium DOM and the PC host boundary; synthetic providers only.
 import {app,session,BrowserWindow} from 'electron';
 import {mkdtempSync,rmSync,mkdirSync,writeFileSync,readFileSync} from 'node:fs';
@@ -370,6 +371,7 @@ async function run(){
  await nov11Cases({root,date,title,clock,check,inspect,job,detailHeader});
  await nov06Cases({root,date,title,clock,check,inspect,job,detailHeader});
  await v156Cases({root,date,check});
+ await medigateCountCases({root,check});
  await (await import("./electron-v161-cases.mjs")).v161Cases(check);
  await portingCases(check);
  check('all inspection and entry windows are released',BrowserWindow.getAllWindows().length===0);

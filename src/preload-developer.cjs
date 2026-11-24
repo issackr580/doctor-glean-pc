@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('doctorGlean',Object.freeze({
   cancelCredential:site=>ipcRenderer.invoke('pc:credential-cancel',site),
   setFeature:(key,value)=>ipcRenderer.invoke('pc:set-feature',key,value),
   selectDaily:keys=>ipcRenderer.invoke('pc:daily-selection',keys),
+  setMedigateCounterPage:url=>ipcRenderer.invoke('pc:medigate-counter-page',url),
   saveMemo:(date,text)=>ipcRenderer.invoke('pc:memo',date,text),
   setEntryHosts:rows=>ipcRenderer.invoke('pc:entry-hosts',rows),
   skipSurvey:(key,value)=>ipcRenderer.invoke('pc:survey-skip',key,value),
