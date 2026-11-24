@@ -6,7 +6,7 @@ import {randomUUID} from 'node:crypto';
 import {executionEvent} from './build-info.js';
 import {cleanReceipt} from './workflow-store.js';
 export class DailyRunner{
- constructor({ledger,store,createPage,createInspectionPage,isManualOpen=()=>false,quiz,onChange=()=>{},onEvent=()=>{},shouldYield=()=>false,taskSelected=()=>true,now=Date.now,sleep=waitFor}){Object.assign(this,{ledger,store,createPage,createInspectionPage,isManualOpen,quiz,onChange,onEvent,shouldYield,taskSelected,now,sleep});this.active=null;this.last={running:false,reason:'idle',key:'',progress:''};}
+ constructor({ledger,store,createPage,createInspectionPage,readDocpleAttendance,isManualOpen=()=>false,quiz,onChange=()=>{},onEvent=()=>{},shouldYield=()=>false,taskSelected=()=>true,now=Date.now,sleep=waitFor}){Object.assign(this,{ledger,store,createPage,createInspectionPage,readDocpleAttendance,isManualOpen,quiz,onChange,onEvent,shouldYield,taskSelected,now,sleep});this.active=null;this.last={running:false,reason:'idle',key:'',progress:''};}
  snapshot(){return {...this.last};}
  get busy(){return !!this.active;}
  get claimPending(){return !!this.active?.claimSent;}
@@ -44,6 +44,18 @@ export class DailyRunner{
     const mayAct=()=>!readOnly&&this.taskSelected(key)&&!this.ledger.snapshot().paused&&(task.kind.startsWith('brand')?this.store.features().brand:this.store.features().dailyClaim)&&allowed();
     publish(task.label+' 확인 중');
     try{
+     if(key==='docple:attendance'&&this.readDocpleAttendance&&(readOnly?!this.ledger.snapshot().paused&&this.taskSelected(key):mayAct())){
+      const context=this.receiptContext?.(task.site);
+      const current=()=>allowed()&&!this.isManualOpen(task.site)&&this.taskSelected(key)&&
+       !this.ledger.snapshot().paused&&(readOnly||mayAct())&&context===this.receiptContext?.(task.site);
+      const result=await this.readDocpleAttendance(date,controller.signal,{remainingMs:540000-(this.now()-began),current});
+      if(result?.restricted){receipt={status:'unknown',reason:'site_wait'};continue;}
+      if(result?.abandoned||!current()){staleReceipt=true;receipt={status:'unknown',reason:'scope_changed'};continue;}
+      const consumed=this.ledger.consumed(dailyTicket(task,date,0,this.now()));
+      if(result?.status==='complete'||result?.status==='pending'&&readOnly&&!consumed&&!old?.attempted){
+       receipt={...result,attempted:consumed};continue;
+      }
+     }
      const create=readOnly&&this.createInspectionPage?this.createInspectionPage:this.createPage;
      run.page=await create(task.site,controller.signal,{onDialog:message=>dailyDialog(task,message,run.claimSent)});
      const page=run.page;
@@ -91,7 +103,7 @@ export class DailyRunner{
     finally{
      for(const ticket of tickets)this.ledger.finish(ticket,receipt.status==='complete'?'confirmed':'unknown',this.now());
      emit('result',{...cleanReceipt(receipt,this.now()),attempted:receipt.submitted===true||tickets.length>0,elapsedMs:Math.max(0,this.now()-taskBegan),evidence:receipt.status==='complete'?receipt.submitted===true||tickets.length>0?'observed_after_pc_action':'existing_observed':'unconfirmed'});
-     receipt={...receipt,attempted:receipt.submitted===true||tickets.length>0||old?.attempted===true,reads,navigations,elapsedMs:Math.max(0,this.now()-taskBegan)};
+     receipt={...receipt,attempted:receipt.attempted===true||receipt.submitted===true||tickets.length>0||old?.attempted===true,reads,navigations,elapsedMs:Math.max(0,this.now()-taskBegan)};
      if(key==='docple:attendance'&&receipt.reason==='site_wait')receipt.waitUntil=this.siteWait?.status('docple')?.until??0;
      if(key==='hmp:capsule'&&receipt.status==='login'&&!receipt.attempted&&!this.ledger.consumed(dailyTicket(task,date,0,this.now())))receipt.reason='hmp_login_before_claim';
      if(!staleReceipt)this.store.record(date,key,receipt,this.now());run.claimSent=false;run.page?.close();run.page=null;completed++;publish(task.label+' 확인 종료');

@@ -570,6 +570,10 @@ else{
        },
        yieldCatalog:()=>{const current=collector.snapshot();if(current.running){catalogQueue.request(current.date,catalog.selected());collector.cancel('entry_priority');}},
        onChange:()=>{notify();if(!automation?.busy)queueMicrotask(()=>catalogQueue?.pump());},onError:operationError});
+      automation.daily.readDocpleAttendance=(date,signal,options)=>{
+       if(!dataAccess.allowed()||updater.guarded||!net.isOnline())return {abandoned:true};
+       return nativeCatalog.readAttendance(date,signal,{...options,current:()=>options.current()&&dataAccess.allowed()&&!updater.guarded&&net.isOnline()});
+      };
       automation.daily.siteWait=siteWait;
       automation.daily.receiptContext=site=>[credentials.vault.epoch(site),profileEpochs.get(site)??0,state.snapshot().epoch,attendanceSelectionEpoch].join('/');
       registration=new RegistrationController({store:new RegistrationStore(join(dataDirectory,'registration-attempts-v1.json')),

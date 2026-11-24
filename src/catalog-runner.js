@@ -83,14 +83,21 @@ export class CatalogRunner{
       if(this.sleeping||!this.online()||run.interrupted)return ready();
       return true;
      };
-     await ready();await boundCatalog(this.prepareCollection(id,siteController.signal),siteController.signal,remaining());if(!this.#owns(run))return;
-     await ready();const native=await this.nativeRead(profile,date,siteController.signal,{remainingMs:remaining(),current:()=>this.#owns(run)&&remaining()>0&&!this.sleeping&&this.online()&&kstDate(this.now())===today&&!this.isManualOpen(id)});
-     if(!this.#owns(run))return;
-     await ready();if(native?.restricted)throw Object.assign(Error(),{code:'site_wait'});
-     if(native?.abandoned)throw Object.assign(Error(),{code:'cancelled'});
-     if(kstDate(this.now())!==today)throw Object.assign(Error(),{code:'date_mismatch'});
-     if(this.isManualOpen(id))throw Object.assign(Error(),{code:'cancelled'});
-     if(native?.done===true){this.store.record(id,date,native,this.now());run.completed++;this.#publish(run);continue;}
+     const readNative=async()=>{
+      await ready();
+      const owner=this.context(id);
+      const current=()=>this.#owns(run)&&remaining()>0&&!run.interrupted&&!this.sleeping&&this.online()&&
+       kstDate(this.now())===today&&!this.isManualOpen(id)&&this.context(id)===owner;
+      const result=await this.nativeRead(profile,date,siteController.signal,{remainingMs:remaining(),current});
+      const interrupted=run.interrupted;
+      await ready();
+      if(result?.restricted)throw Object.assign(Error(),{code:'site_wait'});
+      if(result?.abandoned||interrupted||!current())throw Object.assign(Error(),{code:'cancelled'});
+      if(result?.done===true){this.store.record(id,date,result,this.now());return true;}
+      return false;
+     };
+     await ready();await boundCatalog(this.prepareCollection(id,siteController.signal),siteController.signal,remaining());
+     if(await readNative()){run.completed++;this.#publish(run);continue;}
      if(remaining()<=0)throw Object.assign(Error(),{code:'time_limit'});
      await ready();run.page=await this.createPage(profile,siteController.signal);
      if(!this.#owns(run)){run.page?.close();return;}
@@ -110,7 +117,11 @@ export class CatalogRunner{
        recoveryAttempted=true;run.page.close();run.page=null;
        const recovered=await boundCatalog(this.recoverLogin(id,siteController.signal),siteController.signal,remaining());
        if(!this.#owns(run))return;
-       if(recovered){await ready();run.page=await this.createPage(profile,siteController.signal);await boundCatalog(run.page.open(),siteController.signal,remaining());previous=null;continue;}
+       if(recovered){
+        if(id==='docple'&&await readNative())break;
+        await ready();run.page=await this.createPage(profile,siteController.signal);
+        await boundCatalog(run.page.open(),siteController.signal,remaining());previous=null;continue;
+       }
        this.store.record(id,date,reply,this.now());break;
       }
       const after=run.page.checkpoint?.();
