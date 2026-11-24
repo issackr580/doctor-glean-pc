@@ -3,3 +3,5 @@ export const automaticEntrySite=site=>['doctorville','medigate','intermd','bluep
 export const hmpLedgerSlot=job=>job.site==='hmp'&&job.hmpRepeatSchema===2?32+job.slot:job.slot;
 export const legacyHmpConsumed=(ledger,job)=>Object.values(ledger.snapshot().jobs).some(r=>r.site==='hmp'&&r.target===job.key&&r.slot===job.slot&&r.dueAt===job.due);
 export const legacyHmpOverlap=(ledger,job)=>job.site==='hmp'&&job.hmpRepeatSchema===2&&job.slot===0&&Object.values(ledger.snapshot().jobs).some(r=>r.site==='hmp'&&r.target===job.key&&r.slot===0&&r.dueAt===job.start);
+
+export const medigateCountConfirmed=(site,receipt)=>site==='medigate'&&receipt?.status==='complete'&&receipt.reason==='confirmed';

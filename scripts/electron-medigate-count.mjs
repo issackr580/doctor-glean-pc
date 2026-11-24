@@ -1,4 +1,5 @@
 import {session} from 'electron';
+import {syntheticEntryClock} from './electron-entry-clock.mjs';
 import assert from 'node:assert/strict';
 import {join} from 'node:path';
 import {randomUUID} from 'node:crypto';
@@ -9,6 +10,7 @@ import {LocalState} from '../src/local-state.js';
 import {discoverMedigatePage,MedigateCountPages,readMedigateCounter} from '../src/medigate-counter.js';
 import {remotePreferences} from '../src/security.js';
 import {kstInstant} from '../src/schedule.js';
+import {SiteWait,workerWait} from '../src/site-wait.js';
 
 const list='https://new.medigate.net/symposium';
 const november='https://www.medigate.net/event/20261103092020307';
@@ -23,18 +25,19 @@ export async function medigateCountCases({root,check}){
  assert.throws(()=>options.set('2026-12',december+'?unapproved=1'));
  options.set('2026-12',december);
  check('month-specific official setting survives restart and is not used for January',new MedigateCountPages(file).get('2026-12')===december&&!options.get('2027-01'));
- for(const scenario of ['increases','unchanged','mismatch','account-change','cancelled','next-month','redirect','wrong-period']){
+ for(const scenario of ['increases','unchanged','mismatch','account-change','cancelled','next-month','redirect','wrong-period','server-wait']){
   const partition='entry-aggregate-'+randomUUID(),profile=session.fromPartition(partition);
   let countReads=0,docs=0,posts=0,clicks=0,closed=0,status,epoch=0,watch;
   await profile.protocol.handle('https',({url,method})=>{
    if(method!=='GET'){posts++;return new Response('',{status:403});}
    if(url===endpoint){
     const count=countReads++>0&&scenario!=='unchanged'?4:3;
+    if(scenario==='server-wait')return new Response('{}',{status:429,headers:{...dbHeader,'Retry-After':'600'}});
     if(scenario==='redirect')return new Response('',{status:302,headers:{Location:endpoint+'?second=yes'}});
     return new Response(JSON.stringify({data:{count}}),{headers:dbHeader});
    }
    let body='';
-   if(url===list)body='<a href="'+december+'">2026년 12월 웨비나 월간 참여 현황</a><a href="'+november+'">2026년 11월 웨비나 월간 참여 현황</a>';
+   if(url===list)body='<article><h3>합성 강의</h3><p class="date">'+syntheticDay+' 13:00 ~ 14:00</p><a href="/symposium/123">상세보기</a><button onclick="window.syntheticClicks=(window.syntheticClicks||0)+1">입장하기</button></article>'+'<a href="'+december+'">2026년 12월 웨비나 월간 참여 현황</a><a href="'+november+'">2026년 11월 웨비나 월간 참여 현황</a>';
    if(url===december){
     docs++;
     const month=scenario==='wrong-period'?11:12;
@@ -44,7 +47,8 @@ export async function medigateCountCases({root,check}){
    }
    return new Response(document(body),{headers:{'Content-Type':'text/html; charset=utf-8'}});
   });
-  const create=signal=>new AutomationPage('medigate',signal,{...remotePreferences('medigate'),partition});
+  const gate=new SiteWait(join(root,'medigate-wait-'+scenario+'.json'));
+  const create=signal=>new AutomationPage('medigate',signal,{...remotePreferences('medigate'),partition},{traffic:workerWait(gate,'medigate',signal,()=>epoch)});
   const controller=new AbortController();
   try{
    if(['next-month','redirect','wrong-period'].includes(scenario)){
@@ -69,21 +73,29 @@ export async function medigateCountCases({root,check}){
     sleep:async(ms)=>{now+=ms;if(scenario==='account-change')epoch++;if(scenario==='cancelled')runner.manualOpened('medigate');},
     catalog:()=>rows,createInspectionPage:async(_site,signal)=>create(signal),
     createPage:async(_site,signal)=>{
-     const page=create(signal),close=page.close.bind(page);
+     const page=syntheticEntryClock(create(signal),()=>now),close=page.close.bind(page),call=page.call.bind(page);
      page.close=()=>{if(!page.closed)closed++;close();};
-     page.call=async(_name,[_job,mode])=>{
-      if(mode==='click'){clicks++;status=Object.values(ledger.snapshot().jobs)[0]?.state;return {status:'clicked'};}
-      return {status:'ready',targetMatched:true,matchedTargets:1,entryControls:1};
+     page.call=async(name,args,options)=>{
+      if(args[1]!=='click')return call(name,args,options);
+      status=Object.values(ledger.snapshot().jobs)[0]?.state;
+      const result=await call(name,args,options);
+      clicks=await page.current.webContents.executeJavaScript('window.syntheticClicks??0');
+      return result;
      };
      return page;
     },
-    medigateCounter:{allowed:()=>true,epoch:()=>epoch,page:month=>options.get(month)},
+    medigateCounter:{allowed:()=>gate.allowed('medigate'),epoch:()=>epoch,page:month=>options.get(month)},
     onChange:()=>{if(store.entries(syntheticDay)[0]?.receipt)watch();}});
    runner.reserveCatalog(syntheticDay,rows);const [job]=store.entries(syntheticDay);
    await runner.run(job);
    const timer=setTimeout(watch,14000);
    try{await finished;}finally{clearTimeout(timer);}
    const result=new WorkflowStore(file,{now:()=>now}).entries(syntheticDay)[0];
+   if(scenario==='server-wait'){
+    check('Medigate count 429 prevents dispatch and persists the site hold',
+     clicks===0&&result.status==='blocked'&&posts===0&&countReads===1&&Object.keys(ledger.snapshot().jobs).length===0&&!new SiteWait(gate.file).allowed('medigate'));
+    continue;
+   }
    check('original Medigate click only once after durable record '+scenario,clicks===1&&status==='attempting'&&result.entryAttempted&&posts===0);
    check('only a genuine monthly increase confirms Medigate '+scenario,result.status===(scenario==='increases'?'complete':'unknown')&&closed===1);
    check('Medigate watcher releases scheduler and repeat after result '+scenario,!runner.active&&!runner.medigateWatch&&runner.due()===null);

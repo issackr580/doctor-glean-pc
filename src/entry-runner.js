@@ -1,6 +1,6 @@
 import {discoverMedigatePage,initialMedigatePage,readMedigateCounter} from './medigate-counter.js';
 import {resourceCount} from './resource-use.js';
-import {automaticEntrySite,hmpLedgerSlot,legacyHmpConsumed,legacyHmpOverlap} from './entry-support.js';
+import {medigateCountConfirmed,automaticEntrySite,hmpLedgerSlot,legacyHmpConsumed,legacyHmpOverlap} from './entry-support.js';
 import {validHmpCheckpoint,hmpHistory,nextHmpCheckpoint} from './hmp-policy.js';
 import {attachCheckpoints,nextCheckpoint} from './entry-checkpoints.js';
 import {siteById,allowedNavigation} from './security.js';
@@ -185,7 +185,7 @@ export class EntryRunner{
   const current=this.store.entries(job.date).find(row=>row.key===job.key);if(!automaticEntrySite(job.site)||!sameWorker(job,current)||!sameReceiptOwner(job,current)||current&&['cancelled','manual_clicked'].includes(current.status))return;
   if(job.site==='hmp'&&raw.attempted===false&&this.#consumed(job))raw={status:'unknown',reason:'unknown_result'};
   const now=this.now(),receipt=cleanReceipt({...raw,slot:job.slot,due:job.due},now),attempts=[...(job.attempts??[]),receipt].slice(-5);
-  const next=receipt.reason==='medigate_count_increased'?null:nextCheckpoint(job,receipt,now);if(next){this.store.updateEntry(job.key,{...next,attempts,receipt,executionFinishedAt:now});this.onChange();return;}
+  const next=medigateCountConfirmed(job.site,receipt)?null:nextCheckpoint(job,receipt,now);if(next){this.store.updateEntry(job.key,{...next,attempts,receipt,executionFinishedAt:now});this.onChange();return;}
   if(job.repeatSchema===1&&!['lecture_ended','manual_clicked','cancelled','blocked','login','ambiguous','not_registered'].includes(receipt.status)){
    const first=job.repeatFirstEntryAt??(receipt.playerObserved===true?receipt.observedAt:0);let next=job.slot+1;
    while(first&&next<3&&first+next*600000+90000<now)next++;
@@ -287,9 +287,9 @@ export class EntryRunner{
    if(!current())break;
    const count=await this.#counter(baseline.url,baseline.month,signal,current,Math.min(6000,deadline-this.now()));
    if(!current()||count===null||count<baseline.count)break;
-   if(count>baseline.count)return {status:'complete',reason:'medigate_count_increased',attempted:true};
+   if(count>baseline.count)return {status:'complete',reason:'confirmed',attempted:true};
   }
-  return {status:'unknown',reason:'medigate_count_unconfirmed',attempted:true};
+  return {status:'unknown',reason:'provider_result_unconfirmed',attempted:true};
  }
  async run(job,{prepare=false}={}){
   if(this.active||job?.site==='medigate'&&this.medigateWatch||!automaticEntrySite(job?.site)||!validHmpCheckpoint(job))return false;
@@ -305,7 +305,7 @@ export class EntryRunner{
    trace?.finish({...receipt,attempted:dispatched,readOnly:prepare});
    let diagnostics={};try{diagnostics=run.page?.diagnostics?.()??{};}catch{}
    emit('result',{...cleanReceipt({...receipt,attempted:dispatched,elapsedMs:Math.max(0,this.now()-began)},this.now()),readOnly:prepare,navigationBlocked:diagnostics.navigationBlocked,popupDenied:diagnostics.popupDenied,mainFrameFailures:diagnostics.mainFrameFailures});
-   try{if(ticket&&dispatched)this.ledger.finish(ticket,receipt.reason==='medigate_count_increased'&&allowed()?'confirmed':'unknown',this.now());
+   try{if(ticket&&dispatched)this.ledger.finish(ticket,medigateCountConfirmed(job.site,receipt)&&allowed()?'confirmed':'unknown',this.now());
    if(started&&!rescheduled){if(prepare&&allowed()){this.store.updateEntry(job.key,{prepNextAt:Math.min(job.start,this.now()+60000),receipt:cleanReceipt(receipt)});if(receipt.status==='lecture_ended')this.#finish(job,receipt);}
    else if(dispatched)this.#finish(job,{...(allowed()?receipt:{status:'unknown',reason:'scope_changed'}),attempted:true,elapsedMs:Math.max(0,this.now()-began)});
    else if(!prepare&&allowed())this.#unexecuted(job,{...receipt,elapsedMs:Math.max(0,this.now()-began)});}}
@@ -412,11 +412,11 @@ export class EntryRunner{
      trace.event('click_response',executed);
      receipt={...reply,status:executed.status==='clicked'?'clicked':'unknown',reason:executed.status==='clicked'?'clicked':'navigation_unconfirmed',attempted:true};
      if(job.site==='medigate'&&this.medigateCounter){
-      if(!baseline){receipt={...receipt,status:'unknown',reason:'medigate_count_unconfirmed'};break;}
+      if(!baseline){receipt={...receipt,status:'unknown',reason:'provider_result_unconfirmed'};break;}
       run.current=()=>allowed()&&this.medigateCounter.allowed()&&this.medigateCounter.epoch()===baseline.owner;
       this.medigateWatch=run;this.active=null;detached=true;
       void this.#medigateResult(baseline,job,controller.signal,allowed).then(result=>{receipt={...receipt,...result};},
-       ()=>{receipt={...receipt,status:'unknown',reason:'medigate_count_unconfirmed'};}).finally(finalize).catch(()=>{try{this.ledger.setPaused(true);}catch{}});
+       ()=>{receipt={...receipt,status:'unknown',reason:'provider_result_unconfirmed'};}).finally(finalize).catch(()=>{try{this.ledger.setPaused(true);}catch{}});
       return true;
      }
      await this.sleep(800,controller.signal);receipt.navigationObserved=(page.version!==before||page.url!==beforeUrl)&&(allowedNavigation(job.site,page.url)||page.allowsEntryNavigation?.(page.url)===true);
