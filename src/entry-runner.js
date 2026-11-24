@@ -403,7 +403,7 @@ export class EntryRunner{
      const input={site:job.site,kind:'entry',date:job.date,target:job.key,slot:hmpLedgerSlot(job),dueAt:job.due,deadline:job.deadline};
      ticket=this.ledger.reserve(input,this.now());if(!ticket||!allowed()||!this.ledger.beginDispatch(ticket,this.now())){receipt={status:'unknown',reason:'duplicate_prevented'};break;}
      this.store.updateEntry(job.key,{status:'attempting',entryAttempted:true});page.allowPopups(true);const before=page.version,beforeUrl=page.url;dispatched=true;
-     page.armEntryDispatch?.();
+     page.armEntryDispatch?.({providerOnly:job.site==='medigate'&&!!this.medigateCounter});
      resourceCount('entryDispatches');emit('dispatch',{attempted:true,targetMatched:true});
      trace.event('click_requested',{attempted:true,targetMatched:true});
      let executed;

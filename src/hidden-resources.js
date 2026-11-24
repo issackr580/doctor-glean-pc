@@ -14,7 +14,9 @@ export function guardSession(profile,policy){
  let owners=profiles.get(profile);
  if(!owners){owners=new Map();profiles.set(profile,owners);profile.webRequest.onBeforeRequest((request,done)=>{
   const rule=sessionRules.get(profile);if(external(request.url)&&rule&&!rule.allowed(request))return done({cancel:true});
-  const owner=owners.get(request.webContentsId);if(owner?.redirects?.block(request)||owner?.traffic&&!owner.traffic.allowed())return done({cancel:true});const cancel=!!owner&&blockHiddenMedia(request,owner.role);if(cancel)resourceCount('mediaGetBlocked');done({cancel});
+  const owner=owners.get(request.webContentsId);
+  if(owner?.entryFrameAllowed&&external(request.url)&&['mainFrame','subFrame'].includes(request.resourceType)&&!owner.entryFrameAllowed(request.url))return done({cancel:true});
+  if(owner?.redirects?.block(request)||owner?.traffic&&!owner.traffic.allowed())return done({cancel:true});const cancel=!!owner&&blockHiddenMedia(request,owner.role);if(cancel)resourceCount('mediaGetBlocked');done({cancel});
  });
  profile.webRequest.onBeforeRedirect(details=>owners.get(details.webContentsId)?.redirects?.redirect(details));
  const finished=details=>owners.get(details.webContentsId)?.redirects?.finish(details.id);
@@ -32,7 +34,7 @@ export function hiddenResources(contents,traffic,redirects){
  if(owners.has(contents.id))return owners.get(contents.id).controller;
  const owner={role:'hidden_read',traffic,redirects};owners.set(contents.id,owner);trackPage(contents,'hidden');
  const close=()=>owners.delete(id);contents.once('destroyed',close);
- owner.controller={entry:()=>{owner.role='entry';},close};return owner.controller;
+ owner.controller={entry:allowFrame=>{owner.role='entry';owner.entryFrameAllowed=allowFrame;},close};return owner.controller;
 }
 export function observeResourceBytes(contents){
  if(measured.has(contents))return;measured.add(contents);

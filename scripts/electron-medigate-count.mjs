@@ -15,6 +15,7 @@ import {SiteWait,workerWait} from '../src/site-wait.js';
 const list='https://new.medigate.net/symposium';
 const november='https://www.medigate.net/event/20261103092020307';
 const december='https://www.medigate.net/event/20261205092020307';
+const outside='https://lecture.example.invalid/watch';
 const endpoint='https://apis.medigate.net/w/event/webinar-start-count';
 const syntheticDay='2026-12-08';
 const document=body=>'<html><meta charset="utf-8">'+body+'</html>';
@@ -27,8 +28,9 @@ export async function medigateCountCases({root,check}){
  check('month-specific official setting survives restart and is not used for January',new MedigateCountPages(file).get('2026-12')===december&&!options.get('2027-01'));
  for(const scenario of ['increases','unchanged','mismatch','account-change','cancelled','next-month','redirect','wrong-period','server-wait']){
   const partition='entry-aggregate-'+randomUUID(),profile=session.fromPartition(partition);
-  let countReads=0,docs=0,posts=0,clicks=0,closed=0,status,epoch=0,watch;
+  let countReads=0,docs=0,posts=0,outsideRequests=0,clicks=0,closed=0,status,epoch=0,watch;
   await profile.protocol.handle('https',({url,method})=>{
+   if(url===outside){outsideRequests++;return new Response('',{status:403});}
    if(method!=='GET'){posts++;return new Response('',{status:403});}
    if(url===endpoint){
     const count=countReads++>0&&scenario!=='unchanged'?4:3;
@@ -37,7 +39,13 @@ export async function medigateCountCases({root,check}){
     return new Response(JSON.stringify({data:{count}}),{headers:dbHeader});
    }
    let body='';
-   if(url===list)body='<article><h3>합성 강의</h3><p class="date">'+syntheticDay+' 13:00 ~ 14:00</p><a href="/symposium/123">상세보기</a><button onclick="window.syntheticClicks=(window.syntheticClicks||0)+1">입장하기</button></article>'+'<a href="'+december+'">2026년 12월 웨비나 월간 참여 현황</a><a href="'+november+'">2026년 11월 웨비나 월간 참여 현황</a>';
+   if(url===list)body=`<article><h3>합성 강의</h3><p class="date">${syntheticDay} 13:00 ~ 14:00</p><a href="/symposium/123">상세보기</a><button id="entry">입장하기</button></article>
+    <a href="${december}">2026년 12월 웨비나 월간 참여 현황</a><a href="${november}">2026년 11월 웨비나 월간 참여 현황</a>
+    <script>document.getElementById('entry').onclick=()=>{
+     window.syntheticClicks=(window.syntheticClicks||0)+1;
+     window.open(${JSON.stringify(outside)});
+     document.body.append(Object.assign(document.createElement('iframe'),{src:${JSON.stringify(outside)}}));
+    };</script>`;
    if(url===december){
     docs++;
     const month=scenario==='wrong-period'?11:12;
@@ -48,7 +56,7 @@ export async function medigateCountCases({root,check}){
    return new Response(document(body),{headers:{'Content-Type':'text/html; charset=utf-8'}});
   });
   const gate=new SiteWait(join(root,'medigate-wait-'+scenario+'.json'));
-  const create=signal=>new AutomationPage('medigate',signal,{...remotePreferences('medigate'),partition},{traffic:workerWait(gate,'medigate',signal,()=>epoch)});
+  const create=signal=>new AutomationPage('medigate',signal,{...remotePreferences('medigate'),partition},{traffic:workerWait(gate,'medigate',signal,()=>epoch),externalEntryAllowed:(_site,url)=>url===outside});
   const controller=new AbortController();
   try{
    if(['next-month','redirect','wrong-period'].includes(scenario)){
@@ -99,7 +107,10 @@ export async function medigateCountCases({root,check}){
    check('original Medigate click only once after durable record '+scenario,clicks===1&&status==='attempting'&&result.entryAttempted&&posts===0);
    check('only a genuine monthly increase confirms Medigate '+scenario,result.status===(scenario==='increases'?'complete':'unknown')&&closed===1);
    check('Medigate watcher releases scheduler and repeat after result '+scenario,!runner.active&&!runner.medigateWatch&&runner.due()===null);
-   if(scenario==='increases')check('first increase closes without extra status loads',countReads===2&&docs===2);
+   if(scenario==='increases'){
+    check('first increase closes without extra status loads',countReads===2&&docs===2);
+    check('saved external host cannot authorize an automatic popup or frame',outsideRequests===0);
+   }
    if(scenario==='account-change'||scenario==='cancelled')check('scope loss causes zero follow-up reads '+scenario,countReads===1);
   }finally{controller.abort();profile.protocol.unhandle('https');}
  }

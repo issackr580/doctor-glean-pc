@@ -36,7 +36,7 @@ export class AutomationPage{
   try{this.#guard(window);return window;}catch{window.destroy();throw failure('worker_closed');}
  }
  #guard(window){
-  this.windows.push(window);const contents=window.webContents;const resources=hiddenResources(contents,this.traffic);if(this.entryDispatchArmed)resources.entry();window.once('closed',resources.close);
+  this.windows.push(window);const contents=window.webContents;const resources=hiddenResources(contents,this.traffic);if(this.entryDispatchArmed)resources.entry(this.entryFrameAllowed);window.once('closed',resources.close);
   const guard=(event,url)=>{const target=typeof url==='string'?url:event.url;if(!this.allowsEntryNavigation(target)){this.runtime.navigationBlocked=Math.min(1000,this.runtime.navigationBlocked+1);this.navigationBlocks.set(contents,(this.navigationBlocks.get(contents)??0)+1);const load=this.pendingLoads.get(contents);if(load&&this.site==='dtalks'&&dtalksLoginRedirect(target))load.secureLoginRedirect=true;event.preventDefault();this.#diagnostic('navigation_blocked',{destinationKind:destinationKind(target)});}};
   contents.on('will-navigate',guard);contents.on('will-redirect',(event,url,_inPlace,main)=>{if((main??event.isMainFrame)!==false)guard(event,url);});
   contents.on('will-attach-webview',event=>event.preventDefault());
@@ -45,7 +45,7 @@ export class AutomationPage{
   contents.on('render-process-gone',()=>this.#diagnostic('renderer_gone'));
   contents.on('did-fail-load',(_event,code,_description,_url,main)=>{if(main!==false&&code!==-3){this.runtime.mainFrameFailures=Math.min(1000,this.runtime.mainFrameFailures+1);this.#diagnostic('network_error',{mainFrame:true,networkKind:networkKind(code)});}});
   contents.on('console-message',(event,details)=>{const level=typeof details==='number'?details:details?.level??event.level;if(level==='error'||level===3)this.runtime.consoleErrors=Math.min(1000,this.runtime.consoleErrors+1);});
-  contents.setWindowOpenHandler(({url})=>{if((!this.traffic||this.traffic.allowed())&&(!this.channelAuthorized||this.channelAuthorized()&&this.current===window)&&this.popupAllowed&&this.windows.length<3&&(allowedPopup(this.site,url,contents.getURL())||this.entryDispatchArmed&&this.externalEntryAllowed(this.site,url)))return {action:'allow',overrideBrowserWindowOptions:{show:false,width:1100,height:1800,webPreferences:{...this.preferences,backgroundThrottling:false}}};this.runtime.popupDenied=Math.min(1000,this.runtime.popupDenied+1);return {action:'deny'};});
+  contents.setWindowOpenHandler(({url})=>{if((!this.traffic||this.traffic.allowed())&&(!this.channelAuthorized||this.channelAuthorized()&&this.current===window)&&this.popupAllowed&&this.windows.length<3&&(allowedPopup(this.site,url,contents.getURL())||this.entryDispatchArmed&&!this.entryFrameAllowed&&this.externalEntryAllowed(this.site,url)))return {action:'allow',overrideBrowserWindowOptions:{show:false,width:1100,height:1800,webPreferences:{...this.preferences,backgroundThrottling:false}}};this.runtime.popupDenied=Math.min(1000,this.runtime.popupDenied+1);return {action:'deny'};});
   contents.on('did-create-window',child=>{try{this.#guard(child);if(this.focusPopup&&(this.site!=='doctorville'||!this.entryDispatchArmed||this.current===window))this.current=child;this.#diagnostic('popup_opened',{popup:true});}catch{child.destroy();this.dialogResult={status:'unknown',reason:'worker_closed'};}});
   // Browser dialogs are read only to fixed classifications, never logged raw.
   // Unknown confirmations are dismissed; only a task-specific original claim
@@ -123,8 +123,12 @@ export class AutomationPage{
   }finally{if(this.pendingLoads.get(contents)===context)this.pendingLoads.delete(contents);}
   await bounded(this.current.webContents.debugger.sendCommand('Page.enable'),this.signal,10000);
  }
- armEntryDispatch(){this.dispatchDocument=this.entryBinding();this.entryDispatchArmed=true;this.entryArmedAt??=Date.now();for(const w of this.windows)if(!w.isDestroyed())hiddenResources(w.webContents).entry();}
- allowsEntryNavigation(url){return allowedNavigation(this.site,url)||this.entryDispatchArmed&&this.externalEntryAllowed(this.site,url);}
+ armEntryDispatch({providerOnly=false}={}){
+  this.dispatchDocument=this.entryBinding();this.entryDispatchArmed=true;this.entryArmedAt??=Date.now();
+  this.entryFrameAllowed=providerOnly?url=>allowedNavigation(this.site,url):undefined;
+  for(const window of this.windows)if(!window.isDestroyed())hiddenResources(window.webContents).entry(this.entryFrameAllowed);
+ }
+ allowsEntryNavigation(url){return allowedNavigation(this.site,url)||this.entryDispatchArmed&&!this.entryFrameAllowed&&this.externalEntryAllowed(this.site,url);}
  async doctorvilleArrival(job,authorize,consume){
   if(this.site!=='doctorville'||job.site!==this.site||!this.entryDispatchArmed||!officialIdentity(job)||this.channelFollowed)return;
   this.channelFollowed=true;
