@@ -11,39 +11,80 @@
 </head>
 <body>
   <main>
-    <header><div><p class="eyebrow" id="edition">PC 검증용</p><h1 id="app-name">의사 이삭 줍기</h1></div><span id="date"></span></header>
-    <section class="summary" aria-labelledby="summary-title">
-      <h2 id="summary-title">강의 조회</h2>
-      <button id="quick" class="primary" type="button">오늘 한 번에 실행</button><p class="notice">오늘 강의 조회·출석 상태 확인과 켜 둔 자동 기능을 함께 실행해요.</p>
-      <p>① 사이트 열기 → ② 사이트에서 로그인 → ③ 그 창 위쪽의 「로그인 마침 · 이 사이트 조회」를 눌러 주세요.</p>
-      <p class="notice">「로그인 마침」은 브라우저 세션 보관이에요. 아이디·비밀번호를 저장하려면 사이트별 「계정 저장·복구」를 이용해 주세요. 로그인 유지 기간은 사이트 정책을 따라요.</p>
-      <p class="notice">휴대폰과 설정·실행 내역을 공유하지 않아요. 양쪽에서 자동 실행을 켜면 같은 작업이 각각 실행될 수 있어요.</p>
-      <div class="query-controls"><label for="query-date">조회 날짜</label><input id="query-date" type="date"><button id="collect" class="primary" type="button">강의 조회</button><button id="cancel" type="button" disabled>조회 중지</button></div>
-    </section>
+    <header class="app-header">
+      <div class="app-brand">
+        <span class="app-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <div><h1 id="app-name">의사 이삭 줍기</h1><p class="eyebrow" id="edition">Windows PC</p></div>
+      </div>
+      <span id="run-state" class="run-state"></span>
+    </header>
+    <nav class="app-nav" aria-label="관리 화면">
+      <div role="tablist" aria-label="관리 화면">
+        <button type="button" role="tab" id="tab-agenda" aria-controls="panel-agenda" aria-selected="true">강의 일정</button>
+        <button type="button" role="tab" id="tab-automation" aria-controls="panel-automation" aria-selected="false" tabindex="-1">자동 실행</button>
+        <button type="button" role="tab" id="tab-sites" aria-controls="panel-sites" aria-selected="false" tabindex="-1">사이트·계정</button>
+        <button type="button" role="tab" id="tab-settings" aria-controls="panel-settings" aria-selected="false" tabindex="-1">설정·도움말</button>
+      </div>
+    </nav>
     <p id="message" role="status" aria-live="polite"></p>
-    <p id="progress" role="status" aria-live="polite"></p>
-    <section id="sites" aria-label="사이트 목록"></section>
-    <section class="schedule" aria-labelledby="schedule-title"><div class="section-heading"><h2 id="schedule-title">강의 목록</h2><button id="copy" type="button">간략 목록 복사</button></div><div id="lectures"></div></section>
-    <section class="control" aria-labelledby="control-title">
-      <h2 id="control-title">자동 실행</h2>
-      <p id="automation-state">자동 실행을 중지한 상태예요.</p>
-      <p class="muted">기능을 선택하고 자동 실행을 허용해 주세요. PC가 켜져 있고 이 프로그램이 실행 중이어야 해요. 절전·종료로 기한을 놓친 작업은 몰아서 실행하지 않아요.</p>
-      <div id="features" class="features"></div>
-      <div class="query-controls"><button id="resume" class="primary" type="button">자동 실행 허용</button><button id="stop" type="button">전체 중지</button></div>
-      <h3>자동 입장 사이트</h3><div id="entry-sites" class="features"></div><p class="muted">조회 후 오늘 예약을 갱신해요. 클릭·강의창 이동·재생 확인은 각각 기록해요. 한미는 시작·25분에 입장하고, 25분 회차의 명확한 실패 때만 35분에 한 번 더 확인해요. 디톡스 자동 입장은 중단하며 직접 열기·조회는 유지해요.</p>
+    <section id="panel-agenda" role="tabpanel" aria-labelledby="tab-agenda" class="app-panel">
+      <p id="date" class="agenda-date"></p>
+      <div class="agenda-heading">
+        <h2 id="schedule-title">오늘 강의</h2>
+        <p id="schedule-count" class="muted"></p>
+      </div>
+      <div class="agenda-toolbar">
+        <div class="query-controls">
+          <button id="today" type="button">오늘</button>
+          <input id="query-date" type="date" aria-label="조회 날짜">
+          <button id="collect" class="primary" type="button">강의 조회</button>
+          <button id="cancel" type="button" hidden>조회 중지</button>
+        </div>
+        <div class="agenda-actions">
+          <button id="quick" type="button" title="오늘 강의 조회와 켜 둔 자동 기능을 함께 실행해요.">오늘 한 번에 실행</button>
+          <button id="copy" type="button">목록 복사</button>
+        </div>
+      </div>
+      <p id="progress" role="status" aria-live="polite"></p>
+      <section class="agenda-card" aria-labelledby="schedule-title">
+        <div class="agenda-columns" aria-hidden="true"><span>시작</span><span>강의</span><span>사이트</span></div>
+        <div id="lectures"></div>
+      </section>
     </section>
-    <section class="control section-space"><div class="section-heading"><h2>오늘 출석·퀴즈·브랜드관</h2><button id="daily-check" type="button">상태만 확인</button></div><p id="daily-progress" role="status"></p><div id="daily-selection" class="features"></div><div id="daily-results"></div></section>
-    <section class="schedule"><h2>오늘 자동 입장 예약·실행</h2><div id="entry-results"></div><p id="lounge-result" class="muted"></p></section>
-    <section class="control"><h2>날짜 메모</h2><textarea id="date-memo" maxlength="2000" rows="3" aria-label="선택 날짜 메모"></textarea><button id="save-memo" type="button">메모 저장</button></section>
-    <section class="control"><h2>설문 직접 참여</h2><div id="survey-results"></div></section>
-    <details class="control"><summary>메디게이트 월간 수강 집계</summary>
-      <label>이번 달 행사 주소 <input id="medigate-counter-page" type="url" placeholder="https://www.medigate.net/event/…"></label>
-      <button id="save-medigate-counter-page" type="button">저장</button>
-      <p class="muted">공식 페이지를 자동으로 찾지 못하면 이번 달 행사 주소를 입력해 주세요. 빈 값으로 저장하면 자동 확인으로 돌아갑니다.</p>
-    </details>
-    <label>앱 데이터 사용 <select id="data-mode"><option value="always">항상 허용</option><option value="wifi">Wi-Fi에서만 허용</option><option value="off">모두 끄기</option></select></label><p id="data-mode-status" role="status"></p>
-    <details><summary>로컬 사용량 진단</summary><p id="usage-status"></p><button id="usage-toggle" type="button">7일간 기록</button> <button id="usage-delete" type="button">기록 삭제</button></details>
-    <footer><span id="version"></span><button id="report" class="text-button" type="button">오류보고 저장</button><button id="update-check" type="button">PC 업데이트 확인</button><button id="update-install" type="button" hidden>다운로드·업데이트</button><button id="update-page" type="button" hidden>공식 배포 페이지 열기</button><p id="update-result" role="status"></p><button id="quit" type="button">프로그램 종료</button><p>X는 트레이에 숨기기예요. 업데이트는 버튼을 누를 때만 진행해요.</p></footer>
+    <section id="panel-automation" role="tabpanel" aria-labelledby="tab-automation" class="app-panel" hidden>
+      <div class="section-heading panel-heading"><h2 class="panel-title">자동 실행</h2>
+        <div class="query-controls"><button id="resume" class="primary" type="button">자동 실행 허용</button><button id="stop" type="button">전체 중지</button></div>
+      </div>
+      <details class="control"><summary>자동 실행 설정</summary>
+        <p id="automation-state">자동 실행을 중지한 상태예요.</p>
+        <p class="muted">기능을 선택하고 자동 실행을 허용해 주세요. PC가 켜져 있고 이 프로그램이 실행 중이어야 해요. 절전·종료로 기한을 놓친 작업은 몰아서 실행하지 않아요.</p>
+        <div id="features" class="features"></div>
+        <h3>자동 입장 사이트</h3><div id="entry-sites" class="features"></div><p class="muted">조회 후 오늘 예약을 갱신해요. 클릭·강의창 이동·재생 확인은 각각 기록해요. 한미는 시작·25분에 입장하고, 25분 회차의 명확한 실패 때만 35분에 한 번 더 확인해요. 디톡스 자동 입장은 중단하며 직접 열기·조회는 유지해요.</p>
+      </details>
+      <section class="schedule"><h2>오늘 자동 입장 예약·실행</h2><div id="entry-results"></div><p id="lounge-result" class="muted"></p></section>
+      <section class="control section-space"><div class="section-heading"><h2>오늘 출석·퀴즈·브랜드관</h2><button id="daily-check" type="button">상태만 확인</button></div><p id="daily-progress" role="status"></p><div id="daily-selection" class="features"></div><div id="daily-results"></div></section>
+    </section>
+    <section id="panel-sites" role="tabpanel" aria-labelledby="tab-sites" class="app-panel" hidden>
+      <h2 class="panel-title">사이트·계정</h2>
+      <details class="control site-help"><summary>로그인 방법</summary>
+        <p>사이트에서 로그인한 뒤 그 창 상단의 「로그인 마침 · 이 사이트 조회」를 누르세요.</p>
+        <p class="muted">비밀번호를 저장하려면 사이트별 「계정 저장·복구」를 이용하세요. 휴대폰과 설정·실행 내역은 각각 관리돼요.</p>
+      </details>
+      <section id="sites" aria-label="사이트 목록"></section>
+    </section>
+    <section id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" class="app-panel" hidden>
+        <h2 class="panel-title">설정·도움말</h2>
+      <details class="control"><summary>날짜 메모</summary><textarea id="date-memo" maxlength="2000" rows="3" aria-label="선택 날짜 메모"></textarea><button id="save-memo" type="button">메모 저장</button></details>
+      <details class="control"><summary>설문 직접 참여</summary><div id="survey-results"></div></details>
+      <details class="control"><summary>메디게이트 월간 수강 집계</summary>
+        <label>이번 달 행사 주소 <input id="medigate-counter-page" type="url" placeholder="https://www.medigate.net/event/…"></label>
+        <button id="save-medigate-counter-page" type="button">저장</button>
+        <p class="muted">공식 페이지를 자동으로 찾지 못하면 이번 달 행사 주소를 입력해 주세요. 빈 값으로 저장하면 자동 확인으로 돌아갑니다.</p>
+      </details>
+      <div class="control"><label>앱 데이터 사용 <select id="data-mode"><option value="always">항상 허용</option><option value="wifi">Wi-Fi에서만 허용</option><option value="off">모두 끄기</option></select></label><p id="data-mode-status" role="status"></p></div>
+      <details class="control"><summary>로컬 사용량 진단</summary><p id="usage-status"></p><button id="usage-toggle" type="button">7일간 기록</button> <button id="usage-delete" type="button">기록 삭제</button></details>
+      <footer><span id="version"></span><button id="report" class="text-button" type="button">오류보고 저장</button><button id="update-check" type="button">PC 업데이트 확인</button><button id="update-install" type="button" hidden>다운로드·업데이트</button><button id="update-page" type="button" hidden>공식 배포 페이지 열기</button><p id="update-result" role="status"></p><button id="quit" type="button">프로그램 종료</button><p>X는 트레이에 숨기기예요. 업데이트는 버튼을 누를 때만 진행해요.</p></footer>
+    </section>
   </main>
   <dialog id="report-dialog"><h2>오류보고 미리보기</h2><p>버전·작업 상태와 시도 결과를 확인해 주세요. 복사·저장은 현재 미리 본 내용을 사용해요.</p><textarea id="report-preview" rows="18" readonly aria-label="오류보고 미리보기"></textarea><div class="query-controls"><button id="report-copy" type="button">복사</button><button id="report-save" type="button">TXT 저장</button><button id="report-close" type="button">닫기</button></div></dialog>
   <dialog id="credential-dialog" aria-labelledby="credential-title">
