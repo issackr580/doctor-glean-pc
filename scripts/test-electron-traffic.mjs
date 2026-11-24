@@ -1,3 +1,4 @@
+import {compareHttpReads} from './electron-http-reads.mjs';
 import {app,BrowserWindow,ipcMain} from 'electron';
 import {createServer} from 'node:http';
 import {mkdtempSync,writeFileSync,mkdirSync} from 'node:fs';
@@ -155,6 +156,7 @@ app.on('window-all-closed',()=>{});
 async function run(){
 try{
  await app.whenReady();await compareBrowser();await duplicateWindows();await resumeCatalog();await comparePolicies();
+ if(!legacy)await compareHttpReads({moduleOf,temp,equal,report:report.httpReads={}});
  const dir=fileURLToPath(new URL('../verification/',import.meta.url));mkdirSync(dir,{recursive:true});
  writeFileSync(join(dir,'traffic-'+(legacy?'baseline':'candidate')+'.json'),JSON.stringify(report,null,2)+'\n');
  if(!legacy)writeFileSync(join(dir,'electron-traffic.json'),JSON.stringify({runtime:{platform:process.platform,electron:process.versions.electron},checks,report},null,2)+'\n');

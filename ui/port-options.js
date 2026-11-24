@@ -1,16 +1,13 @@
 const el=(tag,text)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;return n;};
 export function setupPortOptions(api,perform){
  let current;
- const memo=document.getElementById('date-memo'),hosts=document.getElementById('entry-host-list');
+ const memo=document.getElementById('date-memo'),counter=document.getElementById('medigate-counter-page');
+ document.getElementById('save-medigate-counter-page').onclick=()=>perform(()=>api.setMedigateCounterPage(counter.value.trim()),'이번 달 집계 주소를 저장했어요.');
  document.getElementById('save-memo').onclick=()=>perform(()=>api.saveMemo(current.date,memo.value),'메모를 저장했어요.');
- document.getElementById('save-entry-hosts').onclick=()=>{
-  const rows=hosts.value.split('\n').map(s=>s.trim()).filter(Boolean).map(s=>({host:s.replace(/^https?:\/\//,''),http:s.startsWith('http://')}));
-  return perform(()=>api.setEntryHosts(rows),'입장 서버 설정을 저장했어요. 차단된 요청을 다시 보내지 않아요.');
- };
  return state=>{
   current=state;if(!state.options)return;
+  if(document.activeElement!==counter)counter.value=state.medigateCounterPage??'';
   if(document.activeElement!==memo){memo.value=state.options.memos[state.date]??'';}
-  if(document.activeElement!==hosts)hosts.value=state.options.entryHosts.map(r=>(r.http?'http://':'https://')+r.host).join('\n');
   document.getElementById('daily-selection').replaceChildren(...state.dailyTasks.map(task=>{
    const label=el('label'),input=el('input');input.type='checkbox';input.checked=state.options.dailyKeys.includes(task.key);input.onchange=()=>perform(()=>api.selectDaily(input.checked?[...state.options.dailyKeys,task.key]:state.options.dailyKeys.filter(k=>k!==task.key)),'일일 작업 선택을 저장했어요.');label.append(input,document.createTextNode(task.label));return label;
   }));

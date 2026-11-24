@@ -70,3 +70,18 @@ test('partial rows survive a loading transition followed by an execution error',
 test('login recovery closes the expired page and restarts its query once',async()=>{const s=setup([{status:'login',done:true,events:[]},{status:'ok',done:true,coverage:true,events:[]}]);let recovery=0;s.runner.recoverLogin=async()=>{recovery++;return true;};await s.runner.start(date,['doctorville']);assert.equal(recovery,1);assert.deepEqual(s.calls,['open:doctorville','close:doctorville','open:doctorville','close:doctorville']);assert.equal(s.saved.at(-1).status,'ok');});
 test('a second login failure does not request another automatic recovery',async()=>{const s=setup([{status:'login',done:true,events:[]},{status:'login',done:true,events:[]}]);let recovery=0;s.runner.recoverLogin=async()=>{recovery++;return true;};await s.runner.start(date,['doctorville']);assert.equal(recovery,1);assert.equal(s.saved.at(-1).status,'login');});
 test('native network failures retain only a fixed failure code',async()=>{const s=setup([]);s.runner.createPage=async()=>({open:async()=>{throw Object.assign(Error('private error text'),{code:'network_error',failure:'dns_error'});},close(){}});await s.runner.start(date,['doctorville']);assert.equal(s.saved[0].diagnostics.failure,'dns_error');assert.doesNotMatch(JSON.stringify(s.saved),/private error/);});
+
+test('entry preemption can resume only the sites not yet processed',async()=>{
+ const s=setup([{status:'ok',done:true,coverage:true,events:[]}]);
+ let remaining;
+ const original=s.runner.onChange;
+ s.runner.onChange=state=>{
+  original(state);
+  if(state.running&&state.completed===1&&!remaining){
+   remaining=s.runner.remainingSites();s.runner.cancel('entry_priority');
+  }
+ };
+ await s.runner.start(date,['doctorville','keymedi','medigate']);
+ assert.deepEqual(remaining,['keymedi','medigate']);
+ assert.deepEqual(s.runner.remainingSites(),[]);
+});

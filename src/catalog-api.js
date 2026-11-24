@@ -37,3 +37,14 @@ export function completeDocple(pages,wanted){
  if(pages.length!==Math.max(1,first.totalPages)||rows.length!==first.totalCount||new Set(rows.map(r=>r.id)).size!==rows.length||pages.some((p,i)=>p.totalCount!==first.totalCount||p.totalPages!==first.totalPages||p.rows.length!==(i===pages.length-1?first.totalCount-i*6:6)))fail();
  return {site:'docple',status:'ok',done:true,coverage:true,events:rows.filter(r=>r.date===wanted),reason:'list_read',diagnostics:{rows:rows.length,totalRows:rows.length,unknown:0,pages:pages.length,listStatus:'checked',cardLayout:'docple_live_cards',stopReason:'docple_list_exhausted'}};
 }
+
+
+// Match the reviewed calendar reader's month and date checks. The host only
+// uses this result for status display. It grants no permission to submit.
+export function docpleAttendedToday(body,wanted){
+ if(!date(wanted))fail();
+ const month=wanted.slice(0,7),data=body?.data,days=data?.attendedDates;
+ if(body?.success===false||data?.yearMonth!==month.replace('-','')||!Array.isArray(days)||days.length>31||
+    new Set(days).size!==days.length||days.some(day=>!date(day)||!day.startsWith(month+'-')||day>wanted))fail();
+ return days.includes(wanted);
+}

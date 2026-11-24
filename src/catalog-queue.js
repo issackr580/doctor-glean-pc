@@ -3,12 +3,14 @@ export class CatalogQueue {
  constructor({start,busy,onChange=()=>{},context=()=>0,resultValid=()=>false,now=Date.now,validDate}){
   Object.assign(this,{start,busy,onChange,context,resultValid,now,validDate});this.running=new Map();this.recent=new Map();this.pending=new Map();this.generation=0;this.automaticGeneration=0;
  }
- request(date,ids,{automatic=false,morningAt}={}){
+ request(date,ids,{automatic=false,morningAt,joinRunning=automatic}={}){
   if(this.disposed||!this.validDate(date))return false;
   let queued=false;
   for(const id of ids){
    const scope=this.context(id),current=this.running.get(id),cached=this.recent.get(id),age=this.now()-(cached?.at??0);
-   if(automatic&&(current?.date===date&&current.scope===scope||cached?.date===date&&cached.scope===scope&&age>=0&&age<60000&&this.resultValid(date,id)))continue;
+   const runningSame=current?.date===date&&current.scope===scope;
+   const freshAutomatic=automatic&&cached?.date===date&&cached.scope===scope&&age>=0&&age<60000&&this.resultValid(date,id);
+   if(joinRunning&&runningSame||freshAutomatic)continue;
    queued=true;const old=this.pending.get(id);
    this.pending.set(id,{date,scope,morningAt:morningAt??(old?.date===date?old.morningAt:undefined),retried:false,automatic:automatic&&!(old?.date===date&&!old.automatic)});
   }

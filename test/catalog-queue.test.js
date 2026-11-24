@@ -34,3 +34,16 @@ test('automatic duplicates share a running or fresh scoped result, manual refres
  ask(false);await settle();scope++;ask();await settle();result=false;ask();await settle();
  result=true;now+=60000;ask();await settle();assert.equal(calls.length,5);q.close();
 });
+
+test('same-date manual refresh shares the running site but an interrupted site can resume',async()=>{
+ let release;const calls=[];
+ const queue=new CatalogQueue({busy:()=>false,validDate:()=>true,start:async(_date,sites)=>{
+  calls.push(sites);if(calls.length===1)await new Promise(resolve=>{release=resolve;});
+ }});
+ const date='2026-11-24';
+ queue.request(date,['docple','keymedi']);
+ assert.equal(queue.request(date,['keymedi'],{joinRunning:true}),false);
+ assert.equal(queue.request(date,['keymedi']),true);
+ release();await new Promise(resolve=>setImmediate(resolve));queue.pump();queue.close();
+ assert.deepEqual(calls,[['docple','keymedi'],['keymedi']]);
+});
