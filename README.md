@@ -14,6 +14,7 @@ PC 전용 [공개 소스 저장소](https://github.com/issackr580/doctor-glean-p
 4. [개발 방침](docs/DEVELOPMENT_POLICY.md)과 [결정 기록](docs/DECISIONS.md): 확정 범위
 5. [개발자 로그 수집](docs/DIAGNOSTICS.md): 재현 전 기록 켜기·JSON 내보내기·공유 기준
 6. [배포 절차](docs/RELEASE_PROCESS.md)와 [이번 기록](docs/releases/0.1.0-preview.39.md): 소스 기준점·검증·릴리스
+7. [PC판 로드맵](docs/IMPLEMENTATION_PLAN.md)
 
 ```sh
 npm ci
