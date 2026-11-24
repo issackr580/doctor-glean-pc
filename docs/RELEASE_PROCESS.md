@@ -153,3 +153,7 @@ node scripts/build-app-patch.mjs --from=/old/artifact/developer --to=/new/artifa
 ## preview.34 게시 확인
 
 [두 에디션의 검증 결과와 릴리스 자산](releases/0.1.0-preview.34.md)을 기록했다.
+
+## preview.40 게시 확인
+
+두 에디션의 서버 자산, 서명 피드, 호환 버전과 실기기 미확인 범위를 기록했다. 수동 첨부 workflow는 게시 후 제거했다. [실행 소스와 검증 기록](releases/0.1.0-preview.40.md)
