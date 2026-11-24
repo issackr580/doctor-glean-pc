@@ -7,3 +7,140 @@
 dialog{max-width:560px;width:calc(100% - 64px);border:1px solid #c9ded7;border-radius:18px;padding:24px;color:#193d35;background:#fff}dialog::backdrop{background:#123b335c}#credential-form>label:not(.feature){display:grid;gap:6px;margin:14px 0}#credential-form input:not([type=checkbox]){width:100%;box-sizing:border-box;border:1px solid #b4d2c8;border-radius:8px;padding:10px;font:inherit}#credential-result{min-height:24px;color:#86511c}dialog hr{border:0;border-top:1px solid #dce8e3;margin:22px 0}
 
 textarea{box-sizing:border-box;width:100%;padding:10px;border:1px solid #b4d2c8;border-radius:8px;color:inherit;background:#fff;font:inherit;resize:vertical}#report-preview{font:12px/1.6 monospace}details.control summary{cursor:pointer;font-weight:600}#daily-selection label{display:flex;align-items:center;gap:8px;font-size:13px}
+
+/* The default workspace keeps the agenda above the fold at the PC window size. */
+:root {
+  --app-bg: #f4f7f5;
+  --paper: #fff;
+  --ink: #172c24;
+  --secondary: #53685e;
+  --accent: #10654e;
+  --line: #dbe6df;
+  --pale: #eaf4ee;
+  color: var(--ink);
+  background: var(--app-bg);
+}
+[hidden] { display: none !important; }
+main { max-width: 1040px; padding: 20px 26px 36px; }
+.app-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 0 16px;
+}
+.app-brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.app-brand h1 { margin: 0 0 2px; font-size: 19px; line-height: 1.32; }
+.app-brand .eyebrow { color: var(--secondary); line-height: 1.35; }
+.app-mark {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  border-radius: 9px;
+  background: var(--accent);
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  padding: 0 10px;
+}
+.app-mark i { height: 2px; border-radius: 2px; background: #e4f3e9; }
+.app-mark i:last-child { width: 65%; }
+.run-state {
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font-size: 12px;
+  color: var(--secondary);
+  white-space: nowrap;
+}
+.run-state.enabled { color: var(--accent); background: var(--pale); }
+.app-nav { position: sticky; top: 0; z-index: 2; background: var(--app-bg); }
+.app-nav [role=tablist] { display: flex; gap: 3px; border-bottom: 1px solid var(--line); }
+.app-nav [role=tab] {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 6px 6px 0 0;
+  padding: 9px 13px;
+  background: transparent;
+  color: var(--secondary);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.app-nav [role=tab]:hover { background: var(--pale); }
+.app-nav [aria-selected=true] { color: var(--accent); border-bottom-color: var(--accent); background: var(--pale); }
+.app-panel { margin-top: 18px; }
+.app-panel > .control { margin-bottom: 10px; }
+.panel-title { font-size: 23px; margin: 0 0 13px; }
+.panel-heading { flex-wrap: wrap; gap: 8px; }
+.panel-heading .query-controls { margin: 0; gap: 6px; }
+.site-help.control { padding: 12px 16px; }
+#panel-automation .schedule { margin: 16px 0 14px; }
+#panel-settings summary + textarea { margin-block: 12px; }
+#message, #progress { min-height: 0; }
+#message:empty, #progress:empty, #schedule-count:empty { margin: 0; }
+#message:not(:empty), #progress:not(:empty) { margin: 8px 0; }
+.agenda-heading { display: flex; align-items: baseline; gap: 10px; }
+.agenda-date { margin: 0 0 3px; font-size: 13px; font-weight: 600; color: var(--accent); }
+#schedule-title { font-size: 28px; line-height: 1.22; margin: 0; }
+#schedule-count { margin: 0; color: var(--secondary); }
+.agenda-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin: 11px 0 9px; }
+.agenda-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.agenda-toolbar .query-controls { margin: 0; gap: 6px; }
+.agenda-card {
+  --time-column: 70px;
+  --site-column: 105px;
+  overflow: hidden;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.agenda-columns {
+  display: grid;
+  grid-template-columns: var(--time-column) minmax(0,1fr) var(--site-column);
+  padding: 8px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--secondary);
+  background: #edf3ef;
+  border-bottom: 1px solid var(--line);
+}
+.agenda-columns span { padding: 0 12px; }
+.agenda-slot { display: grid; grid-template-columns: var(--time-column) minmax(0,1fr); }
+.agenda-slot + .agenda-slot { border-top: 1px solid var(--line); }
+.agenda-time {
+  margin: 0;
+  padding: 12px 10px 10px 12px;
+  color: var(--accent);
+  background: #f8faf8;
+  font-size: 16px;
+  line-height: 1.45;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.agenda-row { display: grid; grid-template-columns: minmax(0,1fr) var(--site-column); align-items: start; }
+.agenda-row + .agenda-row { border-top: 1px solid #edf1ee; }
+.agenda-name { min-width: 0; padding: 11px 12px; }
+.agenda-name .lecture-title { font-size: 14px; font-weight: 600; line-height: 1.55; }
+.agenda-registration { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
+.agenda-registration .site-status { margin: 0; color: var(--secondary); }
+.agenda-registration button { padding: 3px 8px; font-size: 12px; }
+.agenda-source { padding: 10px 10px 8px 12px; display: grid; justify-items: start; gap: 3px; }
+.site-tag { padding: 2px 6px; border-radius: 4px; background: var(--pale); color: var(--accent); font-size: 12px; font-weight: 600; line-height: 1.45; }
+.agenda-empty { padding: 24px 16px; }
+.agenda-empty p { margin: 0; }
+.agenda-empty p + p:not(:empty) { margin-top: 5px; }
+
+@media (max-width: 660px) {
+  main { padding: 15px 18px 30px; }
+  .app-header { flex-direction: row; align-items: center; margin-bottom: 12px; }
+  .app-nav [role=tab] { padding-inline: 9px; }
+  #schedule-title { font-size: 24px; }
+  .agenda-card { --time-column: 58px; --site-column: 94px; }
+  .agenda-time { padding-left: 9px; font-size: 15px; }
+  .agenda-columns span, .agenda-name, .agenda-source { padding-inline: 9px; }
+}
+@media (max-width: 420px) {
+  .app-brand h1 { font-size: 16px; }
+  .app-nav [role=tab] { padding-inline: 5px; }
+}

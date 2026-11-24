@@ -90,12 +90,26 @@ try{
  if(edition.developer){await evaluate('window.doctorGlean.openUpdatePage("https://foreign.invalid/")');check('developer cannot open an unsigned update page or supplied URL',openedPages.length===0);}
  check('renderer supplied update arguments cannot select a URL, local file or executable',(await evaluate('window.doctorGlean.installUpdate("https://foreign.invalid/", "/tmp/private")')).status==='failed'&&openedPages.length===0);
  check('rendered control can acknowledge readiness without supplying a nonce, path or process',(await evaluate('window.doctorGlean.updateReady("untrusted", "/tmp/private", 1)')).ok===true);
+ check('agenda is the only panel visible when the app opens',await evaluate(`!document.querySelector('#panel-agenda').hidden &&
+  ['automation','sites','settings'].every(name=>document.getElementById('panel-'+name).hidden) &&
+  document.querySelector('#schedule-title').textContent==='오늘 강의'`));
+ await evaluate(`document.getElementById('tab-agenda').focus();
+  document.activeElement.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}));void 0`);
+ check('keyboard navigation opens automation and retains tab focus',await evaluate(`document.activeElement.id==='tab-automation' &&
+  !document.getElementById('panel-automation').hidden && document.getElementById('panel-agenda').hidden`));
+ await evaluate(`document.getElementById('tab-settings').click();void 0`);
+ check('settings exposes update and reporting controls and edition-specific diagnostics',await evaluate(`
+  ['#report','#update-check'].every(id=>document.querySelector(id).getClientRects().length>0) &&
+   (!!document.querySelector('#entry-report-select')===${edition.developer})`));
+ await evaluate(`document.getElementById('tab-sites').click();void 0`);
+ check('site controls are visible from the account tab',await evaluate(`document.querySelector('#sites button').getClientRects().length>0`));
  await evaluate('[...document.querySelectorAll("#sites button")].find(b=>b.textContent==="계정 저장·복구").click()');
  check('account settings open in the local control dialog',await evaluate('document.querySelector("#credential-dialog").open'));
  writeFileSync(new URL('../verification/account-settings-'+edition.id+'.png',import.meta.url),(await control.webContents.capturePage()).toPNG());
  check('Linux cannot fall back to plaintext account storage',!initial.credentials.vault.available&&initial.credentials.vault.backend==='unavailable'&&await evaluate('document.querySelector("#credential-save").disabled'));
  await evaluate('document.querySelector("#credential-id").value="SYNTHETIC_ACCOUNT";document.querySelector("#credential-password").value="SYNTHETIC_PASSWORD";document.querySelector("#credential-close").click()');
  check('closing account settings clears both fields',await evaluate('document.querySelector("#credential-id").value===""&&document.querySelector("#credential-password").value===""'));
+ await evaluate(`document.getElementById('tab-agenda').focus();document.getElementById('tab-agenda').click();void 0`);
  const protectedSave=await evaluate('window.doctorGlean.saveCredential("hmp","SYNTHETIC_ACCOUNT","SYNTHETIC_PASSWORD",true)');
  check('credential IPC refuses save when Windows protection is unavailable',!protectedSave.ok&&protectedSave.status==='storage_unavailable'&&!existsSync(join(dataDirectory,'credentials-v1.json')));
  check('untrusted credential site names are rejected',(await evaluate('window.doctorGlean.recoverCredential("__proto__")')).ok===false);
@@ -174,6 +188,31 @@ try{
   check(id+' only selected day collected',done.results[id].events.every(row=>row.date===today));
  }
  check('Keymedi requires P/M reward',done.results.keymedi.events[0].title==='합성 키메디 강의 1');
+ await until(()=>evaluate(`document.querySelectorAll('#lectures article').length===2`));
+ control.setContentSize(780,760);
+ await pause(150);
+ const layout=await evaluate(`({
+  times:[...document.querySelectorAll('.agenda-time time')].map(e=>e.textContent),
+  rows:[...document.querySelectorAll('.agenda-row')].map(e=>({top:e.getBoundingClientRect().top,bottom:e.getBoundingClientRect().bottom})),
+  height:innerHeight
+ })`);
+ writeFileSync(new URL('../verification/agenda-'+edition.id+'.png',import.meta.url),(await control.webContents.capturePage()).toPNG());
+ const expectedTimes=[...new Set(['doctorville','keymedi'].flatMap(id=>done.results[id].events.map(e=>e.time)))].sort();
+ check('default viewport shows both lectures together under their start times '+JSON.stringify(layout),
+  JSON.stringify(layout.times)===JSON.stringify(expectedTimes)&&layout.rows.length===2&&
+  layout.rows.every(row=>row.top>0&&row.bottom<layout.height)&&layout.rows[0].top<layout.height/2);
+ control.setContentSize(600,500);
+ await pause(150);
+ check('minimum viewport has no horizontal overflow and keeps a lecture in view',await evaluate(`
+  document.documentElement.scrollWidth===innerWidth && document.querySelector('.agenda-row').getBoundingClientRect().bottom<innerHeight`));
+ control.setContentSize(780,760);
+ await evaluate(`window.doctorGlean.setDate(${JSON.stringify(tomorrow)})`);
+ await until(()=>evaluate(`document.querySelector('#schedule-title').textContent==='선택일 강의'`));
+ await evaluate(`document.getElementById('today').click();void 0`);
+ await until(()=>evaluate(`document.querySelector('#schedule-title').textContent==='오늘 강의'`));
+ check('Today button restores the selected Korean date and cached lectures',await until(()=>evaluate(`
+  document.getElementById('query-date').value===${JSON.stringify(today)} && document.querySelectorAll('#lectures article').length===2`)));
+
  await evaluate('window.doctorGlean.collect()');
  await until(async()=>{const s=await state();return s.collection.running&&s.collection.site==='doctorville';});
  await evaluate('window.doctorGlean.openSite("keymedi")');

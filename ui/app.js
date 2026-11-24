@@ -20,6 +20,84 @@ function sessionLabel(site){
  const login=s.authSource==='daily_receipt'?'오늘 출석·퀴즈에서 로그인 확인됨':s.authSource==='verified_profile'?'작업용 프로필에서 로그인 확인됨':({authenticated:'마지막 화면에서 로그인 확인됨',login_required:'마지막 화면은 로그인 화면',not_confirmed:'로그인 성공 미확인',loading:'사이트 여는 중'}[s.login]??'로그인 성공 미확인');
  return login+(s.save==='saving'?' · 세션 보관 중':s.save==='flushed'?' · 세션 저장 요청 완료':site.open?' · 로그인 뒤 상단의 「로그인 마침」을 눌러 주세요.':' · 로그인 뒤 다시 조회해 주세요.');
 }
+function setupNavigation(){
+ const tabs=[...document.querySelectorAll('.app-nav [role="tab"]')];
+ function activate(selected){
+  for(const tab of tabs){
+   const active=tab===selected;
+   tab.setAttribute('aria-selected',String(active));
+   tab.tabIndex=active?0:-1;
+   document.getElementById(tab.getAttribute('aria-controls')).hidden=!active;
+  }
+  window.scrollTo(0,0);
+ }
+ for(const [index,tab] of tabs.entries()){
+  tab.onclick=()=>activate(tab);
+  tab.onkeydown=event=>{
+   const offsets={ArrowLeft:-1,ArrowRight:1};
+   let next=index;
+   if(event.key==='Home')next=0;
+   else if(event.key==='End')next=tabs.length-1;
+   else if(Object.hasOwn(offsets,event.key))next=(index+offsets[event.key]+tabs.length)%tabs.length;
+   else return;
+   event.preventDefault();
+   activate(tabs[next]);
+   tabs[next].focus();
+  };
+ }
+}
+const dateLabel=new Intl.DateTimeFormat('ko-KR',{month:'long',day:'numeric',weekday:'long',timeZone:'UTC'});
+function renderAgenda(state,events){
+ const isToday=state.date===state.today;
+ document.getElementById('schedule-title').textContent=isToday?'오늘 강의':'선택일 강의';
+ document.getElementById('date').textContent=dateLabel.format(new Date(state.date+'T00:00:00Z'))+' · 한국 시간';
+ document.getElementById('schedule-count').textContent=events.length?'강의 '+events.length+'개':'';
+ const today=document.getElementById('today');
+ today.disabled=isToday;
+ today.onclick=()=>perform(()=>api.setDate(state.today),'오늘 일정으로 이동했어요.');
+ const groups=new Map();
+ for(const event of events){
+  if(!groups.has(event.time))groups.set(event.time,[]);
+  groups.get(event.time).push(event);
+ }
+ const slots=[];
+ for(const [time,entries] of groups){
+  const slot=node('section',undefined,'agenda-slot'),heading=node('h3',undefined,'agenda-time');
+  const clock=node('time',time);
+  clock.dateTime=state.date+'T'+time+'+09:00';
+  heading.append(clock);
+  const list=node('div',undefined,'agenda-slot-list');
+  for(const event of entries){
+   const row=node('article',undefined,'agenda-row'),detail=node('div',undefined,'agenda-name');
+   detail.append(node('p',event.title,'lecture-title'));
+   if(event.site==='hmp'){
+    const status=event.lectureEnded?'강의 종료':({registered:'신청완료',not_registered:'미신청',closed:'신청마감',unknown:'신청 상태 미확인'})[event.registrationStatus];
+    const meta=node('div',undefined,'agenda-registration');
+    if(status)meta.append(node('span',status,'site-status'));
+    if(event.registrationStatus==='not_registered'&&!event.lectureEnded&&api.requestRegistration){
+     const apply=node('button',registrationButtonLabel(state.registration?.lectures[event.id]));
+     apply.type='button';
+     apply.disabled=event.stale||!!state.registration?.active||!!state.automation?.active||state.collection.running||!!state.credentials?.active||state.registration?.storageUnavailable===true;
+     apply.onclick=()=>perform(()=>api.requestRegistration('catalog',state.registration?.lectureKeys[event.id]),registrationReplyLabel);
+     meta.append(apply);
+    }
+    if(meta.childElementCount)detail.append(meta);
+   }
+   const site=node('div',undefined,'agenda-source');
+   site.append(node('span',event.siteName,'site-tag'));
+   if(event.stale)site.append(node('span','저장된 목록','muted'));
+   row.append(detail,site);list.append(row);
+  }
+  slot.append(heading,list);slots.push(slot);
+ }
+ if(!slots.length){
+  const empty=node('div',undefined,'agenda-empty');
+  empty.append(node('p',state.collection.running?'강의를 조회하고 있어요.':'확인된 강의가 없어요.'),
+   node('p',state.collection.running?'':'「강의 조회」를 누르거나 「사이트·계정」에서 조회 상태를 확인하세요.','muted'));
+  slots.push(empty);
+ }
+ document.getElementById('lectures').replaceChildren(...slots);
+}
 async function refresh(){
  if(refreshing){repeat=true;return;}refreshing=true;
  try{
@@ -36,10 +114,13 @@ async function refresh(){
   document.getElementById('usage-delete').onclick=()=>perform(()=>api.usage('delete'),'사용량 기록을 삭제했어요.');
   document.title=state.appName;document.getElementById('app-name').textContent=state.appName;
   document.getElementById('edition').textContent=state.edition==='developer'?'PC 개발자용 · 검증판':'PC 배포용 · 검증판';
-  document.getElementById('date').textContent=state.date+' · 한국 시간';document.getElementById('version').textContent='PC '+state.version;
+  document.getElementById('version').textContent='PC '+state.version;
   const date=document.getElementById('query-date');date.min=state.today;date.max=state.maxDate;date.value=state.date;
   document.getElementById('collect').disabled=state.collection.running;
-  document.getElementById('cancel').disabled=!state.collection.running;
+  document.getElementById('cancel').hidden=!state.collection.running;
+  const runState=document.getElementById('run-state');
+  runState.textContent=!state.dataAccess.allowed?'데이터 접속 보류':state.siteWaitUntrusted?'자동 요청 보류':state.paused?'자동 실행 중지':'자동 실행 허용';
+  runState.classList.toggle('enabled',state.dataAccess.allowed&&!state.siteWaitUntrusted&&!state.paused);
   document.getElementById('automation-state').textContent=state.siteWaitUntrusted?'PC 시계 또는 사이트 대기 기록을 확인할 수 없어 자동 요청을 보류했어요.':state.paused?'자동 실행을 중지한 상태예요.':'자동 실행을 허용한 상태예요.';
   const rows=state.sites.map(site=>{
    const row=node('div',undefined,'site'),info=node('div',undefined,'site-info'),label=node('label',undefined,'site-name');
@@ -77,15 +158,7 @@ async function refresh(){
    row.append(info,actions);return row;
   });document.getElementById('sites').replaceChildren(...rows);
   const selected=state.sites.filter(site=>site.selected),events=selected.flatMap(site=>(state.results[site.id]?.events??[]).map(event=>({...event,siteName:site.name,stale:state.results[site.id].stale}))).sort((a,b)=>a.time.localeCompare(b.time)||a.siteName.localeCompare(b.siteName));
-  const lectures=events.map(event=>{
-   const row=node('article',undefined,'lecture'),time=node('span',event.time,'lecture-time'),detail=node('div');
-   detail.append(node('p',event.siteName+(event.stale?' · 저장된 목록':''),'lecture-site'),node('p',event.title,'lecture-title'));
-   if(event.site==='hmp'){const status=event.lectureEnded?'강의 종료':({registered:'신청완료',not_registered:'미신청',closed:'신청마감',unknown:'신청 상태 미확인'})[event.registrationStatus];detail.append(node('p',status,'site-status'));}
-   if(event.site==='hmp'&&event.registrationStatus==='not_registered'&&!event.lectureEnded&&api.requestRegistration){const apply=node('button',registrationButtonLabel(state.registration?.lectures[event.id]));apply.type='button';apply.disabled=event.stale||!!state.registration?.active||!!state.automation?.active||state.collection.running||!!state.credentials?.active||state.registration?.storageUnavailable===true;apply.onclick=()=>perform(()=>api.requestRegistration('catalog',state.registration?.lectureKeys[event.id]),registrationReplyLabel);detail.append(apply);}
-   row.append(time,detail);return row;
-  });
-  if(!lectures.length)lectures.push(node('p',state.collection.running?'선택한 날짜의 강의를 확인하고 있어요.':'확인된 강의가 없어요. 사이트별 조회 상태를 확인해 주세요.','muted'));
-  document.getElementById('lectures').replaceChildren(...lectures);
+  renderAgenda(state,events);
   const progress=document.getElementById('progress');
   progress.textContent=state.collection.running?`조회 ${state.collection.completed}/${state.collection.total} · ${state.sites.find(site=>site.id===state.collection.site)?.name??''}`:state.collection.reason==='finished'?'조회 종료 · '+collectionSummary(state.results,selected.map(site=>site.id)):reasonLabels[state.collection.reason]??'';
   if(state.pendingQueries?.length)progress.textContent+=' · 로그인 후 조회 대기 '+state.pendingQueries.length+'곳';
@@ -103,6 +176,7 @@ document.getElementById('stop').addEventListener('click',()=>perform(()=>api.set
 document.getElementById('quick').addEventListener('click',()=>perform(()=>api.quickRun(),'오늘 확인을 시작했어요. 켜 둔 자동 기능만 실행해요.'));
 document.getElementById('daily-check').addEventListener('click',()=>perform(()=>api.checkDaily(true),'출석·퀴즈 상태를 확인해요. 버튼 제출은 하지 않아요.'));
 document.getElementById('quit').addEventListener('click',()=>api.quit());
+setupNavigation();
 setupReports(api,say);
 setupCredentials(api,refresh);
 api?.onChanged(()=>refresh().catch(()=>say('프로그램 상태를 확인하지 못했어요.')));
