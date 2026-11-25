@@ -19,26 +19,38 @@ import {officialIdentity,identityInvalid} from './entry-identity.js';
 import {randomUUID} from 'node:crypto';
 import {doctorvilleDetailNavigation} from './automation-policy.js';
 import {docpleId} from './docple-policy.js';
+import {doctorvilleSurveySource} from './doctorville-survey-page.js';
+import {doctorvilleSurveyId} from './survey-policy.js';
 const assets=new Map();
-const NAMES=new Set(['daily.js','auto-entry.js','pc-entry.js','keymedi-lounge.js','doctorville-quiz-pilot.js','doctorville-quiz-journey.js','doctorville-quiz-page.js','doctorville-survey.js','credential-login.js','credential-keymedi-proof.js','credential-background-keymedi-proof.js','credential-page-state.js','credential-docple-session.js']);
+const NAMES=new Set(['daily.js','auto-entry.js','pc-entry.js','keymedi-lounge.js','doctorville-quiz-pilot.js','doctorville-quiz-journey.js','doctorville-quiz-page.js','credential-login.js','credential-keymedi-proof.js','credential-background-keymedi-proof.js','credential-page-state.js','credential-docple-session.js']);
 const failure=code=>Object.assign(Error(code),{code});
 const destinationKind=raw=>{try{const u=new URL(raw);return u.protocol==='http:'?'insecure':u.protocol==='https:'?'unapproved_https':'other_scheme';}catch{return 'invalid';}};
 const networkKind=code=>code===-105?'dns':code===-7||code===-118?'timeout':code<=-200&&code>=-299?'tls':[-100,-101,-102,-106,-109,-111,-130].includes(code)?'connection':'other';
 const dtalksLoginRedirect=raw=>{try{const u=new URL(raw);return u.origin==='http://www.dtalks.kr'&&!u.username&&!u.password&&!u.port&&!u.hash&&u.pathname==='/login.do'&&u.searchParams.getAll('backUrl').length<=1&&[...u.searchParams.keys()].every(k=>k==='backUrl');}catch{return false;}};
 export class AutomationPage{
- constructor(site,signal,preferences,{traffic,onDialog=()=>({accept:false,status:'unknown',reason:'manual_confirmation'}),onDiagnostic=()=>{},externalEntryAllowed=()=>false}={}){
-  Object.assign(this,{site,signal,preferences,traffic,onDialog,onDiagnostic,externalEntryAllowed});this.navigationBlocks=new WeakMap();this.pendingLoads=new WeakMap();this.secureLoginFallbackUsed=false;this.entryDispatchArmed=false;this.windows=[];this.generation=0;this.popupAllowed=false;this.focusPopup=false;this.closed=false;this.dialogResult=null;this.dialogs=0;
+ constructor(site,signal,preferences,{traffic,surveyRead,onDialog=()=>({accept:false,status:'unknown',reason:'manual_confirmation'}),onDiagnostic=()=>{},externalEntryAllowed=()=>false}={}){
+  if(surveyRead&&(site!=='doctorville'||!['survey','survey_reminder'].includes(surveyRead.phase)||typeof surveyRead.id!=='string'||!/^[1-9]\d{0,9}$/.test(surveyRead.id)))throw failure('policy_rejected');
+  Object.assign(this,{site,signal,preferences,traffic,surveyRead,onDialog,onDiagnostic,externalEntryAllowed});this.navigationBlocks=new WeakMap();this.pendingLoads=new WeakMap();this.secureLoginFallbackUsed=false;this.entryDispatchArmed=false;this.windows=[];this.generation=0;this.popupAllowed=false;this.focusPopup=false;this.closed=false;this.dialogResult=null;this.dialogs=0;
   this.runtime={navigationBlocked:0,popupDenied:0,mainFrameFailures:0,consoleErrors:0,credentialRequestObservationSupported:['doctorville','dtalks','whodadoc','hmp'].includes(site),credentialNetworkEnabled:false,credentialRequests:0,credentialResponses:0,credentialHttpStatus:0,credentialNetworkFailures:0};this.root=this.#create();this.current=this.root;this.abort=()=>this.close();signal.addEventListener('abort',this.abort,{once:true});
  }
  #diagnostic(stage,detail={}){if(!this.closed&&!this.signal.aborted)try{this.onDiagnostic(stage,{...detail,pageGeneration:this.generation});}catch{}}
  #create(){
-  const window=new BrowserWindow({show:false,width:1100,height:1800,autoHideMenuBar:true,webPreferences:{...this.preferences,backgroundThrottling:false}});
+  const window=new BrowserWindow({show:false,width:1100,height:1800,autoHideMenuBar:true,webPreferences:{...this.preferences,backgroundThrottling:false,
+   ...(this.surveyRead?{autoplayPolicy:'document-user-activation-required'}:{})}});
   try{this.#guard(window);return window;}catch{window.destroy();throw failure('worker_closed');}
  }
  #guard(window){
-  this.windows.push(window);const contents=window.webContents;const resources=hiddenResources(contents,this.traffic);if(this.entryDispatchArmed)resources.entry(this.entryFrameAllowed);window.once('closed',resources.close);
+  this.windows.push(window);const contents=window.webContents;
+  const survey=this.surveyRead?{...this.surveyRead,document:url=>this.allowsEntryNavigation(url)}:undefined;
+  const resources=hiddenResources(contents,this.traffic,undefined,survey);if(this.entryDispatchArmed)resources.entry(this.entryFrameAllowed);window.once('closed',resources.close);
   const guard=(event,url)=>{const target=typeof url==='string'?url:event.url;if(!this.allowsEntryNavigation(target)){this.runtime.navigationBlocked=Math.min(1000,this.runtime.navigationBlocked+1);this.navigationBlocks.set(contents,(this.navigationBlocks.get(contents)??0)+1);const load=this.pendingLoads.get(contents);if(load&&this.site==='dtalks'&&dtalksLoginRedirect(target))load.secureLoginRedirect=true;event.preventDefault();this.#diagnostic('navigation_blocked',{destinationKind:destinationKind(target)});}};
-  contents.on('will-navigate',guard);contents.on('will-redirect',(event,url,_inPlace,main)=>{if((main??event.isMainFrame)!==false)guard(event,url);});
+  let surveyRedirects=0;
+  contents.on('will-navigate',(event,url)=>{if(survey)event.preventDefault();else guard(event,url);});
+  contents.on('will-redirect',(event,url,_inPlace,main)=>{
+   if((main??event.isMainFrame)===false)return;
+   if(survey){resourceCount('redirects',1,survey.phase);if(++surveyRedirects>1){event.preventDefault();return;}}
+   guard(event,url);
+  });
   contents.on('will-attach-webview',event=>event.preventDefault());
   contents.on('did-start-navigation',(event,_url,inPlace,main)=>{if((main??event.isMainFrame)&&!(inPlace??event.isInPlace)){this.generation++;this.#diagnostic('page_started',{mainFrame:true});}});
   contents.on('did-finish-load',()=>this.#diagnostic('page_finished',{mainFrame:true}));
@@ -50,7 +62,7 @@ export class AutomationPage{
   // Browser dialogs are read only to fixed classifications, never logged raw.
   // Unknown confirmations are dismissed; only a task-specific original claim
   // confirmation can be accepted by the host's callback.
-  contents.debugger.attach('1.3');contents.debugger.sendCommand('Page.enable').catch(()=>{});observeResourceBytes(contents);
+  contents.debugger.attach('1.3');contents.debugger.sendCommand('Page.enable').catch(()=>{});observeResourceBytes(contents,survey?.phase);
   if(this.credentialNetwork)contents.debugger.sendCommand('Network.enable',{maxPostDataSize:0}).catch(()=>{this.runtime.credentialNetworkEnabled=false;});
   let topFrame='';
   const requests=new Set(),response=status=>{this.runtime.credentialResponses=Math.min(1000,this.runtime.credentialResponses+1);if(Number.isInteger(status)&&status>=100&&status<=599)this.runtime.credentialHttpStatus=status;};
@@ -85,7 +97,7 @@ export class AutomationPage{
   this.credentialNetwork=true;
   await Promise.all(this.windows.map(async window=>{try{await bounded(window.webContents.debugger.sendCommand('Network.enable',{maxPostDataSize:0}),this.signal,5000);this.runtime.credentialNetworkEnabled=true;}catch{this.runtime.credentialNetworkEnabled=false;}}));
  }
- #alive(){if(this.traffic&&!this.traffic.allowed())throw failure('site_wait');if(this.closed||this.signal.aborted||!this.current||this.current.isDestroyed())throw failure('cancelled');}
+ #alive(){if(this.traffic&&!this.traffic.allowed())throw failure('site_wait');if(this.closed||this.signal.aborted||!this.current||this.current.isDestroyed()||this.surveyRead&&!this.surveyRead.current())throw failure('cancelled');}
  async load(url){
   if(this.waitingForLoginForm&&!this.url){
    this.#alive();
@@ -99,7 +111,7 @@ export class AutomationPage{
    try{if(!this.current.webContents.getURL())await bounded(this.current.loadURL('about:blank'),this.signal,2000);
     await bounded(this.current.webContents.debugger.sendCommand('Page.addScriptToEvaluateOnNewDocument',{source:'('+source+')({mode:"observe_start"})'}),this.signal,2000);this.loungeObserverInstalled=true;}catch{/* Observation is optional. */}
   }
-  this.#alive();if(!allowedNavigation(this.site,url))throw failure('policy_rejected');const window=this.current,contents=window.webContents,blockedBefore=this.navigationBlocks.get(contents)??0,context={secureLoginRedirect:false};this.pendingLoads.set(contents,context);
+  this.#alive();if(this.surveyRead?!this.allowsEntryNavigation(url):!allowedNavigation(this.site,url))throw failure('policy_rejected');const window=this.current,contents=window.webContents,blockedBefore=this.navigationBlocks.get(contents)??0,context={secureLoginRedirect:false};this.pendingLoads.set(contents,context);
   const loading=window.loadURL(url).catch(async error=>{
    if(error.errno!==-3||this.signal.aborted||(this.navigationBlocks.get(contents)??0)>blockedBefore)throw error;
    const until=Date.now()+15000;let version=this.version,stableAt=Date.now();
@@ -128,7 +140,7 @@ export class AutomationPage{
   this.entryFrameAllowed=providerOnly?url=>allowedNavigation(this.site,url):undefined;
   for(const window of this.windows)if(!window.isDestroyed())hiddenResources(window.webContents).entry(this.entryFrameAllowed);
  }
- allowsEntryNavigation(url){return allowedNavigation(this.site,url)||this.entryDispatchArmed&&!this.entryFrameAllowed&&this.externalEntryAllowed(this.site,url);}
+ allowsEntryNavigation(url){return this.surveyRead?doctorvilleSurveyId(url)===this.surveyRead.id:allowedNavigation(this.site,url)||this.entryDispatchArmed&&!this.entryFrameAllowed&&this.externalEntryAllowed(this.site,url);}
  async doctorvilleArrival(job,authorize,consume){
   if(this.site!=='doctorville'||job.site!==this.site||!this.entryDispatchArmed||!officialIdentity(job)||this.channelFollowed)return;
   this.channelFollowed=true;
@@ -195,6 +207,16 @@ export class AutomationPage{
   return ok===true&&!this.closed&&!this.signal.aborted&&this.url===url&&this.version===version;
  }
  async call(name,args,{navigation=false,expectedDocument,authorize=()=>true}={}){
+  if(this.surveyRead){
+   const {id,phase}=this.surveyRead;
+   const {url,version}=await this.ready();
+   if(name!=='doctorville-survey.js'||navigation||args?.length!==2||args[0]!==id||args[1]!==url||doctorvilleSurveyId(url)!==id||this.dialogResult||!authorize())throw failure('scope_changed');
+   resourceCount('domReads',1,phase);
+   const code='('+doctorvilleSurveySource+')('+JSON.stringify(id)+','+JSON.stringify(url)+')';
+   const answer=await bounded(this.current.webContents.executeJavaScriptInIsolatedWorld(1003,[{code}]),this.signal,8000);
+   this.#alive();if(this.version!==version||this.url!==url||!authorize())throw failure('page_changed');
+   return answer;
+  }
   if(name==='daily.js'&&this.site==='docple'&&args[0]?.kind==='attendance'&&!args[0].phase&&!args[0].action&&await this.hasDocpleReceipt(args[0].date))return {status:'complete',reason:'docple_visible_receipt'};
   await this.ready();
   const landing=name==='credential-provider-landing.js';

@@ -72,7 +72,7 @@ try{
  check('control preload and real IPC ready',initial.sites.length===10);
  check('application version comes from its package',initial.version===appMetadata.version);
  check('automatic features are available but initially disabled',initial.automationAvailable&&initial.paused&&Object.values(initial.automation.features).every(value=>!value));
- await until(()=>evaluate('document.querySelectorAll("#features input").length===7'));
+ await until(()=>evaluate('document.querySelectorAll("#features input").length===6'));
  check('control offers feature settings and a visible full quit button',await evaluate('!!document.querySelector("#quit")&&document.querySelectorAll("#entry-sites input").length===9'));
  check('Docple catalog and entry start opt-in while existing attendance choice remains',!initial.sites.find(s=>s.id==='docple').selected&&!initial.automation.entrySites.includes('docple')&&initial.options.dailyKeys.includes('docple:attendance'));
  check('date memo is saved only for its chosen date',(await evaluate(`window.doctorGlean.saveMemo(${JSON.stringify(today)},'SYNTHETIC_LOCAL_MEMO')`)).ok&&(await state()).options.memos[today]==='SYNTHETIC_LOCAL_MEMO');
@@ -101,6 +101,15 @@ try{
  check('settings exposes update and reporting controls and edition-specific diagnostics',await evaluate(`
   ['#report','#update-check'].every(id=>document.querySelector(id).getClientRects().length>0) &&
    (!!document.querySelector('#entry-report-select')===${edition.developer})`));
+ const beforeSurveySettings=requests.length;
+ check('survey opening and deadline notifications default to off',await evaluate(`
+  document.getElementById('survey-mode').value==='off' && document.getElementById('survey-delay').value==='60' && !document.getElementById('survey-reminder').checked`));
+ await evaluate(`document.getElementById('survey-reminder').checked=true; document.getElementById('survey-reminder').dispatchEvent(new Event('change')); void 0`);
+ await until(async()=>(await state()).automation.surveySettings.reminder);
+ check('turning on the independent deadline option leaves opening off and makes zero requests',
+  (await state()).automation.surveySettings.mode==='off'&&requests.length===beforeSurveySettings);
+ check('trusted IPC rejects unknown survey modes',!(await evaluate(`window.doctorGlean.surveySettings({mode:'other',delay:60,reminder:true})`)).ok);
+ await evaluate(`window.doctorGlean.surveySettings({mode:'off',delay:60,reminder:false})`);
  await evaluate(`document.getElementById('tab-sites').click();void 0`);
  check('site controls are visible from the account tab',await evaluate(`document.querySelector('#sites button').getClientRects().length>0`));
  await evaluate('[...document.querySelectorAll("#sites button")].find(b=>b.textContent==="계정 저장·복구").click()');

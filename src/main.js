@@ -7,7 +7,7 @@ import {DataAccess} from './data-access.js';
 import {SiteWait,workerWait,observeSiteResponse} from './site-wait.js';
 import {NativeCatalogRead} from './native-catalog.js';
 import {configureUsage,changeUsage,flushUsage,resourceUse,trackPage} from './resource-use.js';
-import {app,BrowserWindow,Menu,Tray,nativeImage,ipcMain,session,dialog,clipboard,powerMonitor,safeStorage,net,shell} from 'electron';
+import {app,BrowserWindow,Menu,Tray,nativeImage,ipcMain,session,dialog,clipboard,powerMonitor,safeStorage,net,shell,Notification} from 'electron';
 import {fileURLToPath} from 'node:url';
 import {join} from 'node:path';
 import {writeFile} from 'node:fs/promises';
@@ -314,11 +314,15 @@ async function observeDocple(window,id){
  }catch{}
 }
 let attendanceSelectionEpoch=0,catalogSelectionEpoch=0;
+const surveyContext=()=>[kstDate(),credentials?.vault.epoch('doctorville'),profileEpochs.get('doctorville')??0,state?.snapshot().epoch].join('/');
 function hardenSiteWindow(window,id){
   if(remoteWindows.has(window))return;
   remoteWindows.add(window);manualOwners.set(window,id);notify();
   const contents=window.webContents;
-  watchManualEntry(window,id,{jobs:()=>automation?.store.entries()??[],surveyAllowed:()=>manualSurveyKeys.has(window),onSurvey:(url,raw)=>automation?.survey.observe(url,raw,manualSurveyKeys.get(window)),onClick:key=>{automation?.entry.cancelJob(key,true);browserEvent(id,'manual_entry_observed');}});
+  watchManualEntry(window,id,{jobs:()=>automation?.store.entries()??[],surveyScope:url=>{
+   const key=manualSurveyKeys.get(window)??null;
+   return dataAccess.allowed()&&automation?.survey.wantsObservation(url,key)?surveyContext()+'/'+(key??''):null;
+  },onSurvey:(url,raw)=>automation?.survey.observe(url,raw,manualSurveyKeys.get(window)??null),onClick:key=>{automation?.entry.cancelJob(key,true);browserEvent(id,'manual_entry_observed');}});
   window.setTitle(siteById(id).name+' · 로그인 후 상단의 「로그인 마침」을 눌러 주세요');
   contents.on('page-title-updated',event=>event.preventDefault());
   window.setAutoHideMenuBar(false);
@@ -391,6 +395,18 @@ function openSite(id,login=false,survey){
   if(survey)manualSurveyKeys.set(window,survey.key);
   navigateSite(window,id,survey?.url??(login&&site.loginUrl?site.loginUrl:site.url));
 }
+function openSurvey(key){
+ const url=automation.survey.target(key);if(!url)return {ok:false};
+ openSite('doctorville',false,{key,url});return {ok:true};
+}
+function notifySurvey({key,title,phase,minutesLeft}){
+ if(quitting||!Notification.isSupported())return false;
+ try{
+  const notification=new Notification({title:phase==='survey_reminder'?'닥터빌 설문 마감 임박':'닥터빌 설문 참여 가능',body:title+' · '+(minutesLeft===0?'곧 마감':'약 '+minutesLeft+'분 남음')});
+  notification.once('click',()=>{if(quitting)return;try{if(!updater?.guarded&&openSurvey(key).ok)return;}catch{}showControl();});
+  notification.show();return true;
+ }catch{return false;}
+}
 function registerIPC(channel,handler){
   ipcMain.handle(channel,async(event,...args)=>{
     if(!trustedControl(event,control,controlUrl))throw Error('not_allowed');
@@ -460,7 +476,8 @@ function ipc(){
   });
   registerIPC('pc:entry-hosts',rows=>{if(automation.busy||remoteWindows.size||credentials.busy||collector.snapshot().running)return {ok:false,reason:'busy'};pcOptions.hosts(rows);notify();return {ok:true};});
   registerIPC('pc:survey-skip',(key,value)=>({ok:automation.survey.skip(key,value)}));
-  registerIPC('pc:survey-open',key=>{const url=automation.survey.target(key);if(!url)return {ok:false};openSite('doctorville',false,{key,url});return {ok:true};});
+  registerIPC('pc:survey-open',openSurvey);
+  registerIPC('pc:survey-settings',settings=>{automation.setSurveySettings(settings);return {ok:true};});
   registerIPC('pc:copy-schedule',async()=>{await clipboard.writeText(formatPcSchedule(viewDate,catalog.selected(),catalog.view(viewDate).results)+(pcOptions.snapshot().memos[viewDate]?'\n\n메모: '+pcOptions.snapshot().memos[viewDate]:''));return {ok:true};});
   registerIPC('pc:pause',value=>{
     if(typeof value!=='boolean')return {ok:false,reason:'invalid_setting'};
@@ -529,7 +546,7 @@ else{
   app.whenReady().then(()=>{
     try{
       snapshotIdentityState(join(app.getPath('userData'),'workflows-v1.json'));snapshotIdentityState(join(app.getPath('userData'),'workflows-v1.json'),'before-entry-policy-v156');snapshotIdentityState(join(app.getPath('userData'),'workflows-v1.json'),'before-network-v168');
-      configureUsage(join(dataDirectory,'usage-v1.json'));siteWait=new SiteWait(join(dataDirectory,'site-wait-v1.json'));
+      configureUsage(join(dataDirectory,'usage-v1.json'),VERSION);siteWait=new SiteWait(join(dataDirectory,'site-wait-v1.json'));
       state=new LocalState(join(app.getPath('userData'),'state-v1.json'));
       updater=new PcUpdater({context:{appPath:app.getAppPath(),executable:process.execPath,edition:EDITION.id,currentVersion:VERSION,electronVersion:process.versions.electron,platform:process.platform,arch:process.arch,channel:VERSION.includes('-preview.')?'preview':'stable'},
        fetch:(url,options)=>{dataAccess.require();return net.fetch(url,{...options,signal:AbortSignal.any([options.signal,dataAccess.controller.signal])});},publicDownload:(target,progress)=>{dataAccess.require();return electronPatchDownload(target,progress,dataAccess.controller.signal);},privateDownload:(target,progress)=>{dataAccess.require();return downloadPrivateUpdate(target,progress,{parent:control});},
@@ -566,6 +583,7 @@ else{
       catalogQueue=new CatalogQueue({context:id=>credentials.vault.epoch(id)+':'+(profileEpochs.get(id)??0),resultValid:(date,id)=>{const row=catalog.view(date).results[id];return row?.coverage===true&&!row.stale&&row.status==='ok';},start:async(date,ids,morningAt)=>{const run=collector.start(date,ids);if(collector.snapshot().running)automation?.catalogStarted(date,morningAt);await run;automation?.catalogFinished(date,ids,collector.snapshot(),morningAt);},busy:()=>!dataAccess.allowed()||updater.guarded||collector.sleeping||collector.snapshot().running||!!automation?.busy||credentials.busy,validDate:validQueryDate,onChange:notify});
       medigateCountPages=new MedigateCountPages(join(dataDirectory,'medigate-counter-pages-v1.json'));
       automation=new AutomationController({file:join(dataDirectory,'workflows-v1.json'),dataEnabledAt:()=>dataAccess.enabledAt??0,options:pcOptions,followupAllowed:()=>net.isOnline()&&siteWait.allowed('intermd')&&!credentials.busy&&![...manualOwners.values()].includes('intermd'),ledger:state,executionAllowed:()=>dataAccess.allowed()&&!updater.guarded,
+       surveyAllowed:()=>net.isOnline()&&Notification.isSupported()&&!credentials.busy&&!registration?.active&&siteWait.allowed('doctorville'),surveyContext,notifySurvey,
        entryContextEpoch:site=>credentials.vault.epoch(site),medigateCounter:{
         allowed:()=>dataAccess.allowed()&&!updater.guarded&&net.isOnline()&&siteWait.allowed('medigate'),
         epoch:()=>credentials.vault.epoch('medigate')+':'+(profileEpochs.get('medigate')??0),page:month=>medigateCountPages.get(month),
