@@ -1,10 +1,12 @@
 # Windows 검증판 실행 안내
 
-## 현재 버전 0.1.0-preview.40
+## 현재 버전 0.1.0-preview.41
 
 첫 화면의 **강의 일정**에 오늘 시작 시각, 강의명, 사이트가 표시된다. 자동 입장 예약과 출석·퀴즈는 **자동 실행**에서 확인한다. 계정은 **사이트·계정**, 오류보고와 버전·업데이트는 **설정·도움말**에서 확인한다.
 
-기존 preview.28~39에서 업데이트하려면 이전 화면 하단의 **PC 업데이트 확인 → 다운로드·업데이트**를 누른다. 같은 에디션 preview.20~39는 작은 패치로도 바로 올릴 수 있다. 첫 설치는 전체 Windows x64 ZIP을 사용한다. [배포용](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.40) · [협업자용 개발자 Draft](https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-87c59a9b8d09dcc579f2) · [버튼 업데이트](UPDATES.md)
+닥터빌 설문 개시 확인과 별도 마감 알림은 **설정·도움말 → 닥터빌 설문**에서 설정한다.
+
+preview.40부터 **설정·도움말 → PC 업데이트 확인**을 사용한다. preview.28~39의 버튼은 이전 화면 하단에 있다. 같은 에디션 preview.20~40은 작은 패치로도 바로 올릴 수 있다. 첫 설치는 전체 Windows x64 ZIP을 사용한다. [배포용](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.41) · [협업자용 개발자 Draft](https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-11639e73ffd59303ab21) · [버튼 업데이트](UPDATES.md)
 
 0.1.0-preview.29는 강의 조회·당일 작업·자동 입장·예약 실행을 연결한 검증판이다. Windows와 실제 사이트 계정에서의 확인은 남아 있다.
 
