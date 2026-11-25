@@ -1,6 +1,6 @@
 # PC판 현재 상태와 다음 작업
 
-현재 공개 배포용과 협업자용 Draft는 **0.1.0-preview.40**입니다. 실행 소스는 `562378713e10014cdc7850535b5a1bee5e46e6b4`입니다. [배포용](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.40) · [개발자용 Draft](https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-87c59a9b8d09dcc579f2) · [검증 및 게시 기록](releases/0.1.0-preview.40.md)
+현재 공개 배포용과 협업자용 Draft는 **0.1.0-preview.41**입니다. 실행 소스는 `c53d64c11c9273020d81d2ad4f966a31d35e5b26`입니다. [배포용](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.41) · [개발자용 Draft](https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-11639e73ffd59303ab21) · [검증 및 게시 기록](releases/0.1.0-preview.41.md)
 
 ## PC-023 — v156 자동입장 정책·읽기 API·숨은 미디어 제한 (게시 완료)
 
@@ -222,7 +222,7 @@ Node 466개와 구문 검사, Linux Electron 45 합성 HTTPS 조회 검사 개�
 
 두 에디션의 Windows 묶음과 실제 서버 패치는 [preview.40 릴리스 검증](releases/0.1.0-preview.40.md)에 기록했다.
 
-## 닥터빌 설문 v176 작업본
+## preview.41 닥터빌 설문 v176 게시
 
 공개 preview.40의 `af3f32f`에서 같은 시작 시각의 자동입장 실행 기록 5건을 재현했다. 수동 목록은 5건이었고 개시 확인은 0회였다. 열린 설문 관측을 넣어도 마감 확인과 알림은 0회였다. 기존 판독기는 동봉한 12가지 합성 문서의 기본 상태를 이미 읽었다.
 
@@ -239,4 +239,4 @@ Node 466개와 구문 검사, Linux Electron 45 합성 HTTPS 조회 검사 개�
 
 합성 본문은 개시 189바이트, 마감 188바이트의 표본 각 1개다. 분리 집계용 고정 입력 110·220바이트도 각각의 단계에 반영됐다. Chromium 전송량의 귀속 가능한 표본이 없으면 미측정으로 표시한다. Windows 실기기 알림, 실제 회원 화면·서버 응답, 캐시와 OS 전체 통신량은 확인이 남았다.
 
-`npm run verify:pc -- --container-no-sandbox`에서 Node 503개·구문 및 Linux Electron 45 합성 검사 1,634개를 통과했다. 설문 전용 175개와 개발자용 관리 창 165개가 포함된다. 별도로 Windows 배포용 묶음의 관리 창을 Linux Electron에서 실행해 151개를 통과했다. 후보 앱의 실행 코드는 preview.40 기반이며 이 작업은 소스 PR이다.
+`npm run verify:pc -- --container-no-sandbox`에서 Node 503개·구문 및 Linux Electron 45 합성 검사 1,634개를 통과했다. 설문 전용 175개와 개발자용 관리 창 165개가 포함된다. 별도로 Windows 배포용 묶음의 관리 창을 Linux Electron에서 실행해 151개를 통과했다. 이 작업본은 preview.41에 반영됐다. [게시 검증](releases/0.1.0-preview.41.md)
