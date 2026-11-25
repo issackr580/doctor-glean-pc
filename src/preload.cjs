@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld('doctorGlean',Object.freeze({
   setEntryHosts:rows=>ipcRenderer.invoke('pc:entry-hosts',rows),
   skipSurvey:(key,value)=>ipcRenderer.invoke('pc:survey-skip',key,value),
   openSurvey:key=>ipcRenderer.invoke('pc:survey-open',key),
+  surveySettings:settings=>ipcRenderer.invoke('pc:survey-settings',settings),
   setEntrySites:ids=>ipcRenderer.invoke('pc:set-entry-sites',ids),
   checkDaily:readOnly=>ipcRenderer.invoke('pc:daily',readOnly),
   quickRun:()=>ipcRenderer.invoke('pc:quick-run'),

@@ -4,6 +4,7 @@ import {MEDIGATE_COUNTER_ORIGIN,MEDIGATE_COUNTER_PATH} from './medigate-counter.
 import {existsSync,unlinkSync} from 'node:fs';
 import {atomicJson,readJson} from './atomic-json.js';
 import {siteById,allowedNavigation} from './security.js';
+import {doctorvilleSurveyId} from './survey-policy.js';
 
 const integer=n=>Number.isSafeInteger(n)&&n>=0;
 const max=Number.MAX_SAFE_INTEGER;
@@ -46,7 +47,7 @@ export class SiteWait{
  }
  observe(site,{url,status,retryAfter,resourceType,document=false,api=false}){
   const provider=siteById(site);let address;try{address=new URL(url);}catch{return false;}
-  if(!provider||address.protocol!=='https:'||address.port||address.username||address.password||!(allowedNavigation(site,url)||site==='keymedi'&&address.hostname==='api.keymedi.com'||site==='medigate'&&address.origin===MEDIGATE_COUNTER_ORIGIN&&address.pathname===MEDIGATE_COUNTER_PATH))return false;
+  if(!provider||address.protocol!=='https:'||address.port||address.username||address.password||!(allowedNavigation(site,url)||site==='doctorville'&&doctorvilleSurveyId(url)||site==='keymedi'&&address.hostname==='api.keymedi.com'||site==='medigate'&&address.origin===MEDIGATE_COUNTER_ORIGIN&&address.pathname===MEDIGATE_COUNTER_PATH))return false;
   if(!(document||api||['mainFrame','subFrame'].includes(resourceType))||![403,429,503].includes(status))return false;
   const at=this.now();if(!this.clockTrusted(at)){
    // A restriction received during rollback is timed from the last trusted instant.

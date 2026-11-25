@@ -3,14 +3,15 @@ import {allowedNavigation} from './security.js';
 import {pcEntrySource} from './entry-page.js';
 import {officialIdentity} from './entry-identity.js';
 import {randomUUID} from 'node:crypto';
-const survey=readFileSync(new URL('../vendor/automation/doctorville-survey.js',import.meta.url),'utf8');
+import {doctorvilleSurveySource} from './doctorville-survey-page.js';
+import {doctorvilleSurveyId} from './survey-policy.js';
 const engine=readFileSync(new URL('../vendor/automation/auto-entry.js',import.meta.url),'utf8');
 const identityEngine=readFileSync(new URL('../vendor/identity/auto-entry.js',import.meta.url),'utf8');
 // This isolated world has no preload, IPC or Node. The website cannot write its
 // click queue. Only trusted user input is inspected, using the original engine.
 const WORLD=1001;
-export function watchManualEntry(window,site,{jobs,onClick,onSurvey=()=>{},surveyAllowed=()=>false,interval=700}){
- let running=false,closed=false,generation=0,lastSurvey=0;
+export function watchManualEntry(window,site,{jobs,onClick,onSurvey=()=>{},surveyScope=()=>null,interval=700}){
+ let running=false,closed=false,generation=0,lastSurvey=0,surveyGeneration=-1;
  const contents=window.webContents,debuggerWire=contents.debugger,token=randomUUID().replaceAll('-',''),binding='__doctorGleanManualNotify',contexts=new Set(),candidates=new Set(),seen=new Set();let ownDebugger=false,mainFrame='';
  const report=(item,tag)=>{
   if(closed||window.isDestroyed()||!item||!Number.isSafeInteger(item.sequence)||item.sequence<1||item.sequence>1000000||typeof tag!=='string'||!/^[a-f0-9]{32}$/.test(tag)||typeof item.key!=='string'||!/^[a-f0-9]{64}$/.test(item.key))return;
@@ -73,7 +74,15 @@ export function watchManualEntry(window,site,{jobs,onClick,onSurvey=()=>{},surve
    if(result===null){await contents.executeJavaScriptInIsolatedWorld(WORLD,[{code:install}]);await bind();return;}
    await bind();
    if(closed||window.isDestroyed()||contents.getURL()!==url||boundGeneration!==generation||!Array.isArray(result?.clicks))return;
-   if(site==='doctorville'&&surveyAllowed()&&Date.now()-lastSurvey>=15000){lastSurvey=Date.now();const raw=await contents.executeJavaScriptInIsolatedWorld(WORLD,[{code:`(${survey})('')`}]);if(!closed&&!window.isDestroyed()&&contents.getURL()===url&&boundGeneration===generation)onSurvey(url,raw);}
+   if(site==='doctorville'&&(surveyGeneration!==generation||Date.now()-lastSurvey>=15000)){
+    const scope=surveyScope(url),id=scope&&doctorvilleSurveyId(url);
+    if(id){
+     surveyGeneration=generation;lastSurvey=Date.now();
+     const code='('+doctorvilleSurveySource+')('+JSON.stringify(id)+','+JSON.stringify(url)+')';
+     const raw=await contents.executeJavaScriptInIsolatedWorld(WORLD,[{code}]);
+     if(!closed&&!window.isDestroyed()&&contents.getURL()===url&&boundGeneration===generation&&scope===surveyScope(url))onSurvey(url,raw);
+    }
+   }
    for(const item of result.clicks)report(item,result.tag);
   }catch{}finally{running=false;if(!closed&&boundGeneration!==generation)queueMicrotask(()=>tick());}
  };

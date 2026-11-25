@@ -12,13 +12,15 @@ import {DAILY_TASKS} from './automation-policy.js';
 import {kstDate,kstInstant,nextLoungePreparation} from './schedule.js';
 import {MorningSchedule} from './morning-schedule.js';
 export class AutomationController{
- constructor({file,ledger,createPage,createInspectionPage,isManualOpen,catalog,catalogBusy,queueCatalog,yieldCatalog,onChange=()=>{},onEvent=()=>{},onError=()=>{},now=Date.now,traceEntry,observeEntry,medigateCounter,entryContextEpoch=()=>0,dataEnabledAt=()=>0,executionAllowed=()=>true,followupAllowed=()=>true,options=new PcOptions(join(dirname(file),'pc-options-v1.json'))}){
+ constructor({file,ledger,createPage,createInspectionPage,isManualOpen,catalog,catalogBusy,queueCatalog,yieldCatalog,onChange=()=>{},onEvent=()=>{},onError=()=>{},now=Date.now,traceEntry,observeEntry,medigateCounter,entryContextEpoch=()=>0,dataEnabledAt=()=>0,executionAllowed=()=>true,followupAllowed=()=>true,surveyAllowed=()=>false,surveyContext=()=>'',notifySurvey,options=new PcOptions(join(dirname(file),'pc-options-v1.json'))}){
   Object.assign(this,{ledger,createPage,isManualOpen,catalog,catalogBusy,queueCatalog,yieldCatalog,onChange,onError,now,dataEnabledAt,executionAllowed,followupAllowed});this.store=new WorkflowStore(file,{now,policyConsumed:j=>Object.values(ledger.snapshot().jobs).some(r=>r.site==='hmp'&&r.target===j.key&&r.slot===j.slot&&r.dueAt===j.due)});this.options=options;this.active=null;this.pendingDaily=[];this.followupReads=[];this.pendingReadOnly=true;this.closed=false;
   this.morning=new MorningSchedule(join(dirname(file),'morning-schedule-v1.json'));this.store.recover();
   const common={ledger,store:this.store,createPage,createInspectionPage,isManualOpen,onChange:()=>{onChange();},onEvent,now};
   this.quiz=new DoctorvilleQuizRunner(common);
   this.daily=new DailyRunner({...common,quiz:this.quiz,shouldYield:()=>this.allowed()&&!!(this.entry.due(this.now())||this.entry.revisionDue())});
-  this.survey=new SurveyRunner({file:join(dirname(file),'surveys-v1.json'),options,allowed:()=>this.store.features().survey,onChange,now});
+  this.survey=new SurveyRunner({file:join(dirname(file),'surveys-v1.json'),options,allowed:()=>true,onChange,now,
+   canRead:()=>!this.sleeping&&this.allowed()&&!isManualOpen?.('doctorville')&&surveyAllowed(),context:surveyContext,
+   catalog:date=>this.catalog(date).doctorville,jobs:date=>this.store.entries(date),createPage:createInspectionPage,notify:notifySurvey});
   this.daily.taskSelected=key=>this.options.snapshot().dailyKeys.includes(key);
   this.entry=new EntryRunner({...common,catalog,traceEntry,observeEntry,medigateCounter,contextEpoch:entryContextEpoch});this.entry.recover();this.lounge=new LoungeRunner(common);
   this.rearm();this.timer=setInterval(()=>this.tick(),250);this.timer.unref();
@@ -26,10 +28,11 @@ export class AutomationController{
  allowed(){return !this.closed&&this.executionAllowed()&&!this.ledger.snapshot().paused&&!this.store.failed&&!this.options.failed;}
  get busy(){return !!this.active||this.daily.busy||this.entry.busy||this.lounge.busy;}
  rearm(){this.boundary=this.now();this.morningAt=this.morning.next(this.now());this.loungeAt=nextLoungePreparation(this.now());}
- snapshot(){return {features:this.store.features(),entrySites:this.store.entrySites(),automaticEntrySites:this.store.entrySites().filter(automaticEntrySite),today:this.store.day(),entries:this.store.entries(),surveys:this.survey.snapshot(),daily:this.daily.snapshot(),preflight:this.preflightProgress,active:this.active??'',queuedDaily:[...this.pendingDaily],nextMorning:this.store.features().morning?this.morningAt:0,nextLounge:this.store.features().lounge?this.loungeAt:0,storageUnavailable:this.store.failed||this.options.failed};}
+ snapshot(){return {features:this.store.features(),entrySites:this.store.entrySites(),automaticEntrySites:this.store.entrySites().filter(automaticEntrySite),today:this.store.day(),entries:this.store.entries(),surveys:this.survey.snapshot(),surveySettings:this.survey.settings(),surveyStorageUnavailable:!!this.survey.failed,daily:this.daily.snapshot(),preflight:this.preflightProgress,active:this.active??'',queuedDaily:[...this.pendingDaily],nextMorning:this.store.features().morning?this.morningAt:0,nextLounge:this.store.features().lounge?this.loungeAt:0,storageUnavailable:this.store.failed||this.options.failed};}
  diagnostics(){return {...this.store.diagnostics(),storageUnavailable:this.store.failed||this.options.failed,surveys:this.survey.snapshot({diagnostics:true}),quizFuses:this.quiz.fuses.summary(),daily:this.daily.snapshot(),preflight:this.preflightProgress,active:this.active??'',queuedDaily:[...this.pendingDaily],nextMorning:this.morningAt,nextLounge:this.loungeAt};}
  setFeature(key,value){this.store.setFeature(key,value);if(!value){if(key==='entry')this.entry.cancel();if(key==='lounge')this.lounge.cancel();if(['dailyClaim','quizAuto','brand'].includes(key))this.daily.cancel();}this.rearm();if(key==='entry'&&value)this.entry.reserveCatalog(kstDate(this.now()),this.catalog(kstDate(this.now())));this.onChange();this.tick();}
  setEntrySites(ids){this.store.setEntrySites(ids);this.onChange();this.tick();}
+ setSurveySettings(settings){this.survey.setSettings(settings);}
  async preflightEntry(key){
   if(this.closed||typeof key!=='string'||!/^[a-f0-9]{64}$/.test(key)||this.busy||this.catalogBusy())return {ok:false,reason:'busy'};
   this.active='preflight';this.onChange();
@@ -84,10 +87,10 @@ export class AutomationController{
   if(ids.includes('doctorville')&&this.allowed()&&this.store.features().quizAuto&&!this.ledger.consumed(dailyTicket({site:'doctorville',kind:'quiz'},date,0,this.now()))&&!['complete','wrong'].includes(this.store.day(date).quizAuto?.status)&&!this.pendingDaily.includes('doctorville:quiz'))this.requestDaily({keys:['doctorville:quiz']});
   this.onChange();this.tick();
  }
- manualOpened(site){this.daily.manualOpened(site);this.entry.manualOpened(site);this.lounge.manualOpened(site);}
- cancel(reason='cancelled'){this.preflightBatch?.abort();this.pendingDaily=[];this.followupReads=[];this.pendingReadOnly=true;this.daily.cancel(reason);this.entry.cancel();this.lounge.cancel();this.onChange();}
+ manualOpened(site){this.daily.manualOpened(site);this.entry.manualOpened(site);this.lounge.manualOpened(site);if(site==='doctorville')this.survey.cancel();}
+ cancel(reason='cancelled'){this.preflightBatch?.abort();this.pendingDaily=[];this.followupReads=[];this.pendingReadOnly=true;this.daily.cancel(reason);this.entry.cancel();this.lounge.cancel();this.survey.cancel();this.onChange();}
  suspended(){this.sleeping=true;this.cancel('suspended');this.rearm();}
- resumed(){this.sleeping=false;this.rearm();this.tick();}
+ resumed(){this.sleeping=false;this.rearm();this.survey.rearm();this.tick();}
  async #work(kind,work,{priority=false}={}){
   if(this.active)return;this.active=kind;this.onChange();
   try{if(priority)this.yieldCatalog();await work();}
@@ -98,12 +101,13 @@ export class AutomationController{
   if(this.closed||this.sleeping||!this.executionAllowed())return;
   try{
    const now=this.now(),features=this.store.features();
-   if(this.allowed()&&features.survey&&this.surveySeedDate!==kstDate(now)){this.surveySeedDate=kstDate(now);this.survey.seed(kstDate(now),this.catalog(kstDate(now)).doctorville);}
+   if(this.surveySeedDate!==kstDate(now)){this.surveySeedDate=kstDate(now);this.survey.seed(kstDate(now),this.catalog(kstDate(now)).doctorville);}
    const entry=this.allowed()&&features.entry?this.entry.due(now,this.active==='schedule'?this.entry.active?.job.key:undefined):null;
    const loungeDue=this.allowed()&&features.lounge&&now>=this.loungeAt&&now<this.loungeAt+60000+20000&&!this.store.day(kstDate(now)).lounge;
    if(this.active){
     if((entry||loungeDue||this.entry.revisionDue())&&this.active==='daily'&&!this.daily.claimPending)this.daily.cancel('entry_priority');
     if(entry&&this.active==='lounge')this.lounge.cancel();
+    if((entry||loungeDue||this.entry.revisionDue())&&['survey','survey_reminder'].includes(this.active))this.survey.cancel();
     if(entry&&this.active==='prepare'||(entry||loungeDue)&&['preflight','schedule'].includes(this.active)){this.preflightBatch?.abort();this.entry.cancel();}return;
    }
    if(entry){
@@ -145,6 +149,8 @@ export class AutomationController{
      if(morning?.status==='running'&&result.reason!=='entry_priority')this.store.record(kstDate(this.now()),'morning',{...morning,dailyChecked:result.reason==='finished',status:result.reason==='finished'?morning.catalogChecked?'complete':'running':'unknown',reason:result.reason});
     });return;
    }
+   const survey=this.survey.due(now);
+   if(survey)this.#work(survey.phase,()=>this.survey.run(survey));
 
   }catch(error){try{this.ledger.setPaused(true);}catch{}this.onError(error);}
  }

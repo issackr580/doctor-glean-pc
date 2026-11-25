@@ -75,14 +75,22 @@
     <section id="panel-settings" role="tabpanel" aria-labelledby="tab-settings" class="app-panel" hidden>
         <h2 class="panel-title">설정·도움말</h2>
       <details class="control"><summary>날짜 메모</summary><textarea id="date-memo" maxlength="2000" rows="3" aria-label="선택 날짜 메모"></textarea><button id="save-memo" type="button">메모 저장</button></details>
-      <details class="control"><summary>설문 직접 참여</summary><div id="survey-results"></div></details>
+      <details class="control"><summary>닥터빌 설문</summary>
+        <div class="features">
+          <label>설문 개시 확인 <select id="survey-mode"><option value="off">끄기</option><option value="economy">절약 · 강의당 1회</option><option value="balanced">균형 · 강의당 3회</option><option value="active">적극 · 강의당 5회</option><option value="experiment">실험 · 강의당 8회</option></select></label>
+          <label>첫 확인 <select id="survey-delay"><option value="30">시작 30분 후</option><option value="45">시작 45분 후</option><option value="60" selected>시작 60분 후</option><option value="75">시작 75분 후</option><option value="90">시작 90분 후</option></select></label>
+          <label class="feature"><input id="survey-reminder" type="checkbox">설문 놓치지 않게 알림</label>
+        </div>
+        <p class="muted">개시 확인은 자동입장 실행이 확인된 강의에 적용돼요. 남은 시간을 확인한 열린 설문은 마감 약 10분 전에 한 번 더 확인해요. 설문 참여와 제출은 직접 해 주세요.</p>
+        <p id="survey-status" role="status"></p><div id="survey-results"></div>
+      </details>
       <details class="control"><summary>메디게이트 월간 수강 집계</summary>
         <label>이번 달 행사 주소 <input id="medigate-counter-page" type="url" placeholder="https://www.medigate.net/event/…"></label>
         <button id="save-medigate-counter-page" type="button">저장</button>
         <p class="muted">공식 페이지를 자동으로 찾지 못하면 이번 달 행사 주소를 입력해 주세요. 빈 값으로 저장하면 자동 확인으로 돌아갑니다.</p>
       </details>
       <div class="control"><label>앱 데이터 사용 <select id="data-mode"><option value="always">항상 허용</option><option value="wifi">Wi-Fi에서만 허용</option><option value="off">모두 끄기</option></select></label><p id="data-mode-status" role="status"></p></div>
-      <details class="control"><summary>로컬 사용량 진단</summary><p id="usage-status"></p><button id="usage-toggle" type="button">7일간 기록</button> <button id="usage-delete" type="button">기록 삭제</button></details>
+      <details class="control"><summary>로컬 사용량 진단</summary><p id="usage-status"></p><div id="survey-usage"></div><button id="usage-toggle" type="button">7일간 기록</button> <button id="usage-delete" type="button">기록 삭제</button></details>
       <footer><span id="version"></span><button id="report" class="text-button" type="button">오류보고 저장</button><button id="update-check" type="button">PC 업데이트 확인</button><button id="update-install" type="button" hidden>다운로드·업데이트</button><button id="update-page" type="button" hidden>공식 배포 페이지 열기</button><p id="update-result" role="status"></p><button id="quit" type="button">프로그램 종료</button><p>X는 트레이에 숨기기예요. 업데이트는 버튼을 누를 때만 진행해요.</p></footer>
     </section>
   </main>
