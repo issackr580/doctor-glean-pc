@@ -1,6 +1,6 @@
 # PC판 현재 상태와 다음 작업
 
-현재 공개 배포용과 협업자용 Draft는 **0.1.0-preview.41**입니다. 실행 소스는 `c53d64c11c9273020d81d2ad4f966a31d35e5b26`입니다. [배포용](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.41) · [개발자용 Draft](https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-11639e73ffd59303ab21) · [검증 및 게시 기록](releases/0.1.0-preview.41.md)
+현재 공개 배포용과 협업자용 Draft는 **0.1.0-preview.42**입니다. 실행 소스는 `a196d2bd0e5eda6a6d44ccee5e9330a31e875dae`입니다. [배포용](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.42) · [개발자용 Draft](https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-12c3b3344003a02dee12) · [검증 및 게시 기록](releases/0.1.0-preview.42.md)
 
 ## PC-023 — v156 자동입장 정책·읽기 API·숨은 미디어 제한 (게시 완료)
 
@@ -241,10 +241,12 @@ Node 466개와 구문 검사, Linux Electron 45 합성 HTTPS 조회 검사 개�
 
 `npm run verify:pc -- --container-no-sandbox`에서 Node 503개·구문 및 Linux Electron 45 합성 검사 1,634개를 통과했다. 설문 전용 175개와 개발자용 관리 창 165개가 포함된다. 별도로 Windows 배포용 묶음의 관리 창을 Linux Electron에서 실행해 151개를 통과했다. 이 작업본은 preview.41에 반영됐다. [게시 검증](releases/0.1.0-preview.41.md)
 
-## 전날 결과와 닥터라운지 진단
+## preview.42·전날 결과와 닥터라운지 진단
 
 오류보고에 한국 날짜 기준 오늘과 전날의 사이트별 목록 결과, 일일 작업, 입장 증거, 설문 기록을 추가했다. 현재 설문 개시 모드와 마감 알림 스위치도 내보낸다. 오늘 조회 결과가 없어도 전날 기록은 확인할 수 있다. 추가 요약은 원래 저장된 결과에서 만들며 입장 키, 강의 제목, URL, 계정 원문을 담지 않는다.
 
 닥터라운지는 전송 없이 종료됐을 때 개시 후 실제 판독이 찾은 장애 사유를 보존하고 문서 로드 및 DOM 읽기 시도 횟수를 기록한다. 사이트 완료 수를 읽지 못한 경우 관리 화면에 미확인으로 표시한다. 기존 실행·요청 간격·전송 규칙을 사용한다.
 
 Node 504개와 구문 검사, Linux Electron 45의 합성 조회·내보내기 167개, 자동 실행 30개, 설문 175개를 통과했다. 실제 Windows에서 새 진단이 수집되는지는 별도 확인한다.
+
+배포 파일과 업데이트 피드 확인을 마쳤다. [게시 기록](releases/0.1.0-preview.42.md)
