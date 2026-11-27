@@ -9,6 +9,9 @@ import {kstDate,kstInstant} from '../src/schedule.js';
 import {resolveEdition} from '../src/edition.js';
 import {weekendCases} from './electron-weekend-cases.mjs';
 import {WorkflowStore,cleanReceipt} from '../src/workflow-store.js';
+import {CatalogStore} from '../src/catalog-store.js';
+import {SurveyRunner} from '../src/survey-runner.js';
+import {PcOptions} from '../src/pc-options.js';
 
 const application=resolve(process.env.DOCTOR_GLEAN_PC_TEST_ROOT??fileURLToPath(new URL('../',import.meta.url)));
 const appMetadata=JSON.parse(readFileSync(join(application,'package.json'),'utf8')),edition=resolveEdition(appMetadata.doctorGleanEdition);
@@ -21,12 +24,22 @@ let registrationPosted=false,registrationDurable=false,registrationPostCount=0,h
 const windowMenus=new WeakMap(),setMenu=BrowserWindow.prototype.setMenu;
 BrowserWindow.prototype.setMenu=function(menu){windowMenus.set(this,menu);return setMenu.call(this,menu);};
 const today=kstDate(),tomorrow=kstDate(Date.parse(today+'T12:00:00+09:00')+86_400_000);
+const yesterday=kstDate(kstInstant(today,'00:00')-1);
 // Keep synthetic enrollment open regardless of the developer's daytime clock.
 const syntheticClock='23:50';
 const seededStore=new WorkflowStore(join(dataDirectory,'workflows-v1.json')),seededEvent={site:'doctorville',date:today,time:syntheticClock,title:'합성 닥터빌 강의 1'},seededKey=seededStore.entryKey(seededEvent),seededStart=kstInstant(today,syntheticClock);
 seededStore.putEntry({key:seededKey,...seededEvent,start:seededStart,due:seededStart-3000000,deadline:seededStart+600000,nextAt:seededStart-3000000,status:'reserved',slot:0,retries:0,attempts:[],entryAttempted:false,scheduleChanges:[{oldTime:'23:40',time:syntheticClock,oldStart:seededStart-600000,start:seededStart,oldDue:seededStart-3600000,due:seededStart-3000000,oldDeadline:seededStart,deadline:seededStart+600000,checkedAt:Date.now()-300000}]});
 const historicalEvent={site:'hmp',date:today,time:'00:00',title:'합성 이전 실행 강의'},historicalAt=Date.now()-120000;
 seededStore.putEntry({key:seededStore.entryKey(historicalEvent),...historicalEvent,start:kstInstant(today,'00:00'),due:kstInstant(today,'00:00'),deadline:kstInstant(today,'00:00')+90000,nextAt:0,status:'clicked',slot:4,retries:0,entryAttempted:true,attempts:Array.from({length:5},(_,slot)=>cleanReceipt({status:'clicked',attempted:true,slot,playback:'inaccessible'},historicalAt+slot))});
+const previousStart=kstInstant(yesterday,'18:00');
+const previousLecture={site:'doctorville',date:yesterday,time:'18:00',title:'합성 전날 강의',url:'https://www.doctorville.co.kr/seminar/seminarDetail?seminarId=701'};
+const previousReceipt=cleanReceipt({status:'clicked',reason:'clicked',attempted:true,navigationObserved:true},previousStart+1000);
+seededStore.putEntry({...previousLecture,key:seededStore.entryKey(previousLecture),start:previousStart,due:previousStart,deadline:previousStart+60_000,nextAt:0,status:'clicked',slot:0,retries:0,entryAttempted:true,doctorvilleArrival:'waiting_room',receipt:previousReceipt,attempts:[previousReceipt]});
+seededStore.record(yesterday,'doctorville:attendance',{status:'complete',reason:'confirmed'},previousStart);
+const previousResult={status:'ok',coverage:true,events:[previousLecture]};
+new CatalogStore(join(dataDirectory,'catalog-v1.json')).record('doctorville',yesterday,previousResult,previousStart);
+const seededSurvey=new SurveyRunner({file:join(dataDirectory,'surveys-v1.json'),options:new PcOptions(join(dataDirectory,'pc-options-v1.json')),allowed:()=>true,now:()=>previousStart});
+seededSurvey.seed(yesterday,{...previousResult,stale:false});
 const check=(name,condition)=>{assert.ok(condition,name);checks.push(name);};
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function until(fn,ms=25_000){const end=Date.now()+ms;while(Date.now()<end){const v=await fn();if(v)return v;await pause(80);}throw Error('wait_timeout');}
@@ -252,6 +265,7 @@ try{
  const batchResult=await evaluate('window.doctorGlean.preflightUpcoming()');
  check('batch inspection IPC and visible action remain read-only',batchResult.ok&&(await state()).automation.preflight.running===false&&requests.every(r=>r.method==='GET')&&await evaluate('document.getElementById("entry-results").textContent.includes("예정 예약 일괄 사전 검사")'));
  check('batch UI distinguishes processed counts from eligibility outcomes',await evaluate('document.getElementById("entry-results").textContent.includes("버튼 확인")&&document.getElementById("entry-results").textContent.includes("로그인 필요")'));
+ const beforeReportRequests=requests.length;
  const frozenReport=await evaluate('window.doctorGlean.previewReport()');
  check('report preview exposes the sanitized bytes before export',typeof frozenReport.text==='string'&&!frozenReport.text.includes('SYNTHETIC_LOCAL_MEMO'));
  await evaluate(`window.doctorGlean.exportReport(${JSON.stringify(frozenReport.token)})`);
@@ -260,6 +274,14 @@ try{
  check('ordinary error reports add opt-in entry evidence only in developer builds',edition.developer?Array.isArray(JSON.parse(diagnostic).entryJournal?.records):!Object.hasOwn(JSON.parse(diagnostic),'entryJournal'));
  check('report omits raw session, URLs and lecture titles',!/synthetic-login|https:|합성 .*강의/.test(diagnostic));
  check('report includes bounded collection counts',JSON.parse(diagnostic).sites.length===2);
+ const recent=JSON.parse(diagnostic).recentActivity;
+ const [latest,previous]=recent.days;
+ check('report retains both Korea calendar days with previous catalog, daily, entry and survey results',
+  latest.date===today&&previous.date===yesterday&&previous.sites[0]?.eventCount===1&&previous.daily['doctorville:attendance']?.status==='complete'&&
+  previous.entries[0]?.receipt?.navigationObserved===true&&previous.entries[0]?.doctorvilleArrival==='waiting_room'&&previous.surveys.length===1);
+ check('report includes only sanitized recent results and does not make a request',
+  recent.surveySettings.mode==='off'&&recent.surveySettings.reminder===false&&requests.length===beforeReportRequests&&
+  !JSON.stringify(recent).includes(seededStore.entryKey(previousLecture))&&!JSON.stringify(recent).includes('seminarId'));
  check('blocked navigation is diagnosable without its URL',JSON.parse(diagnostic).browserEvents.some(row=>row.kind==='navigation_blocked')&&!diagnostic.includes('outside.example.invalid'));
  if(edition.developer){
   const policies=await evaluate('window.doctorGleanDeveloper.policyCheck()');
