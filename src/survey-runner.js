@@ -184,9 +184,8 @@ export class SurveyRunner{
   this.#put({...row,status:value?'skipped':'unknown',checkedAt:this.now(),openingFinished:true});
   if(this.active?.key===key)this.cancel();return true;
  }
- snapshot({diagnostics=false}={}){
-  const day=kstDate(this.now());
-  return Object.values(this.data.rows).filter(row=>row.date===day).map(row=>({
+ snapshot({diagnostics=false,date=kstDate(this.now())}={}){
+  return Object.values(this.data.rows).filter(row=>row.date===date).map(row=>({
    ...(diagnostics?{}:{key:row.key,title:row.title??'닥터빌 강의'}),
    status:row.status,closesAt:row.closesAt,checkedAt:row.checkedAt,reads:row.reads,reminderAt:row.reminderAt??0,
    reminderReads:row.reminderCheckedAt?1:0,openingNotified:row.notified,reminderNotified:!!row.reminderNotified,

@@ -130,6 +130,25 @@ test('lounge rejects malformed eligibility and never sends after its deadline',a
  const p=page(async(_name,[input])=>{if(input.mode==='claim')sent++;return {status:'ready',total:7,current:0,eligibleMask:'127',successMask:0};});p.load=async()=>{p.url='https://www.keymedi.com/drlounge';p.route='lounge';};
  await new LoungeRunner({ledger,store,createPage:async()=>p,now:clock.now,sleep:clock.sleep}).run(date,at('00:00:02'));assert.equal(sent,0);
 });
+test('lounge saves the post-opening obstacle and read counts without any claim',async t=>{
+ for(const [status,reason] of [['waiting','mission_unavailable'],['waiting','progress_unavailable'],['blocked','mission_changed'],['ready','no_target']]){
+  const {clock,ledger,store,root}=setup(t,'00:00:04');store.setFeature('lounge',true);let loads=0,reads=0;
+  const p=page(async(_name,[input])=>{
+   if(input.mode==='claim')assert.fail('unexpected claim');
+   if(input.mode==='open')return {status:'opening'};
+   reads++;
+   if(clock.now()<at('00:01:04'))return {status:'waiting',reason:'mission_loading'};
+   if(status==='ready')return {status,current:1,total:7,eligibleMask:0,successMask:1};
+   return {status,reason};
+  });
+  p.load=async()=>{loads++;p.version++;p.route='lounge';};
+  await new LoungeRunner({ledger,store,createPage:async()=>p,now:clock.now,sleep:clock.sleep}).run(date,clock.now());
+  const row=new WorkflowStore(join(root,'workflows.json')).day(date).lounge;
+  assert.equal(row.reason,reason);assert.equal(row.attemptMask,0);assert.equal(row.sentMask,0);
+  assert.equal(row.providerComplete,status==='ready'?1:undefined);
+  assert.equal(row.reads,reads);assert.equal(row.navigations,loads);assert.equal(loads,5);assert.equal(Object.keys(ledger.snapshot().jobs).length,0);
+ }
+});
 test('pre-opening lounge completion waits for a new opening GET before deciding today',async t=>{
  for(const total of [6,7])for(const remainsComplete of [false,true]){
   const {clock,ledger,store}=setup(t,'00:00:04');store.setFeature('lounge',true);const mask=total===6?95:127;let sent=0,loads=0,fresh=false;

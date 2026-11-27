@@ -5,6 +5,7 @@ import {safeReason} from './automation-policy.js';
 import {waitFor} from './async-work.js';
 import {executionEvent} from './build-info.js';
 import {cleanReceipt} from './workflow-store.js';
+const READ_OBSTACLES=new Set(['mission_unavailable','mission_loading','progress_unavailable','mission_changed','manual_confirmation','ambiguous_control','ambiguous_panel','progress_conflict','outside_site']);
 export class LoungeRunner{
  constructor({ledger,store,createPage,isManualOpen=()=>false,onChange=()=>{},onEvent=()=>{},now=Date.now,sleep=waitFor}){Object.assign(this,{ledger,store,createPage,isManualOpen,onChange,onEvent,now,sleep});this.active=null;}
  get busy(){return !!this.active;}
@@ -15,7 +16,8 @@ export class LoungeRunner{
   const opensAt=kstInstant(date,'00:01:04'),closesAt=opensAt+20000,verifyAt=closesAt+12000,controller=new AbortController();
   const run={controller,page:null},lease=date+':'+randomUUID();this.active=run;
   const runId=randomUUID().replace(/-/g,''),emit=(phase,detail={})=>executionEvent(this.onEvent,{area:'automation',phase,site:'keymedi',kind:'lounge',runId,due:opensAt,...detail});
-  let row={status:'running',reason:'running',startedAt:this.now(),opensAt,alarmDelayMs:Math.max(0,this.now()-scheduledAt),attemptMask:0,sentMask:0,successMask:0},fresh=false,refreshes=0,lastRefresh=0,lastSent=0;
+  const row={status:'running',reason:'running',startedAt:this.now(),opensAt,alarmDelayMs:Math.max(0,this.now()-scheduledAt),attemptMask:0,sentMask:0,successMask:0};
+  let fresh=false,refreshes=0,lastRefresh=0,lastSent=0,reads=0,navigations=0,lastFreshObstacle;
   const valid=()=>!controller.signal.aborted&&!this.ledger.snapshot().paused&&this.store.features().lounge&&kstDate(this.now())===date&&this.now()<verifyAt&&!this.store.failed;
   let saved='';const save=()=>{const signature=JSON.stringify(row);if(signature===saved)return;this.store.record(date,'lounge',row,this.now());saved=signature;this.onChange();};
   try{
@@ -24,13 +26,15 @@ export class LoungeRunner{
    emit('start',{startedAt:row.startedAt,delayMs:row.alarmDelayMs});
    if(this.isManualOpen('keymedi')){row.status='busy';row.reason='manual_view_open';return false;}
    run.page=await this.createPage('keymedi',controller.signal);const page=run.page;
-   const reload=async()=>{const requestedAt=this.now();await page.load('https://www.keymedi.com/drlounge');lastRefresh=this.now();if(requestedAt>=opensAt){fresh=true;refreshes++;}row.firstPageReadyAt??=this.now();};
+   const reload=async()=>{const requestedAt=this.now();navigations++;await page.load('https://www.keymedi.com/drlounge');lastRefresh=this.now();if(requestedAt>=opensAt){fresh=true;refreshes++;}row.firstPageReadyAt??=this.now();};
    await reload();let openedVersion=-1,opens=0,lastOpen=0;
    while(valid()){
     const now=this.now();
     if(['login','provider'].includes(page.route)){row.status='login';row.reason='login_required';break;}
     if(now>=opensAt&&!fresh){await reload();openedVersion=-1;continue;}
-    let result=await page.call('keymedi-lounge.js',[{mode:'inspect'}]);
+    reads++;
+    const result=await page.call('keymedi-lounge.js',[{mode:'inspect'}]);
+    if(fresh&&now>=opensAt&&['waiting','blocked'].includes(result.status)&&READ_OBSTACLES.has(result.reason))lastFreshObstacle=result.reason;
     if(result.providerObservation?.status==='observed')row.providerObservation=result.providerObservation;
     if(openedVersion!==page.version){openedVersion=page.version;opens=0;lastOpen=0;}
     if(result.status==='waiting'&&result.reason==='mission_unavailable'&&opens<2&&(!opens||now-lastOpen>=3000)){opens++;lastOpen=now;await page.call('keymedi-lounge.js',[{mode:'open'}]);await this.sleep(150,controller.signal);continue;}
@@ -42,7 +46,7 @@ export class LoungeRunner{
      row.firstMissionReadAt??=this.now();row.missionTotal=result.total;row.missionMask=missionMask;
      // The provider can still show yesterday's completed missions before its
      // reset. Only the mandatory post-opening GET can prove today's completion.
-     if(fresh&&now>=opensAt){row.providerComplete=result.current;row.successMask=result.current===result.total?missionMask:(result.successMask??0)&127;}
+     if(fresh&&now>=opensAt){lastFreshObstacle=undefined;row.providerComplete=result.current;row.successMask=result.current===result.total?missionMask:(result.successMask??0)&127;}
      if(fresh&&now>=opensAt&&row.providerComplete===result.total){row.status='complete';row.reason=row.sentMask?'confirmed':'already_complete';save();break;}
      const mask=(result.eligibleMask??0)&missionMask&~row.attemptMask;
      if(fresh&&mask&&now>=opensAt&&now<closesAt){
@@ -68,9 +72,13 @@ export class LoungeRunner{
     if(now>=closesAt&&this.now()-lastRefresh>=3000&&refreshes<4){await reload();openedVersion=-1;continue;}
     await this.sleep(now<opensAt?Math.min(400,opensAt-now):150,controller.signal);
    }
-   if(row.status==='running'){row.status='unknown';row.reason=controller.signal.aborted?'cancelled':'provider_result_unconfirmed';}
+   if(row.status==='running'){
+    row.status='unknown';
+    row.reason=controller.signal.aborted?'cancelled':row.attemptMask?'provider_result_unconfirmed':
+     lastFreshObstacle??(!fresh?'stale_document':row.providerComplete!==undefined?'no_target':'provider_result_unconfirmed');
+   }
   }catch(error){row.status='unknown';row.reason=safeReason(controller.signal.aborted?'cancelled':error.code??error.message);}
-  finally{run.page?.close();this.active=null;if(row.status==='running'){row.status='unknown';row.reason='cancelled';}row.finishedAt=this.now();save();emit('result',{...cleanReceipt(row,this.now()),attempted:row.attemptMask!==0,evidence:row.status==='complete'?row.attemptMask?'observed_after_pc_action':'existing_observed':'unconfirmed'});}
+  finally{run.page?.close();this.active=null;if(row.status==='running'){row.status='unknown';row.reason='cancelled';}row.reads=reads;row.navigations=navigations;row.finishedAt=this.now();save();emit('result',{...cleanReceipt(row,this.now()),attempted:row.attemptMask!==0,evidence:row.status==='complete'?row.attemptMask?'observed_after_pc_action':'existing_observed':'unconfirmed'});}
   return true;
  }
 }

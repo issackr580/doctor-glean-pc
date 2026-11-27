@@ -46,6 +46,7 @@ import {pcEntryPage,pcEntrySource} from './entry-page.js';
 import {doctorvilleDetailNavigation} from './automation-policy.js';
 import {boundedWork,waitFor} from './async-work.js';
 import {ReportPreview} from './report-preview.js';
+import {recentDiagnostics} from './recent-diagnostics.js';
 import {PcOptions} from './pc-options.js';
 import {canRegisterEntry} from './execution-presentation.js';
 
@@ -128,10 +129,11 @@ const buildState=()=>({
 });
 
 function diagnosticSnapshot(){
- const snapshot=state.snapshot();
- return {appName:EDITION.name,applicationId:EDITION.appId,edition:EDITION.id,appVersion:VERSION,build:BUILD_INFO,exportedAt:Date.now(),processStartedAt:PROCESS_STARTED_AT,date:kstDate(),automationPaused:snapshot.paused,
+ const snapshot=state.snapshot(),now=Date.now();
+ return {appName:EDITION.name,applicationId:EDITION.appId,edition:EDITION.id,appVersion:VERSION,build:BUILD_INFO,exportedAt:now,processStartedAt:PROCESS_STARTED_AT,date:kstDate(now),automationPaused:snapshot.paused,
   runtime:{platform:process.platform,arch:process.arch,electron:process.versions.electron,chromium:process.versions.chrome,osRelease:release()},runtimeFaults:runtimeFaults.snapshot(),dataAccess:dataAccess.snapshot(),siteWaitUntrusted:!!siteWait&&!siteWait.clockTrusted(Date.now()),resourceUse:resourceUse(),
   stage:'automation',automationAvailable:true,collection:collector.snapshot(),selectedCatalogSites:catalog.selected(),pendingQueries:catalogQueue?.snapshot()??[],sites:catalog.diagnostics(viewDate),automation:automation?.diagnostics(),
+  recentActivity:recentDiagnostics(now,{catalog,workflows:automation.store,survey:automation.survey}),
   siteSessions:SITES.map(({id})=>({site:id,open:[...manualOwners.values()].includes(id),...effectiveSession(id)})),credentials:credentials?.snapshot(),registration:registration?.store.snapshot(),browserEvents:[...browserEvents],developerDiagnostics:developerTools?.status(),
   attempts:Object.values(snapshot.jobs).map(({site,kind,date,slot,state,updatedAt})=>({site,kind,date,slot,state,updatedAt}))};
 }
