@@ -38,6 +38,7 @@ contextBridge.exposeInMainWorld('doctorGlean',Object.freeze({
   preflightEntry:key=>ipcRenderer.invoke('pc:entry-preflight',key),
   preflightUpcoming:()=>ipcRenderer.invoke('pc:entry-preflight-upcoming'),
   requestRegistration:(source,key)=>ipcRenderer.invoke('pc:registration-request',source,key),
+  openDoctorvilleApplication:id=>ipcRenderer.invoke('pc:doctorville-application',id),
   quit:()=>ipcRenderer.invoke('pc:quit'),
   previewReport:()=>ipcRenderer.invoke('pc:report-preview'),
   copyReport:token=>ipcRenderer.invoke('pc:report-copy',token),

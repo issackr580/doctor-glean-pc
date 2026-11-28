@@ -11,7 +11,7 @@ export class CredentialRunner{
  async run(site,page,{candidate,readCredentials,validation=false,automatic=false,freshCollection=false,signal,allowed=()=>true,onChange=()=>{}}){
   const policy=credentialSite(site),nonce=randomUUID().replace(/-/g,''),began=this.now();let attempted=false,submitted=false,at=0,usedProbe=false,reads=0,ready=0,lastVersion=-1,status='unknown',manualSince=0,submittedVersion=-1,refreshed=false,settledReads=0;
   let freshLogout=false;
-  let failureCode,providerRead=false,providerWaits=0,lastUrl='';
+  let failureCode,providerRead=false,providerWaits=0,lastUrl='',docpleHomeChecked=false;
   const trace=[],observe=(phase,reply)=>recordCredentialObservation(trace,credentialObservation(site,page,phase,reply,this.now()-began));
   const live=()=>!signal.aborted&&(!freshCollection||kstDate(this.now())===kstDate(began))&&allowed()&&!page.closed&&this.now()-began<90000&&(!attempted||this.now()-at<(validation?45000:20000));
   // The original background proof rejects candidate-validation fields, even
@@ -57,6 +57,12 @@ export class CredentialRunner{
    while(live()){
     await page.ready?.();if(!live())break;
     if(page.dialogResult){status=safeCredentialStatus(page.dialogResult.status);break;}
+    // The fixed login route can send a saved profile to the home page without
+    // showing a form. Verify its protected calendar once. Never fill home or
+    // consider the redirect itself an authenticated session.
+    if(site==='docple'&&!validation&&!attempted&&!docpleHomeChecked&&page.url==='https://docple-plus.com/'){
+     docpleHomeChecked=true;observe('refresh',{status:'loading'});await page.load(policy.entry);continue;
+    }
     if(site==='doctorville'&&(!validation||submitted)&&settlingDoctorvilleProvider(page.url)){
      // A provider SPA can replace its route before its asynchronous SSO flow
      // reaches the site. Observe only; no script, secret, navigation or POST.

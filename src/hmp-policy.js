@@ -1,4 +1,5 @@
 import {kstDate,kstInstant} from './schedule.js';
+import {retiredAutomaticEntrySite} from './entry-support.js';
 // PC native policy. Receipt history and old checkpoint numbers are never
 // renamed or used as proof of a different policy's execution.
 const MINUTE=60000,OFFSETS=[0,25,35],UNEXECUTED=new Set(['expired','not_open','button_missing','target_missing','network','busy']);
@@ -42,7 +43,9 @@ export function nextHmpCheckpoint(job,receipt,now,history){
 }
 export function migrateEntryPolicy(row,now,consumed=false){
  const job=structuredClone(row);
- if(job.site==='dtalks'&&['reserved','running','attempting','opening'].includes(job.status))return {...job,status:'cancelled',nextAt:0,policyClosed:'dtalks_automatic_disabled_v156'};
+ if(retiredAutomaticEntrySite(job.site)&&['reserved','running','attempting','opening'].includes(job.status)){
+  return {...job,status:'cancelled',nextAt:0,policyClosed:job.site==='dtalks'?'dtalks_automatic_disabled_v156':'automatic_entry_retired'};
+ }
  if(job.site!=='hmp'||hmpSchema(job)===2)return job;
  if(hmpSchema(job)!==1)return {...job,status:'unknown',nextAt:0,policyClosed:'hmp_schema_unconfirmed'};
  if(job.date!==kstDate(now))return job;

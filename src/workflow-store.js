@@ -67,7 +67,17 @@ export class WorkflowStore{
   if(!valid(next))throw Error('storage_error');
   try{this.commit(this.file,next);this.data=next;}catch{this.failed=true;throw Error('storage_error');}
  }
- migrateEntryPolicies(){const next=clone(this.data);next.schemaVersion=2;for(const [key,row] of Object.entries(next.entries))next.entries[key]=migrateEntryPolicy(row,this.now(),this.policyConsumed(row));if(JSON.stringify(next)!==JSON.stringify(this.data))this.#save(next);}
+ migrateEntryPolicies(){
+  const next=clone(this.data);next.schemaVersion=2;let retired=false;
+  for(const [key,row] of Object.entries(next.entries)){
+   const migrated=migrateEntryPolicy(row,this.now(),this.policyConsumed(row));
+   retired||=migrated.policyClosed==='automatic_entry_retired'&&row.policyClosed!==migrated.policyClosed;
+   next.entries[key]=migrated;
+  }
+  if(JSON.stringify(next)===JSON.stringify(this.data))return;
+  if(retired)snapshotIdentityState(this.file,'before-auto-entry-trim');
+  this.#save(next);
+ }
  features(){return {...this.data.features};}
  recover(){
   const next=clone(this.data);let changed=false;
@@ -76,7 +86,7 @@ export class WorkflowStore{
  }
  setFeature(key,value){if(!Object.hasOwn(DEFAULT_FEATURES,key)||typeof value!=='boolean')throw Error('invalid_setting');const next=clone(this.data);next.features[key]=value;this.#save(next);if(key==='entry')this.selectionEpoch++;}
  entrySites(){return [...this.data.entrySites];}
- setEntrySites(ids){if(!Array.isArray(ids)||ids.some(id=>!ENTRY_SITES.includes(id))||new Set(ids).size!==ids.length)throw Error('invalid_setting');const next=clone(this.data);next.entrySites=[...ids];this.#save(next);this.selectionEpoch++;}
+ setEntrySites(ids){if(!Array.isArray(ids)||ids.some(id=>!ENTRY_SITES.includes(id))||new Set(ids).size!==ids.length)throw Error('invalid_setting');const next=clone(this.data);next.entrySites=[...new Set([...ids,...this.data.entrySites.filter(id=>!automaticEntrySite(id))])];this.#save(next);this.selectionEpoch++;}
  day(day=kstDate(this.now())){
   const raw=this.data.days[day]??{daily:{}};const daily={};
   for(const task of DAILY_TASKS)if(raw.daily[task.key])daily[task.key]=cleanReceipt(raw.daily[task.key],raw.daily[task.key].checkedAt);

@@ -70,11 +70,18 @@ function renderAgenda(state,events){
   for(const event of entries){
    const row=node('article',undefined,'agenda-row'),detail=node('div',undefined,'agenda-name');
    detail.append(node('p',event.title,'lecture-title'));
-   if(event.site==='hmp'){
+   if(event.site==='hmp'||event.site==='doctorville'){
     const status=event.lectureEnded?'강의 종료':({registered:'신청완료',not_registered:'미신청',closed:'신청마감',unknown:'신청 상태 미확인'})[event.registrationStatus];
     const meta=node('div',undefined,'agenda-registration');
     if(status)meta.append(node('span',status,'site-status'));
-    if(event.registrationStatus==='not_registered'&&!event.lectureEnded&&api.requestRegistration){
+    if(event.site==='doctorville'&&event.registrationStatus==='not_registered'&&!event.lectureEnded&&event.lectureIdentity?.id&&api.openDoctorvilleApplication){
+     const apply=node('button','신청 페이지 열기');
+     apply.type='button';
+     apply.disabled=event.stale||new Date(state.date+'T'+event.time+':00+09:00').getTime()<=Date.now();
+     apply.onclick=()=>perform(()=>api.openDoctorvilleApplication(event.lectureIdentity.id),'닥터빌 신청 페이지를 열었어요.');
+     meta.append(apply);
+    }
+    if(event.site==='hmp'&&event.registrationStatus==='not_registered'&&!event.lectureEnded&&api.requestRegistration){
      const apply=node('button',registrationButtonLabel(state.registration?.lectures[event.id]));
      apply.type='button';
      apply.disabled=event.stale||!!state.registration?.active||!!state.automation?.active||state.collection.running||!!state.credentials?.active||state.registration?.storageUnavailable===true;

@@ -64,10 +64,10 @@ function cleanEvent(site,date,event){
  const id=site==='docple'?String(event.id):typeof event.id==='string'&&/^[a-f0-9]{64}$/.test(event.id)?event.id:sha(JSON.stringify([site,date,event.time,title,String(event.id??'').slice(0,2000)]));
  const out={site,date,time:event.time,title,id,url,advanced:event.advanced===true};
  if(lectureIdentity)out.lectureIdentity=lectureIdentity;
- if(['hmp','docple'].includes(site)){
+ if(['doctorville','hmp','docple'].includes(site)){
   out.registrationStatus=['registered','not_registered','closed','unknown'].includes(event.registrationStatus)?event.registrationStatus:'unknown';
   out.lectureEnded=event.lectureEnded===true;
-  out.hmpWatchAvailable=event.hmpWatchAvailable===true;
+  if(site!=='doctorville')out.hmpWatchAvailable=event.hmpWatchAvailable===true;
  }
  return out;
 }

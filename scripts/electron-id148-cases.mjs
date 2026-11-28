@@ -52,14 +52,15 @@ export async function id148Cases({root,date,title,clock,check,inspect,job,catalo
    await inspect(site,body,{work:async(page,posts)=>{const r=await page.call('pc-entry.js',[target,'inspect']);check('v148 '+site+' independent guard / '+name,r.status!=='ready'&&posts()===0);}});
   }
  }
- // The other actual v148 engine families are exercised through AutomationPage too.
+ // A complete official-ID proof does not re-enable retired automatic entry.
  for(const site of ['docple','whodadoc']){
   const body=site==='docple'?docpleDetail({id,title:changed,date:date.replaceAll('-','.'),time:clock}).replace('>입장하기</button>',` ${click}>입장하기</button>`):`<section><h1>${changed}</h1><p class="date">${date}</p><p class="time">${clock} ~ 23:59</p><span>신청완료</span><button ${click}>강의 입장하기</button></section>`;
   await inspect(site,body,{url:urls[site],work:async(page,posts)=>{
    const target={...job(site),url:urls[site],lectureIdentity:parseOfficialIdentity(site,urls[site]),...(site==='docple'?{id,registrationStatus:'registered'}:{repeatSchema:1,repeatSlot:0})};
-   const ready=await page.call('auto-entry.js',[target,'inspect']);if(ready.status!=='ready')console.log('ID148_ENGINE:'+JSON.stringify({site,ready}));check('v148 '+site+' actual engine accepts same ID renamed heading',ready.status==='ready'&&ready.targetMatched);
-   const r=await page.call('auto-entry.js',[target,'click'],{navigation:true,expectedDocument:page.entryBinding()});await sleep(40);check('v148 '+site+' original engine control dispatches once',r.status==='clicked'&&posts()===1);
-   await page.call('auto-entry.js',[target,'click'],{navigation:true});check('v148 '+site+' consumed engine marker remains set',posts()===1);
+   for(const mode of ['inspect','click']){
+    const outcome=await page.call('auto-entry.js',[target,mode],{navigation:mode==='click'}).catch(error=>error.code);
+    check('retired '+site+' rejects '+mode+' at the actual Chromium host',outcome==='disabled'&&posts()===0);
+   }
   }});
  }
  const target={...job('medigate'),url:urls.medigate,lectureIdentity:parseOfficialIdentity('medigate',urls.medigate)};

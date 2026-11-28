@@ -365,6 +365,26 @@ async function run(){
   }else check('Docple failed protected session does not permit another automatic submission',(await docpleManager.recover('docple',{automatic:true})).status==='disabled'&&sent===1);
   check('Docple diagnostic results exclude cookies and account values',!/SYNTHETIC_|https:/.test(JSON.stringify(docpleManager.snapshot())));
  }
+ {
+  const partition='docple-redirect-'+randomUUID(),profile=session.fromPartition(partition),directory=join(root,'docple-redirect');
+  const requested=[];let allow=true,created=0;
+  await profile.cookies.set({url:'https://docple-plus.com',name:'accessToken',value:'SYNTHETIC_REDIRECT_TOKEN',secure:true});
+  await profile.protocol.handle('https',request=>{
+   const {pathname}=new URL(request.url);requested.push(request.method+' '+pathname);
+   if(pathname==='/auth/login')return Response.redirect('https://docple-plus.com/');
+   if(pathname==='/api/season2/mission/attendance/calendar')return Response.json({data:{yearMonth:kstDate().slice(0,7).replace('-',''),attendedDates:[kstDate()]}});
+   return new Response(shell('<main>합성 닥플</main>'),{headers:{'content-type':'text/html; charset=utf-8'}});
+  });
+  const manager=new CredentialManager({directory,applicationId:'docple-test',protect,automaticAllowed:()=>true,siteAvailable:()=>allow,isManualOpen:()=>false,createPage:async(_site,signal)=>{
+   created++;return new AutomationPage('docple',signal,{...remotePreferences('docple'),partition});
+  }});
+  manager.vault.save('docple',{id:'SYNTHETIC_USER',password:'SYNTHETIC_PASSWORD'},true);
+  const recovered=await manager.recover('docple');
+  check('Docple home redirect checks the protected calendar once instead of treating landing as login proof',recovered.status==='authenticated'&&!recovered.submitted&&requested.filter(x=>x==='GET /api/season2/mission/attendance/calendar').length===1&&requested.every(x=>x.startsWith('GET ')));
+  const before=requested.length;allow=false;
+  const blocked=await manager.recover('docple');
+  check('Docple manual or automatic recovery during a server wait opens zero windows and makes zero requests',blocked.status==='site_wait'&&(await manager.recover('docple',{automatic:true})).status==='site_wait'&&created===1&&requested.length===before);
+ }
  // Same-origin automatic redirects must settle before catalog reading; a true
  // network failure remains a typed failure. This never retries a login POST.
  const partition='synthetic-catalog-redirect-'+randomUUID(),prefs={...remotePreferences('doctorville'),partition};

@@ -14,7 +14,7 @@ import {catalogEntryReference} from './entry-reference.js';
 import {canPreflightEntry} from './execution-presentation.js';
 import {catalogScheduleRevision,confirmedRevisionTiming,detailIdentity} from './entry-revision.js';
 import {createEntryJob} from './entry-job.js';
-import {canonicalIdentity,identityRunnable,duplicateIdentityKeys,sameWorker,sameReceiptOwner,sameEntryTarget,priorIdentityKeys,rebookIdentity,nextIdentityEntry} from './entry-identity.js';
+import {canonicalIdentity,officialIdentity,identityRunnable,duplicateIdentityKeys,sameWorker,sameReceiptOwner,sameEntryTarget,priorIdentityKeys,rebookIdentity,nextIdentityEntry} from './entry-identity.js';
 const navigable=(site,raw)=>{try{const u=new URL(raw);return allowedNavigation(site,raw)&&!/(?:login|logout|regist|apply|enroll|payment|order|cart|token|auth|session|password|email|ticket|delete|withdraw)/i.test(decodeURIComponent(u.pathname+u.search));}catch{return false;}};
 export class EntryRunner{
  constructor({ledger,store,createPage,createInspectionPage,catalog=()=>({}),contextEpoch=()=>0,medigateCounter,isManualOpen=()=>false,onChange=()=>{},onEvent=()=>{},now=Date.now,sleep=waitFor,traceEntry=()=>({}),observeEntry=()=>{}}){Object.assign(this,{ledger,store,createPage,createInspectionPage,catalog,contextEpoch,medigateCounter,isManualOpen,onChange,onEvent,now,sleep,traceEntry,observeEntry});this.active=null;this.revisions=new Map();this.revisionWaits=new Map();if('policyConsumed' in store)store.policyConsumed=job=>legacyHmpConsumed(ledger,job);store.migrateEntryPolicies?.();}
@@ -139,7 +139,17 @@ export class EntryRunner{
    const hmpGroups=new Map();for(const event of result.events)if(site==='hmp'&&entrySchedule(event,this.now())){const ids=hmpGroups.get(event.time)??new Set();ids.add(this.store.entryKey(event));hmpGroups.set(event.time,ids);}
    for(const target of targets){
     const event=target.event,key=target.key??this.store.entryKey(event),prior=this.store.entries(date).find(j=>j.key===key);
+    const registrationKnown=site==='doctorville'&&!target.blocked&&officialIdentity(event)&&
+     result.events.filter(row=>sameEntryTarget(row,event)).length===1;
+    const unavailable=registrationKnown&&['not_registered','closed'].includes(event.registrationStatus);
     if(prior){
+     if(unavailable){
+      if(prior.status==='reserved'&&prior.entryAttempted===false&&!this.#consumed(prior)){
+       this.store.updateEntry(key,{status:event.registrationStatus==='closed'?'stopped':'not_registered',nextAt:0});
+      }
+      this.revisions.delete(key);continue;
+     }
+     if(registrationKnown&&event.registrationStatus==='registered')this.registrationConfirmed(event);
      const timing=entrySchedule(event,this.now()),peers=result.events.filter(e=>sameEntryTarget(event,e));
      if(!target.blocked&&site!=='doctorville'&&new Set(peers.map(e=>e.time)).size===1&&timing){const pair=attachCheckpoints(prior,{...event,...timing},this.now());if(pair)this.store.updateEntry(key,pair);}
      const proposal=this.#revision(this.store.entries(date).find(j=>j.key===key),results);
@@ -147,6 +157,10 @@ export class EntryRunner{
     }
     const job=createEntryJob(event,this.now());if(!job||site==='hmp'&&(target.blocked||hmpGroups.get(event.time)?.size!==1))continue;
     job.key=key;
+    if(unavailable){
+     if(event.registrationStatus==='not_registered')this.store.putEntry({...job,status:'not_registered',nextAt:0});
+     continue;
+    }
     if(target.blocked){job.status='ambiguous';job.identityBlock=target.blocked;job.scheduleUpdateReason=target.blocked;job.nextAt=0;}
     const reference=catalogEntryReference(event,results);if(reference?.status==='navigate')job.scheduleIdentity=detailIdentity(reference.url);
     this.store.putEntry(job);this.emit('scheduled',job,{status:job.status});this.#observe(job,'reservation_observed',{status:job.status});
@@ -186,11 +200,6 @@ export class EntryRunner{
   if(job.site==='hmp'&&raw.attempted===false&&this.#consumed(job))raw={status:'unknown',reason:'unknown_result'};
   const now=this.now(),receipt=cleanReceipt({...raw,slot:job.slot,due:job.due},now),attempts=[...(job.attempts??[]),receipt].slice(-5);
   const next=medigateCountConfirmed(job.site,receipt)?null:nextCheckpoint(job,receipt,now);if(next){this.store.updateEntry(job.key,{...next,attempts,receipt,executionFinishedAt:now});this.onChange();return;}
-  if(job.repeatSchema===1&&!['lecture_ended','manual_clicked','cancelled','blocked','login','ambiguous','not_registered'].includes(receipt.status)){
-   const first=job.repeatFirstEntryAt??(receipt.playerObserved===true?receipt.observedAt:0);let next=job.slot+1;
-   while(first&&next<3&&first+next*600000+90000<now)next++;
-   if(first&&next<3&&kstDate(first+next*600000)===job.date){const due=first+next*600000;this.store.updateEntry(job.key,{status:'reserved',slot:next,due,deadline:due+90000,nextAt:Math.max(due,now),repeatFirstEntryAt:first,attempts,receipt,executionFinishedAt:now,retries:0,entryAttempted:false});this.onChange();return;}
-  }
   if(job.site==='hmp'&&job.hmpRepeatSchema===2){
    const history=hmpHistory(job,{...receipt,attempted:raw.attempted},now),continueAllowed=!this.ledger.snapshot().paused&&this.store.features().entry&&this.store.entrySites().includes('hmp')&&!this.isManualOpen('hmp')&&raw.reason!=='scope_changed';
    const next=continueAllowed?nextHmpCheckpoint(job,{...receipt,status:raw.status??receipt.status},now,history):null;
@@ -232,9 +241,7 @@ export class EntryRunner{
     if(!currentRead())throw Error('cancelled');
     await run.page.ready?.();
     if(['login','provider'].includes(run.page.route)){reply={status:'login',reason:'login_required'};break;}
-    try{reply=await run.page.call(job.site==='docple'?'auto-entry.js':'pc-entry.js',[job.site==='docple'?{...job,due:this.now()-1,deadline:this.now()+10000}:job,job.site==='docple'?'inspect':'preflight']);reads++;
-     if(job.site==='docple'&&reply.status==='navigate'&&reply.url===job.url&&navigable(job.site,reply.url)&&!detailRead){detailRead=true;await run.page.load(reply.url);fingerprint='';stable=0;continue;}
-    }
+    try{reply=await run.page.call('pc-entry.js',[job,'preflight']);reads++;}
     catch(error){if(controller.signal.aborted)throw error;if(!['page_changed','navigation_changed'].includes(error.code??error.message))throw error;reply={status:'not_open',reason:'page_changed'};reads++;}
     const next=JSON.stringify([reply.status,reply.reason,reply.targetMatched,reply.candidateCards,reply.titleMatches,reply.scheduleMatches,reply.entryControls]);
     trace.event('inspect',{...reply,readOnly:true,pageGeneration:run.page.version});
@@ -298,9 +305,9 @@ export class EntryRunner{
   const ownerEpoch=this.ledger.snapshot().epoch,selectionEpoch=this.store.selectionEpoch,accountEpoch=this.contextEpoch(job.site);
   const allowed=()=>{
    const current=this.store.entries(job.date).find(j=>j.key===job.key),rows=this.store.entries(job.date),markers=current&&(current.entryAttempted===false||dispatched&&current.entryAttempted===true&&current.status==='attempting');
-   return automaticEntrySite(job.site)&&validHmpCheckpoint(job)&&!legacyHmpOverlap(this.ledger,job)&&!this.isManualOpen(job.site)&&!!markers&&sameWorker(job,current)&&!current.identityBlock&&!duplicateIdentityKeys(rows).has(job.key)&&!controller.signal.aborted&&!this.ledger.snapshot().paused&&this.ledger.snapshot().epoch===ownerEpoch&&this.store.selectionEpoch===selectionEpoch&&this.contextEpoch(job.site)===accountEpoch&&this.store.features().entry&&this.store.entrySites().includes(job.site)&&!['cancelled','manual_clicked','clicked','unknown'].includes(current.status)&&job.date===kstDate(this.now())&&!this.store.failed;
+   return automaticEntrySite(job.site)&&validHmpCheckpoint(job)&&!legacyHmpOverlap(this.ledger,job)&&!this.isManualOpen(job.site)&&!!markers&&sameWorker(job,current)&&!current.identityBlock&&!duplicateIdentityKeys(rows).has(job.key)&&!controller.signal.aborted&&!this.ledger.snapshot().paused&&this.ledger.snapshot().epoch===ownerEpoch&&this.store.selectionEpoch===selectionEpoch&&this.contextEpoch(job.site)===accountEpoch&&this.store.features().entry&&this.store.entrySites().includes(job.site)&&!['cancelled','manual_clicked','clicked','unknown','not_registered','stopped'].includes(current.status)&&job.date===kstDate(this.now())&&!this.store.failed;
   };
-  const nativeJob=()=>({...job,due:prepare&&job.site!=='hmp'?job.prepAt:job.due,deadline:prepare&&job.site!=='hmp'?job.start-1:job.deadline,...(liveCatalogRead?{requireDoctorDetail:true}:{}),...(job.site==='hmp'?{hmpRepeatSchema:2,hmpSlot:job.slot,...(prepare?{hmpPreparation:true}:{})}:job.repeatSchema===1?{repeatSlot:job.slot}:{})});
+  const nativeJob=()=>({...job,due:prepare&&job.site!=='hmp'?job.prepAt:job.due,deadline:prepare&&job.site!=='hmp'?job.start-1:job.deadline,...(liveCatalogRead?{requireDoctorDetail:true}:{}),...(job.site==='hmp'?{hmpRepeatSchema:2,hmpSlot:job.slot,...(prepare?{hmpPreparation:true}:{})}:{})});
   const finalize=()=>{
    trace?.finish({...receipt,attempted:dispatched,readOnly:prepare});
    let diagnostics={};try{diagnostics=run.page?.diagnostics?.()??{};}catch{}
@@ -430,15 +437,7 @@ export class EntryRunner{
        }
       }catch{/* The initial entry remains consumed even if its popup closed or changed. */}
      }
-     if(job.site==='docple'&&receipt.navigationObserved&&allowed())try{receipt.watchObserved=await page.observeDocpleArrival?.(job)===true;}catch{receipt.watchObserved=false;}
      trace.event('navigation_observed',{navigationObserved:receipt.navigationObserved,pageGeneration:page.version});
-     if(job.repeatSchema===1&&receipt.navigationObserved&&allowed()){
-      for(let probe=0;probe<5&&allowed()&&this.now()<=job.deadline;probe++){
-       const observed=await page.call('auto-entry.js',[nativeJob(),'entry_probe']);
-       if(observed.status==='player_observed'){receipt.playerObserved=true;receipt.observedAt=this.now();break;}
-       await this.sleep(400,controller.signal);
-      }
-     }
      if(job.site==='hmp'){
       receipt.playback='navigation_unconfirmed';
       if(receipt.navigationObserved&&allowed()){const playback=await page.call('auto-entry.js',[nativeJob(),'playback_start']);receipt.playback=playback.status;await this.sleep(1200,controller.signal);if(allowed()){receipt.playback=(await page.call('auto-entry.js',[nativeJob(),'playback_probe'])).status;trace.event('playback_observed',{playback:receipt.playback});}}

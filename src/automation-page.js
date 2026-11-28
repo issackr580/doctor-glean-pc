@@ -18,7 +18,6 @@ import {pcEntrySource} from './entry-page.js';
 import {officialIdentity,identityInvalid} from './entry-identity.js';
 import {randomUUID} from 'node:crypto';
 import {doctorvilleDetailNavigation} from './automation-policy.js';
-import {docpleId} from './docple-policy.js';
 import {doctorvilleSurveySource} from './doctorville-survey-page.js';
 import {doctorvilleSurveyId} from './survey-policy.js';
 const assets=new Map();
@@ -125,6 +124,7 @@ export class AutomationPage{
   try{
    await bounded(loading,this.signal,45000);this.#alive();if((this.navigationBlocks.get(contents)??0)>blockedBefore)throw failure('policy_rejected');
   }catch(error){
+   if(!this.signal.aborted&&!this.closed&&this.traffic&&!this.traffic.allowed())throw failure('site_wait');
    // Discard the insecure Location and its return query entirely. This is one
    // new, fixed HTTPS GET, only for the original read-only catalog load. Never
    // upgrade arbitrary URLs or replay credential/entry POSTs.
@@ -136,6 +136,7 @@ export class AutomationPage{
   await bounded(this.current.webContents.debugger.sendCommand('Page.enable'),this.signal,10000);
  }
  armEntryDispatch({providerOnly=false}={}){
+  if(!automaticEntrySite(this.site))throw failure('disabled');
   this.dispatchDocument=this.entryBinding();this.entryDispatchArmed=true;this.entryArmedAt??=Date.now();
   this.entryFrameAllowed=providerOnly?url=>allowedNavigation(this.site,url):undefined;
   for(const window of this.windows)if(!window.isDestroyed())hiddenResources(window.webContents).entry(this.entryFrameAllowed);
@@ -183,14 +184,6 @@ export class AutomationPage{
    await waitFor(Math.min(200,Math.max(1,until-Date.now())),this.signal);
   }
  }
- async observeDocpleArrival(job){
-  if(this.site!=='docple'||!this.entryDispatchArmed)return false;
-  const id=docpleId(job.url);if(!id)return false;await this.ready();
-  const url=this.url,generation=this.version,u=new URL(url);
-  if(u.origin!=='https://docple-plus.com'||u.pathname!=='/webinar/'+id+'/watch'||u.search||u.hash)return false;
-  const observed=await bounded(this.current.webContents.executeJavaScript(`location.href===${JSON.stringify(url)}&&document.readyState==='complete'&&!document.querySelector('input[type="password"],[role="dialog"][aria-modal="true"]')`,false),this.signal,10000);
-  return observed===true&&!this.closed&&!this.signal.aborted&&this.url===url&&this.version===generation;
- }
  allowPopups(focus=false){this.popupAllowed=true;this.focusPopup=focus;}
  async ready(){
   this.#alive();const until=Date.now()+10000;
@@ -228,7 +221,7 @@ export class AutomationPage{
   // This credential-prefixed session read cannot dispatch an attendance action.
   // It retains native document binding and bypasses the recovery wrapper itself.
   if(name==='credential-docple-session.js'&&(this.site!=='docple'||args?.[0]?.site!=='docple'||args[0].mode!=='verify'||args[0].kind!=='attendance'||args[0].autoClaim!==false||args[0].attempted!==false||args[0].phase!==undefined||args[0].action!==undefined||navigation))throw failure('policy_rejected');
-  if(['auto-entry.js','pc-entry.js'].includes(name)&&this.site==='dtalks')throw failure('disabled');
+  if(['auto-entry.js','pc-entry.js'].includes(name)&&!automaticEntrySite(this.site))throw failure('disabled');
   if(name==='pc-entry.js'&&(args?.[0]?.site!==this.site||!['preflight','inspect','click','schedule-inspect'].includes(args?.[1])||navigation&&args[1]!=='click'))throw failure('policy_rejected');
   if(name==='pc-entry.js'&&args[1]==='schedule-inspect'&&(this.site!=='doctorville'||!doctorvilleDetailNavigation('https://www.doctorville.co.kr/seminar/main',this.url)||navigation))throw failure('policy_rejected');
   const entry=['auto-entry.js','pc-entry.js'].includes(name),official=entry&&officialIdentity(args?.[0]);

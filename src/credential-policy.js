@@ -2,7 +2,7 @@ import {readFileSync} from 'node:fs';
 export const CREDENTIAL_SITES=Object.freeze(JSON.parse(readFileSync(new URL('../vendor/credentials/sites.json',import.meta.url),'utf8')));
 export const credentialSite=id=>CREDENTIAL_SITES.find(site=>site.id===id)??null;
 export const credentialInput=input=>input&&typeof input==='object'&&typeof input.id==='string'&&input.id.length>0&&input.id.length<=512&&typeof input.password==='string'&&input.password.length>0&&input.password.length<=4096&&!/[\x00-\x1f\x7f]/.test(input.id+input.password);
-export const CREDENTIAL_STATUSES=new Set(['idle','ready','loading','submitted','authenticated','login_required','manual','challenge','blocked','stale','already_submitted','unknown','rejected','pending','saved','removed','disabled','cooldown','daily_limit','cancelled','storage_unavailable','storage_error','network_error','time_limit','busy','not_saved','probe_unready']);
+export const CREDENTIAL_STATUSES=new Set(['idle','ready','loading','submitted','authenticated','login_required','manual','challenge','blocked','stale','already_submitted','unknown','rejected','pending','saved','removed','disabled','cooldown','daily_limit','cancelled','storage_unavailable','storage_error','network_error','time_limit','busy','not_saved','probe_unready','site_wait']);
 export const safeCredentialStatus=value=>CREDENTIAL_STATUSES.has(value)?value:'unknown';
 export function settlingDoctorvilleProvider(raw){
  try{const u=new URL(raw);return typeof raw==='string'&&raw.length<=8192&&u.origin==='https://mims-account.shop.co.kr'&&!u.username&&!u.password&&!u.port&&!u.searchParams.has('cb');}catch{return false;}

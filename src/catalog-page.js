@@ -4,6 +4,7 @@ import {allowedNavigation,siteById} from './security.js';
 import {loginNoticeStatus} from './entry-dialog.js';
 import {pageRole} from './page-role.js';
 import {ID_SITES,officialIdentity} from './entry-identity.js';
+import {readDoctorvilleApplications} from './doctorville-applications.js';
 
 const ASSETS=new Map();
 function asset(name,site){const family=site==='dtalks'&&name==='reader-additional.js'?'direction169':site==='bluepharm'?'direction161':ID_SITES.includes(site)?'identity':'engine',key=family+'/'+name;if(!ASSETS.has(key))ASSETS.set(key,readFileSync(new URL('../vendor/'+key,import.meta.url),'utf8'));return ASSETS.get(key);}
@@ -95,7 +96,8 @@ export class CatalogPage{
   if(!allowedNavigation(this.profile.id,before.url))throw fail('navigation_changed');
   if(before.notice==='blocked')return {site:site.id,status:'blocked',done:true,events:[],coverage:false};
   if(!site.hosts.includes(new URL(before.url).hostname)||/\/login(?:\/|\.|$)|\/auth\/login|\/sign.?in/i.test(new URL(before.url).pathname))return {site:site.id,status:'login',done:true,events:[],coverage:false};
-  const source=`(()=>{if(document.readyState!=='complete')return JSON.stringify({status:'loading',done:false,events:[]});const notice=(${catalogNotice})(${JSON.stringify(before.notice??'')},${loginNoticeStatus});if(notice)return JSON.stringify({site:${JSON.stringify(site.id)},status:notice,done:true,events:[],coverage:false});const read=${asset(readerName(this.profile),this.profile.id)};const result=read(${JSON.stringify(this.profile)},${JSON.stringify(date)},${JSON.stringify(previous)});return JSON.stringify(${site.id==='dtalks'?`(${dtalksCalendarCoverage})(result)`:'result'});})()`;
+  const supplement={dtalks:dtalksCalendarCoverage,doctorville:readDoctorvilleApplications}[site.id];
+  const source=`(()=>{if(document.readyState!=='complete')return JSON.stringify({status:'loading',done:false,events:[]});const notice=(${catalogNotice})(${JSON.stringify(before.notice??'')},${loginNoticeStatus});if(notice)return JSON.stringify({site:${JSON.stringify(site.id)},status:notice,done:true,events:[],coverage:false});const read=${asset(readerName(this.profile),this.profile.id)};const result=read(${JSON.stringify(this.profile)},${JSON.stringify(date)},${JSON.stringify(previous)});return JSON.stringify(${supplement?`(${supplement})(result)`:'result'});})()`;
   let encoded;
   try{resourceCount('domReads');encoded=await this.#evaluate(source);}catch(error){
    const after=this.#current();

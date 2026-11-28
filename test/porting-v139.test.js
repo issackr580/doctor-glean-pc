@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,rmSync,readFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {createHash} from 'node:crypto';
+import {createEntryJob} from '../src/entry-job.js';
 import {kstDate,kstInstant} from '../src/schedule.js';
 import {CatalogStore,sanitiseResult} from '../src/catalog-store.js';
-import {WorkflowStore} from '../src/workflow-store.js';
+import {WorkflowStore,cleanReceipt} from '../src/workflow-store.js';
 import {EntryRunner} from '../src/entry-runner.js';
 import {LocalState} from '../src/local-state.js';
 import {PcOptions} from '../src/pc-options.js';
@@ -22,9 +22,10 @@ import {LoungeRunner} from '../src/lounge-runner.js';
 const date=kstDate(),at=t=>kstInstant(date,t),title='가상 웨비나';
 function setup(t){const root=mkdtempSync(join(tmpdir(),'pc-v139-'));t.after(()=>rmSync(root,{recursive:true,force:true}));let now=at('12:30');return {root,now:()=>now,set:n=>{now=n;},sleep:async ms=>{now+=ms;}};}
 const event=(id='701',patch={})=>({site:'docple',id,url:'https://docple-plus.com/webinar/'+id+'?category=C01&mode=LIVE&sort=START_ASC',date,time:'13:00',title,registrationStatus:'registered',...patch});
-function harness(t){const s=setup(t),ledger=new LocalState(join(s.root,'state.json')),store=new WorkflowStore(join(s.root,'workflows.json'));ledger.setPaused(false);store.setFeature('entry',true);store.setEntrySites(['docple','whodadoc','dtalks']);const runner=new EntryRunner({ledger,store,now:s.now,sleep:s.sleep});return {...s,ledger,store,runner,reserve:(events)=>runner.reserveCatalog(date,{docple:{status:'ok',stale:false,checkedAt:s.now(),events}})};}
+function harness(t){const s=setup(t),ledger=new LocalState(join(s.root,'state.json')),store=new WorkflowStore(join(s.root,'workflows.json'));ledger.setPaused(false);store.setFeature('entry',true);store.setEntrySites(['bluepharm','docple','whodadoc','dtalks']);const runner=new EntryRunner({ledger,store,now:s.now,sleep:s.sleep});return {...s,ledger,store,runner,reserve:(events=[active()])=>runner.reserveCatalog(date,{bluepharm:{status:'ok',stale:false,checkedAt:s.now(),events}})};}
+const active=(patch={})=>({site:'bluepharm',date,time:'13:00',title,...patch});
 const ready={status:'ready',reason:'entry_ready',targetMatched:true,titleMatches:1,scheduleMatches:1,matchedTargets:1,entryControls:1};
-function actionPage(s,{onInspect=()=>{},lose=false,probe='not_open'}={}){return {url:'',version:0,route:'catalog',signal:new AbortController().signal,async load(url){this.url=url;this.version++;},async call(_name,[job,mode]){if(mode==='inspect'){await onInspect(job);return ready;}if(mode==='entry_probe')return {status:probe};if(mode==='click'){s.clicks=(s.clicks??0)+1;assert.equal(Object.values(s.ledger.snapshot().jobs).at(-1).state,'attempting');if(lose)throw Error('lost_ack');this.url='https://docple-plus.com/webinar/701/watch';this.version++;return {status:'clicked'};}return null;},close(){},allowPopups(){}};}
+function actionPage(s,{onInspect=()=>{},lose=false,probe='not_open'}={}){return {url:'',version:0,route:'catalog',signal:new AbortController().signal,async load(url){this.url=url;this.version++;},async call(_name,[job,mode]){if(mode==='inspect'){await onInspect(job);return ready;}if(mode==='entry_probe')return {status:probe};if(mode==='click'){s.clicks=(s.clicks??0)+1;assert.equal(Object.values(s.ledger.snapshot().jobs).at(-1).state,'attempting');if(lose)throw Error('lost_ack');this.url='https://bluepharmkorea.co.kr/';this.version++;return {status:'clicked'};}return null;},close(){},allowPopups(){}};}
 test('Docple catalog keeps public IDs and registration; rejects ID/URL disagreement and opaque parameters',()=>{
  const row=sanitiseResult('docple',date,{status:'ok',coverage:true,events:[event(),event('702')],diagnostics:{stopReason:'docple_list_exhausted',listStatus:'checked',unknown:0}},at('12:00'));
  assert.deepEqual(row.events.map(e=>e.id),['701','702']);assert.equal(row.events[0].registrationStatus,'registered');assert.equal(row.scope,'list_checked');
@@ -37,31 +38,54 @@ test('Docple defaults are opt-in and preserve attendance choices, profile data a
  assert.ok(options.snapshot().dailyKeys.includes('docple:attendance'));assert.deepEqual(new CatalogStore(join(s.root,'catalog.json')).selected(),['hmp']);assert.deepEqual(new WorkflowStore(store.file).entrySites(),['hmp']);assert.equal(readFileSync(store.file,'utf8'),before);
  assert.equal(new WorkflowStore(join(s.root,'fresh.json')).entrySites().includes('docple'),false);
 });
-test('only registered LIVE identities reserve, same titles remain independent and rename does not grant a new action',t=>{
- const s=harness(t);s.reserve([event(),event('702'),event('703',{registrationStatus:'not_registered'}),event('704',{registrationStatus:'unknown'}),event('705',{lectureEnded:true})]);
- assert.equal(s.store.entries().length,2);const [job]=s.store.entries();assert.equal(job.key,createHash('sha256').update('docple|'+date+'|701').digest('hex'));assert.equal(job.due,at('12:30'));assert.equal(job.deadline,at('13:10'));
- s.store.updateEntry(job.key,{status:'clicked',entryAttempted:true});s.reserve([event('701',{title:'이름 변경'})]);assert.equal(s.store.entries().length,2);assert.equal(s.store.entries().find(j=>j.key===job.key).status,'clicked');
+test('retired sites close stored reservations and keep past attempts without creating a worker',async t=>{
+ const s=harness(t),saved={};
+ for(const [site,original] of Object.entries({
+  docple:event(),
+  whodadoc:{site:'whodadoc',date,time:'13:00',title,url:'https://hcp.whodadoc.com/webinar/webi/view?id=702'},
+  dtalks:{site:'dtalks',date,time:'13:00',title,url:'https://www.dtalks.kr/websim/vodList.do'},
+ })){
+  const key=s.store.entryKey(original);
+  const job={...createEntryJob(active(),s.now()),...original,key,status:'attempting',entryAttempted:true,attempts:[cleanReceipt({status:'clicked',attempted:true},s.now())]};
+  s.store.putEntry(job);saved[site]=job;
+  assert.equal(createEntryJob(original,s.now()),null);
+  s.runner.reserveCatalog(date,{[site]:{status:'ok',stale:false,events:[original]}});
+ }
+ const restored=new WorkflowStore(s.store.file,{now:s.now});
+ s.runner.store=restored;
+ s.runner.createPage=async()=>assert.fail('retired worker created');
+ for(const job of Object.values(saved)){
+  const row=restored.entries().find(r=>r.key===job.key);
+  assert.equal(row.status,'cancelled');
+  assert.equal(row.entryAttempted,true);
+  assert.deepEqual(row.attempts,job.attempts);
+  assert.equal(await s.runner.run(job),false);
+  assert.equal(s.runner.retryJob(job.key),false);
+ }
+ assert.equal(s.runner.due(),null);
+ assert.deepEqual(restored.entrySites(),['bluepharm','docple','whodadoc','dtalks']);
 });
 test('atomic ledger write failure sends zero original entry clicks',async t=>{
- const s=harness(t);s.reserve([event()]);s.ledger=new LocalState(join(s.root,'failed.json'),{commit:()=>{throw Error('disk_full');}});
+ const s=harness(t);s.reserve();s.ledger=new LocalState(join(s.root,'failed.json'),{commit:()=>{throw Error('disk_full');}});
  // Allow setup commit, then inject the failure exactly at external dispatch.
  const working=new LocalState(join(s.root,'state2.json'));working.setPaused(false);const failed=new LocalState(join(s.root,'state2.json'),{commit:()=>{throw Error('disk_full');}});s.ledger=failed;s.runner.ledger=failed;s.runner.createPage=async()=>actionPage(s);
- await s.runner.run(s.store.entries()[0]);assert.equal(s.clicks??0,0);assert.equal(failed.snapshot().paused,true);
+ s.set(s.store.entries()[0].due);await s.runner.run(s.store.entries()[0]);assert.equal(s.clicks??0,0);assert.equal(failed.snapshot().paused,true);
 });
 test('lost click ACK remains consumed across restart, refresh and title change',async t=>{
- const s=harness(t);s.reserve([event()]);s.runner.createPage=async()=>actionPage(s,{lose:true});await s.runner.run(s.store.entries()[0]);assert.equal(s.clicks,1);
- const restored=new LocalState(join(s.root,'state.json'));s.runner.ledger=restored;s.runner.recover();s.reserve([event('701',{title:'새 제목'})]);await s.runner.run(s.store.entries()[0]);assert.equal(s.clicks,1);assert.equal(Object.values(restored.snapshot().jobs)[0].state,'unknown');
+ const s=harness(t);s.reserve();s.runner.createPage=async()=>actionPage(s,{lose:true});s.set(s.store.entries()[0].due);await s.runner.run(s.store.entries()[0]);assert.equal(s.clicks,1);
+ const restored=new LocalState(join(s.root,'state.json'));s.runner.ledger=restored;s.runner.recover();s.reserve();await s.runner.run(s.store.entries()[0]);assert.equal(s.clicks,1);assert.equal(Object.values(restored.snapshot().jobs)[0].state,'unknown');
 });
 test('selection revocation or cancellation during inspect cannot call click',async t=>{
- for(const revoke of ['selection','cancel']){const s=harness(t);s.reserve([event()]);s.runner.createPage=async()=>actionPage(s,{onInspect:()=>{if(revoke==='selection')s.store.setEntrySites([]);else s.runner.cancelJob(s.store.entries()[0].key);}});await s.runner.run(s.store.entries()[0]);assert.equal(s.clicks??0,0);}
+ for(const revoke of ['selection','cancel']){const s=harness(t);s.reserve();s.runner.createPage=async()=>actionPage(s,{onInspect:()=>{if(revoke==='selection')s.store.setEntrySites([]);else s.runner.cancelJob(s.store.entries()[0].key);}});await s.runner.run(s.store.entries()[0]);assert.equal(s.clicks??0,0);}
 });
 test('schedule corrections preserve peers and can consume only two distinct checkpoints',t=>{
- const s=harness(t);s.reserve([event(),event('702')]);const [a,b]=s.store.entries();s.reserve([event('701',{time:'13:20'}),event('702')]);const changed=s.store.entries().find(j=>j.key===a.key);
+ const s=harness(t);s.store.setEntrySites(['keymedi']);
+ const lecture={site:'keymedi',date,time:'13:00',title,url:'https://www.keymedi.com/meditv/live/L701'};
+ const peer={...lecture,title:'다른 강의',url:'https://www.keymedi.com/meditv/live/L702'};
+ const reserve=event=>s.runner.reserveCatalog(date,{keymedi:{status:'ok',stale:false,events:[event,peer]}});
+ reserve(lecture);const [a,b]=s.store.entries();reserve({...lecture,time:'13:20'});const changed=s.store.entries().find(j=>j.key===a.key);
  assert.equal(changed.schedulePlan.length,2);assert.deepEqual(s.store.entries().find(j=>j.key===b.key),b);assert.equal(attachCheckpoints(changed,{...changed,time:'13:40'},s.now()),null);
  const restored=new WorkflowStore(s.store.file);assert.deepEqual(restored.entries().find(j=>j.key===a.key).schedulePlan,changed.schedulePlan);
-});
-test('short repeat needs actual player observation before anchoring next checkpoint',async t=>{
- for(const observed of [false,true]){const s=harness(t);s.set(at('13:00'));s.runner.reserveCatalog(date,{whodadoc:{status:'ok',stale:false,events:[{site:'whodadoc',date,time:'13:00',title,url:'https://hcp.whodadoc.com/hcp/main'}]}});s.runner.createPage=async()=>{const p=actionPage(s,{probe:observed?'player_observed':'not_open'});const call=p.call.bind(p);p.call=async(...args)=>{const result=await call(...args);if(args[1][1]==='click')p.url='https://hcp.whodadoc.com/hcp/live';return result;};return p;};await s.runner.run(s.store.entries()[0]);const j=s.store.entries()[0];assert.equal(j.status,observed?'reserved':'clicked');assert.equal(j.slot,observed?1:0);if(observed){assert.equal(j.due,j.repeatFirstEntryAt+600000);assert.equal(j.receipt.playerObserved,true);}}
 });
 test('quiz-wide pending survives daily rollover; only matching explicit receipts settle and total limit is two',t=>{
  const s=setup(t),file=join(s.root,'fuses.json'),f=new ActionFuses(file),op='a'.repeat(32);assert.equal(f.reserveQuiz(17,0,op),true);const restored=new ActionFuses(file);assert.equal(restored.reserveQuiz(17,1,'b'.repeat(32)),false);assert.equal(restored.settleQuiz(17,'b'.repeat(32),'wrong'),false);assert.equal(restored.settleQuiz(17,op,'wrong'),true);assert.equal(restored.reserveQuiz(17,0,'b'.repeat(32)),false);assert.equal(restored.reserveQuiz(17,1,'b'.repeat(32)),true);assert.equal(restored.settleQuiz(17,'b'.repeat(32),'wrong'),true);assert.equal(restored.reserveQuiz(17,1,'c'.repeat(32)),false);
@@ -85,8 +109,8 @@ test('selected Doctorville survey completes only with matching manual proof; exc
  again.observe(url,proof,key);assert.equal(make().snapshot()[0].status,'complete');assert.equal(make().skip(key,true),false);assert.equal(make().snapshot()[0].excluded,true);
 });
 test('workflow write failure after the ledger dispatch reservation still sends zero clicks',async t=>{
- const s=harness(t);s.reserve([event()]);const broken=new WorkflowStore(s.store.file,{commit:(file,data)=>{if(Object.values(data.entries).some(r=>r.status==='attempting'))throw Error('disk_full');atomicJson(file,data);}});s.runner.store=broken;s.runner.createPage=async()=>actionPage(s);
- await s.runner.run(broken.entries()[0]);assert.equal(s.clicks??0,0);assert.equal(Object.values(new LocalState(join(s.root,'state.json')).snapshot().jobs)[0].state,'unknown');
+ const s=harness(t);s.reserve();const broken=new WorkflowStore(s.store.file,{commit:(file,data)=>{if(Object.values(data.entries).some(r=>r.status==='attempting'))throw Error('disk_full');atomicJson(file,data);}});s.runner.store=broken;s.runner.createPage=async()=>actionPage(s);
+ s.set(broken.entries()[0].due);await s.runner.run(broken.entries()[0]);assert.equal(s.clicks??0,0);assert.equal(Object.values(new LocalState(join(s.root,'state.json')).snapshot().jobs)[0].state,'unknown');
 });
 test('read-only refresh never joins a queued write batch',t=>{
  const s=setup(t),ledger=new LocalState(join(s.root,'state.json')),c=new AutomationController({file:join(s.root,'workflow.json'),ledger,now:s.now,catalog:()=>({}),catalogBusy:()=>false,queueCatalog(){},yieldCatalog(){}});clearInterval(c.timer);t.after(()=>c.close());ledger.setPaused(false);c.active='prepare';

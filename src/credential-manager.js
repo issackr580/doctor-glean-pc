@@ -9,8 +9,8 @@ import {credentialSite,credentialInput,safeCredentialStatus} from './credential-
 import {join} from 'node:path';
 import {inspectDocpleSession} from './credential-session.js';
 export class CredentialManager{
- constructor({directory,applicationId,protect,createPage,automaticAllowed,isManualOpen,onChange=()=>{},now=Date.now,developer=false}){
-  Object.assign(this,{createPage,automaticAllowed,isManualOpen,onChange,now});this.vault=new CredentialVault(join(directory,'credentials-v1.json'),applicationId,protect);this.attempts=new CredentialAttempts(join(directory,'credential-attempts-v1.json'),{developer});this.dailyFuses=new ActionFuses(join(directory,'credential-action-fuses-v1.json'));this.runner=new CredentialRunner({attempts:this.attempts,now});this.active=null;this.last=new Map();
+ constructor({directory,applicationId,protect,createPage,automaticAllowed,isManualOpen,siteAvailable=()=>true,onChange=()=>{},now=Date.now,developer=false}){
+  Object.assign(this,{createPage,automaticAllowed,isManualOpen,siteAvailable,onChange,now});this.vault=new CredentialVault(join(directory,'credentials-v1.json'),applicationId,protect);this.attempts=new CredentialAttempts(join(directory,'credential-attempts-v1.json'),{developer});this.dailyFuses=new ActionFuses(join(directory,'credential-action-fuses-v1.json'));this.runner=new CredentialRunner({attempts:this.attempts,now});this.active=null;this.last=new Map();
  }
  get busy(){return !!this.active;}
  snapshot(){return {dailyLogin:this.dailyFuses.summary().ckd,vault:this.vault.snapshot(),attempts:this.attempts.snapshot(),active:this.active?{site:this.active.site,kind:this.active.kind}:null,results:[...this.last].map(([site,result])=>({site,...result}))};}
@@ -21,6 +21,10 @@ export class CredentialManager{
   if(!credentialSite(site))return {status:'blocked'};
   if(this.active||this.isManualOpen(site))return {status:'busy'};
   if(!this.vault.available())return {status:'storage_unavailable'};
+  if(!this.siteAvailable(site)){
+   const result={status:'site_wait',at:this.now(),kind,automatic,attempted:false,submitted:false};
+   this.last.set(site,result);this.onChange();return result;
+  }
   if(automatic&&(!this.automaticAllowed(site)||!this.vault.enabled(site)))return {status:'disabled'};
   const decision=this.attempts.decision(site,this.now(),kind==='save',automatic);
   if(decision!=='ready'&&!(kind==='recover'&&['cooldown','daily_limit'].includes(decision))){
@@ -35,6 +39,7 @@ export class CredentialManager{
    if(controller.signal.aborted)return result={status:'cancelled'};
    run.page=await this.createPage(site,controller.signal,{validation:kind==='save',partition:'credential-validation-'+randomUUID()});
    result=await work(run.page,controller.signal,()=>!controller.signal.aborted&&(!automatic||this.automaticAllowed(site)&&this.vault.enabled(site)));
+   if(!controller.signal.aborted&&!this.siteAvailable(site)&&result.status!=='authenticated')result={...result,status:'site_wait'};
    if(kind==='recover'&&result.status==='authenticated')await run.page.flushSession?.();
   }catch(error){result={status:safeCredentialStatus(controller.signal.aborted?'cancelled':error.code??error.message)};}
   finally{run.page?.close();signal?.removeEventListener('abort',abort);if(this.active===run)this.active=null;this.last.set(site,{status:result.status,at:this.now(),kind,automatic,attempted:result.attempted===true,submitted:result.submitted===true,retryAt:this.attempts.retryAt(site,this.now(),{automatic}),...(result.detail==='input_format'?{detail:'input_format'}:{}),...(Array.isArray(result.trace)?{trace:result.trace}:{}),...(Number.isSafeInteger(result.reads)?{reads:result.reads,elapsedMs:result.elapsedMs}:{})});this.onChange();}

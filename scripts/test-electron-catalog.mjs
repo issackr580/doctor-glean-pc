@@ -1,5 +1,5 @@
 // Executed by Electron with synthetic HTTPS handlers. Never uses real accounts.
-import {app,BrowserWindow,session,dialog,clipboard,shell as desktopShell} from 'electron';
+import {app,BrowserWindow,Notification,session,dialog,clipboard,shell as desktopShell} from 'electron';
 import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync,existsSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
@@ -20,6 +20,9 @@ const dataDirectory=join(temporary,edition.directory),browserDirectory=join(data
 mkdirSync(browserDirectory,{recursive:true});app.setPath('appData',temporary);app.setPath('userData',dataDirectory);app.setPath('sessionData',browserDirectory);
 const resultFile=new URL('../verification/electron-edition-'+edition.id+'.json',import.meta.url);
 const modes={doctorville:'normal',keymedi:'normal',whodadoc:'normal',dtalks:'entry-error'},requests=[],checks=[];
+const applicationNotices=[];
+Notification.isSupported=()=>true;
+Notification.prototype.show=function(){applicationNotices.push(this.title);};
 let registrationPosted=false,registrationDurable=false,registrationPostCount=0,hmpRegistered=false,hmpRegistrationPosts=0,hmpRegistrationDurable=false;
 const windowMenus=new WeakMap(),setMenu=BrowserWindow.prototype.setMenu;
 BrowserWindow.prototype.setMenu=function(menu){windowMenus.set(this,menu);return setMenu.call(this,menu);};
@@ -54,7 +57,7 @@ await app.whenReady();
 for(const id of ['doctorville','keymedi','whodadoc','dtalks','hmp']){
  const profile=session.fromPartition(`persist:doctor-glean-pc-${edition.id}-v1-${id}`);
  await profile.protocol.handle('https',request=>{
-  requests.push({site:id,method:request.method});
+  requests.push({site:id,method:request.method,path:new URL(request.url).pathname});
   if(id==='doctorville'&&request.method==='POST'&&new URL(request.url).pathname==='/synthetic-registration'){
    registrationPostCount++;registrationDurable=Object.values(JSON.parse(readFileSync(join(dataDirectory,'registration-attempts-v1.json'),'utf8')).rows).some(row=>row.site==='doctorville'&&row.date===today&&row.time===syntheticClock&&row.attempted===true);registrationPosted=true;return new Response('{}',{headers:{'content-type':'application/json'}});
   }
@@ -65,7 +68,7 @@ for(const id of ['doctorville','keymedi','whodadoc','dtalks','hmp']){
   if(id==='hmp'&&modes.hmp==='registration')return new Response(shell(`<div class="area"><div class="top"><span class="date">${today}</span><span class="time">23:59 ~ 23:59</span></div><div class="subject"><strong>합성 한미 신청 강의</strong></div>${hmpRegistered?'<span>신청완료</span>':`<button onclick="event.preventDefault();event.stopPropagation();fetch('/synthetic-hmp-registration',{method:'POST'}).then(()=>this.outerHTML='<span>신청완료</span>')">신청하기</button>`}</div><a href="/logout">로그아웃</a>`),{headers:{'content-type':'text/html; charset=utf-8'}});
   if(id==='dtalks'&&(modes.dtalks==='all-error'||modes.dtalks==='entry-error'&&new URL(request.url).pathname!=='/login.do'))return Response.error();
   if(id==='dtalks'&&modes.dtalks==='calendar')return new Response(shell(`<div class="calendar_wrap"><div class="btn_month_wrap active"><span class="date_txt">${today.slice(0,7).replace('-','.')}</span></div><div class="calendar_box active"><div class="calendar_grid"><div class="day" data-date="${today}"><div class="day_txt">${Number(today.slice(8))}</div><div class="day_box"><div class="time">13:00</div><div class="memo">합성 디톡스 강의</div></div></div></div></div></div>`),{headers:{'content-type':'text/html; charset=utf-8'}});
-  const doctorReady=modes.doctorville==='registration'?doctorCards.replaceAll('</a>',registrationPosted?'<span>신청완료</span></a>':`<button onclick="event.preventDefault();event.stopPropagation();fetch('/synthetic-registration',{method:'POST'}).then(()=>this.outerHTML='<span>신청완료</span>')">신청하기</button></a>`):modes.doctorville==='entry-ready'?doctorCards.replaceAll('</a>','<button onclick="fetch(\'/synthetic-entry\',{method:\'POST\'})">입장하기</button></a>'):doctorCards;
+  const doctorReady=modes.doctorville==='registration'?doctorCards.replaceAll('</a>',registrationPosted?'<span>신청완료</span></a>':`<button onclick="event.preventDefault();event.stopPropagation();fetch('/synthetic-registration',{method:'POST'}).then(()=>this.outerHTML='<span>신청완료</span>')">신청하기</button></a>`):modes.doctorville==='entry-ready'?doctorCards.replaceAll('</a>','<button onclick="fetch(\'/synthetic-entry\',{method:\'POST\'})">입장하기</button></a>'):modes.doctorville==='application-catalog'?doctorCards.replace('</a></li>','<span>신청완료</span></a></li>').replace('</a></li></ul>','</a><button>신청하기</button></li></ul>'):doctorCards;
   const ready=(id==='doctorville'?doctorReady:id==='keymedi'?keyCards:'<main>웨비나</main>')+'<a href="/logout">로그아웃</a>';
   const body=modes[id]==='login'?login:`<script>document.write(localStorage.getItem('synthetic-login')==='ready'?${JSON.stringify(ready)}:${JSON.stringify(login)});const b=document.getElementById('synthetic-login');if(b)b.onclick=()=>{localStorage.setItem('synthetic-login','ready');location.reload();};</script>`;
   return new Response(shell(body),{headers:{'content-type':'text/html; charset=utf-8'}});
@@ -325,6 +328,21 @@ try{
  await pause(1200);
  check('cancelled collection cannot become finished later',(await state()).collection.reason==='cancelled');
  check('hidden worker windows released',BrowserWindow.getAllWindows().length===1);
+ modes.doctorville='application-catalog';
+ const listReadStart=requests.length,noticeStart=applicationNotices.length;
+ for(let round=0;round<2;round++){
+  const before=(await state()).results.doctorville?.checkedAt??0;
+  await evaluate('window.doctorGlean.collectSite("doctorville")');
+  await until(async()=>{const s=await state();return !s.collection.running&&s.results.doctorville?.checkedAt>before&&s.results.doctorville.events.some(e=>e.registrationStatus==='not_registered');});
+ }
+ check('Doctorville catalog emits one notice for a new supported card over two list reads',applicationNotices.length===noticeStart+1&&requests.slice(listReadStart).filter(r=>r.site==='doctorville').every(r=>r.method==='GET'&&r.path==='/seminar/main'));
+ const apply='[...document.querySelectorAll("#lectures button")].find(b=>b.textContent==="신청 페이지 열기")';
+ await until(()=>evaluate('!!('+apply+')'));
+ check('Doctorville application rejects renderer-provided URLs without loading either site',!(await evaluate('window.doctorGlean.openDoctorvilleApplication("https://invalid.example/")')).ok);
+ await evaluate('('+apply+').click()');
+ const original=await until(()=>BrowserWindow.getAllWindows().find(w=>w!==control&&w.webContents.getURL().endsWith('seminarId=2')));
+ check('Doctorville agenda opens the original unregistered detail and performs no submission',original.isVisible()&&registrationPostCount===0&&requests.slice(listReadStart).filter(r=>r.path==='/seminar/seminarDetail').length===1);
+ original.close();await until(()=>BrowserWindow.getAllWindows().length===1);
  control.close();check('closing control retains resident app',!control.isDestroyed());
  check('synthetic protocol only made catalog GET requests',requests.every(request=>request.method==='GET'));
  control.show();modes.doctorville='registration';await evaluate('window.doctorGlean.preflightEntry('+JSON.stringify(seededKey)+')');
