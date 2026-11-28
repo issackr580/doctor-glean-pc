@@ -8,7 +8,7 @@ import {SiteWait,workerWait,observeSiteResponse} from './site-wait.js';
 import {updateBrowserPage} from './update-policy.js';
 import {NativeCatalogRead} from './native-catalog.js';
 import {configureUsage,changeUsage,flushUsage,resourceUse,trackPage} from './resource-use.js';
-import {app,BrowserWindow,Menu,Tray,nativeImage,ipcMain,session,dialog,clipboard,powerMonitor,safeStorage,net,shell,Notification} from 'electron';
+import {app,BrowserWindow,Menu,Tray,nativeImage,ipcMain,session,dialog,clipboard,powerMonitor,safeStorage,net,shell,Notification,webContents} from 'electron';
 import {fileURLToPath} from 'node:url';
 import {join} from 'node:path';
 import {writeFile} from 'node:fs/promises';
@@ -37,7 +37,7 @@ import {watchManualEntry} from './manual-entry-watch.js';
 import {automaticEntrySite} from './entry-support.js';
 import {DoctorvilleApplicationNotices,doctorvilleApplicationTargets} from './doctorville-applications.js';
 import {CredentialManager} from './credential-manager.js';
-import {credentialSite,safeCredentialStatus,docpleAuthOperation} from './credential-policy.js';
+import {credentialSite,safeCredentialStatus,docpleAuthOperation,docplePageViewRequest,allowedCredentialPage} from './credential-policy.js';
 import {credentialPageState} from './credential-page-state.js';
 import {manualLoadRecovery} from './site-load-policy.js';
 import {RuntimeFaults,faultNotice} from './runtime-faults.js';
@@ -73,17 +73,27 @@ const networkSessions=new Set(),registeredSessions=new WeakSet();
 function* liveNetworkSessions(){
  for(const ref of networkSessions){const profile=ref.deref();if(profile)yield profile;else networkSessions.delete(ref);}
 }
-const configureNetwork=(profile,id)=>{
+const configureNetwork=(profile,id,{omitDocplePageView=false}={})=>{
  if(!registeredSessions.has(profile)){registeredSessions.add(profile);networkSessions.add(new WeakRef(profile));}
  guardSession(profile,{
   allowed:request=>{
    if(!dataAccess.allowed())return false;
    if(!siteWait)return true;
-   return [id,requestSite(request.url)].every(site=>{
+   const allowed=[id,requestSite(request.url)].every(site=>{
     if(!site||siteWait.allowed(site))return true;
     const hold=siteWait.status(site);
     return hold?.manual===true&&siteWait.clockTrusted(Date.now())&&Date.now()>=hold.until&&[...manualOwners].some(([w,owner])=>owner===site&&!w.isDestroyed()&&w.webContents.id===request.webContentsId);
    });
+   if(!allowed)return false;
+   if(omitDocplePageView&&request.webContentsId>0&&docplePageViewRequest(request.url,request.method)&&['xhr','fetch'].includes(request.resourceType)){
+    const contents=webContents.fromId(request.webContentsId);
+    if(contents?.session===profile&&allowedCredentialPage('docple',contents.getURL())&&
+      (!request.frame||request.frame===contents.mainFrame)){
+     docpleValidationPageViewsOmitted=Math.min(10000,docpleValidationPageViewsOmitted+1);
+     return false;
+    }
+   }
+   return true;
   },
   response:(details,worker)=>{
    const site=requestSite(details.url)??id;
@@ -112,6 +122,7 @@ const siteWindows=new Map(),remoteWindows=new Set(),configuredSessions=new Set()
 const manualOwners=new Map();
 const siteSessions=new Map(),navigationVersions=new WeakMap(),loadRequests=new WeakMap(),closingWindows=new WeakSet(),flushingSessions=new Map();
 const docpleManualAuthResponses=new Map();
+let docpleValidationPageViewsOmitted=0;
 const sessionState=id=>siteSessions.get(id)??{load:'not_opened',login:'not_confirmed',save:'not_requested',route:'other',checkedAt:0,lastError:''};
 const runtimeFaults=new RuntimeFaults({onFault:fault=>{
  try{developerTools?.event({area:'process',phase:'fault',site:'',...fault,appVersion:VERSION,sourceCommit:BUILD_INFO.sourceCommit});}catch{}
@@ -155,6 +166,7 @@ function diagnosticSnapshot(){
    return active||wait.at>=dayStart&&wait.at<=now?[{site:id,status:wait.status,manual:wait.manual,until:wait.until,observedAt:wait.at,source:wait.source??'unknown',context:wait.context,method:wait.method,operation:wait.operation,active}]:[];
   }),
   docpleManualAuthResponses:[...docpleManualAuthResponses.values()],
+  docpleValidationPageViewsOmitted,
   recentActivity:recentDiagnostics(now,{catalog,workflows:automation.store,survey:automation.survey}),
   siteSessions:SITES.map(({id})=>({site:id,open:[...manualOwners.values()].includes(id),...effectiveSession(id)})),credentials:credentials?.snapshot(),registration:registration?.store.snapshot(),browserEvents:[...browserEvents],developerDiagnostics:developerTools?.status(),
   attempts:Object.values(snapshot.jobs).map(({site,kind,date,slot,state,updatedAt})=>({site,kind,date,slot,state,updatedAt}))};
@@ -675,7 +687,7 @@ else{
        siteAvailable:id=>siteWait.allowed(id),automaticAllowed:id=>dataAccess.allowed()&&(!id||siteWait.allowed(id))&&!state.snapshot().paused&&!updater.guarded,isManualOpen:id=>[...manualOwners.values()].includes(id),
        createPage:async(id,signal,{validation,partition}={})=>{
         dataAccess.require();const prefs=validation?{...remotePreferences(id,EDITION.id),partition}:prepareSession(id);
-        if(validation){const profile=session.fromPartition(partition);configureNetwork(profile,id);profile.setPermissionRequestHandler((_c,_p,callback)=>callback(false));profile.setPermissionCheckHandler(()=>false);profile.on('will-download',event=>event.preventDefault());}
+        if(validation){const profile=session.fromPartition(partition);configureNetwork(profile,id,{omitDocplePageView:id==='docple'});profile.setPermissionRequestHandler((_c,_p,callback)=>callback(false));profile.setPermissionCheckHandler(()=>false);profile.on('will-download',event=>event.preventDefault());}
         const page=new AutomationPage(id,signal,{...prefs,disableDialogs:true},{traffic:workerTraffic(id,signal)});
         if(validation){const close=page.close.bind(page),profile=session.fromPartition(partition);let cleaned=false;page.close=()=>{close();if(!cleaned){cleaned=true;profile.clearStorageData().catch(()=>{});profile.clearCache().catch(()=>{});}};}
         return page;

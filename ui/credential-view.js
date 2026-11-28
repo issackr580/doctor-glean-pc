@@ -7,7 +7,7 @@ const dialog=()=>document.getElementById('credential-dialog');
 export function siteWaitLabel(wait,now=Date.now()){
  const timed=wait?.until>now;
  if(!wait?.manual&&!timed)return '';
- const request=wait.operation==='login'?'통합회원 로그인 ':wait.operation==='session_refresh'?'세션 갱신 ':'';
+ const request={login:'통합회원 로그인 ',session_refresh:'세션 갱신 ',page_view:'페이지 방문 기록 '}[wait.operation]??'';
  const status=wait.manual?'서버 403 · 직접 확인 필요':wait.status===429?'서버 429 · '+request+'요청 제한':'사이트 응답 대기';
  return timed?status+' · '+(wait.until>8640000000000000?'장기 대기':koreaTime.format(wait.until)+'까지 대기'):status;
 }
