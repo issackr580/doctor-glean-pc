@@ -5,6 +5,7 @@ import {existsSync,unlinkSync} from 'node:fs';
 import {atomicJson,readJson} from './atomic-json.js';
 import {siteById,allowedNavigation} from './security.js';
 import {doctorvilleSurveyId} from './survey-policy.js';
+import {docpleAuthOperation} from './credential-policy.js';
 
 const integer=n=>Number.isSafeInteger(n)&&n>=0;
 const max=Number.MAX_SAFE_INTEGER;
@@ -15,10 +16,12 @@ const docpleApiSources=new Map([
 const responseSources=new Set(['login_document','document','frame','catalog_api','attendance_api','site_api']);
 const responseContexts=new Set(['manual_browser','background_browser','native_read']);
 const requestMethods=new Set(['GET','POST','HEAD']);
+const authOperations=new Set(['login','session_refresh']);
 function valid(data){
  return data?.version===1&&integer(data.observedAt)&&data.sites&&typeof data.sites==='object'&&!Array.isArray(data.sites)&&Object.entries(data.sites).every(([id,row])=>
   siteById(id)&&row&&integer(row.at)&&integer(row.until)&&integer(row.revision)&&typeof row.manual==='boolean'&&row.at<=data.observedAt&&
-  (row.source===undefined||responseSources.has(row.source))&&(row.context===undefined||responseContexts.has(row.context))&&(row.method===undefined||requestMethods.has(row.method)));
+  (row.source===undefined||responseSources.has(row.source))&&(row.context===undefined||responseContexts.has(row.context))&&(row.method===undefined||requestMethods.has(row.method))&&
+  (row.operation===undefined||id==='docple'&&authOperations.has(row.operation)));
 }
 export function waitUntil(value,now,fallback){
  const header=typeof value==='string'?value.trim():'';
@@ -61,7 +64,8 @@ export class SiteWait{
   const source=resourceType==='subFrame'?'frame':document||resourceType==='mainFrame'?
    (login&&address.origin===login.origin&&address.pathname===login.pathname&&(!login.search||address.search===login.search)?'login_document':'document'):
    (site==='docple'&&docpleApiSources.get(address.pathname)||'site_api');
-  const observation={source,context:responseContexts.has(context)?context:undefined,method:requestMethods.has(method)?method:undefined};
+  const operation=site==='docple'&&docpleAuthOperation(address,method);
+  const observation={source,context:responseContexts.has(context)?context:undefined,method:requestMethods.has(method)?method:undefined,...(operation?{operation}:{})};
   const at=this.now();if(!this.clockTrusted(at)){
    // A restriction received during rollback is timed from the last trusted instant.
    if(!this.failed&&integer(this.high))return this.observeAt(site,status,retryAfter,this.high,observation);
@@ -99,10 +103,11 @@ export function workerWait(gate,site,signal,epoch){
 export function observeSiteResponse(gate,site,details,context){
  if(details.fromCache)return false;
  const retry=Object.entries(details.responseHeaders??{}).find(([name])=>name.toLowerCase()==='retry-after')?.[1];
- const pathname=new URL(details.url).pathname;
+ const address=new URL(details.url),pathname=address.pathname;
  // A first-party data read may also carry an explicit Retry-After outside
  // the native API allowlist. This grants no permission to call that route.
  const directedRead=['xhr','fetch'].includes(details.resourceType)&&[429,503].includes(details.statusCode)&&!!retry&&!/\.(?:png|jpe?g|gif|webp|avif|svg|ico|css|js|woff2?|mp[34])$|\/(?:ad[s]?|advertising|analytics|static|assets)\//i.test(pathname);
- const api=directedRead||site==='medigate'&&details.url.split('?')[0]===MEDIGATE_COUNTER_ORIGIN+MEDIGATE_COUNTER_PATH||site==='keymedi'&&details.url==='https://api.keymedi.com/api/drlounge/getMainInfo'||site==='docple'&&docpleApiSources.has(pathname)||site==='ckd'&&['/hcpapp/webinar/webinarCalAjax.do','/hcpapp/webinar/webinarCalDtlAjax.do'].includes(pathname);
+ const docpleAuthLimited=site==='docple'&&details.statusCode===429&&docpleAuthOperation(address,details.method);
+ const api=directedRead||docpleAuthLimited||site==='medigate'&&details.url.split('?')[0]===MEDIGATE_COUNTER_ORIGIN+MEDIGATE_COUNTER_PATH||site==='keymedi'&&details.url==='https://api.keymedi.com/api/drlounge/getMainInfo'||site==='docple'&&docpleApiSources.has(pathname)||site==='ckd'&&['/hcpapp/webinar/webinarCalAjax.do','/hcpapp/webinar/webinarCalDtlAjax.do'].includes(pathname);
  return gate.observe(site,{url:details.url,status:details.statusCode,retryAfter:Array.isArray(retry)?retry[0]:retry,resourceType:details.resourceType,api,context,method:details.method});
 }

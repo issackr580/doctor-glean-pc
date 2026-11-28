@@ -7,11 +7,13 @@ const dialog=()=>document.getElementById('credential-dialog');
 export function siteWaitLabel(wait,now=Date.now()){
  const timed=wait?.until>now;
  if(!wait?.manual&&!timed)return '';
- const status=wait.manual?'서버 403 · 직접 확인 필요':wait.status===429?'서버 429 · 요청 제한':'사이트 응답 대기';
+ const request=wait.operation==='login'?'통합회원 로그인 ':wait.operation==='session_refresh'?'세션 갱신 ':'';
+ const status=wait.manual?'서버 403 · 직접 확인 필요':wait.status===429?'서버 429 · '+request+'요청 제한':'사이트 응답 대기';
  return timed?status+' · '+(wait.until>8640000000000000?'장기 대기':koreaTime.format(wait.until)+'까지 대기'):status;
 }
 export function resultLabel(result){
  if(result?.detail==='input_format')return '닥터빌 화면의 비밀번호 형식 안내를 확인해 주세요. 입력한 계정은 저장하지 않았어요.';
+ if(result?.status==='saved'&&result.profileStatus==='deferred')return '계정을 저장했어요. 다음 조회나 출석에서 로그인이 필요하면 저장한 계정으로 복구해요.';
  if(result?.status==='saved')return result.profileStatus==='authenticated'?'계정 저장과 작업용 로그인 확인을 마쳤어요. 강의 목록도 다시 확인해요.':'계정은 저장됐어요. 「저장 계정으로 로그인」을 누르면 작업용 로그인과 강의 목록을 확인해요.';
  if(result?.status==='blocked'&&result.submitted)return '로그인 제출 후 이동한 화면에서 완료 여부를 확인하지 못했어요. 입력한 계정은 저장하지 않았어요.';
  if(result?.status==='cancelled'&&result.submitted)return '로그인 제출 후 확인 작업이 중지됐어요. 성공 여부를 확인하지 못해 계정을 저장하지 않았어요.';
