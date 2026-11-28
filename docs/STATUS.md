@@ -1,8 +1,10 @@
 # PC판 현재 상태와 다음 작업
 
-현재 공개 배포용과 협업자용 Draft는 **0.1.0-preview.46**입니다. 실행 소스는 `30b1219facc8f8768aaad4b93fb05e4d8acf90cd`입니다. [배포용](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.46) · [개발자용 Draft](https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-f588be67aa36cd409af1) · [검증 및 게시 기록](releases/0.1.0-preview.46.md)
+현재 공개 배포용과 협업자용 Draft는 **0.1.0-preview.47**입니다. 실행 소스는 `d3e3d1a554f4a19541de72753d1dd5b86eaeaf2e`입니다. [배포용](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.47) · [개발자용 Draft](https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-376c435312e0827e228f) · [검증 및 게시 기록](releases/0.1.0-preview.47.md)
 
-preview.46은 닥플 로그인 후속 조회와 개발자용 Google 로그인 안내를 반영했다. 배포용을 공개하고 개발자용은 협업자 Draft로 제공한다. [게시 및 검사 기록](releases/0.1.0-preview.46.md)
+preview.47은 닥플 로그인 후속 조회와 개발자용 Google 로그인 안내를 반영했다. 배포용을 공개하고 개발자용은 협업자 Draft로 제공한다. [게시 및 검사 기록](releases/0.1.0-preview.47.md)
+
+preview.47은 닥플 통합회원 로그인과 세션 갱신의 HTTP 응답을 구분하고 계정 저장 직후 중복 로그인을 줄였다. 배포용을 공개하고 개발자용은 협업자 Draft로 제공한다. [게시 및 검사 기록](releases/0.1.0-preview.47.md)
 
 ## 닥플 계정 저장 대기
 
