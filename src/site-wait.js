@@ -5,7 +5,7 @@ import {existsSync,unlinkSync} from 'node:fs';
 import {atomicJson,readJson} from './atomic-json.js';
 import {siteById,allowedNavigation} from './security.js';
 import {doctorvilleSurveyId} from './survey-policy.js';
-import {docpleAuthOperation} from './credential-policy.js';
+import {docpleAuthOperation,docplePageViewRequest} from './credential-policy.js';
 
 const integer=n=>Number.isSafeInteger(n)&&n>=0;
 const max=Number.MAX_SAFE_INTEGER;
@@ -16,12 +16,12 @@ const docpleApiSources=new Map([
 const responseSources=new Set(['login_document','document','frame','catalog_api','attendance_api','site_api']);
 const responseContexts=new Set(['manual_browser','background_browser','native_read']);
 const requestMethods=new Set(['GET','POST','HEAD']);
-const authOperations=new Set(['login','session_refresh']);
+const docpleOperations=new Set(['login','session_refresh','page_view']);
 function valid(data){
  return data?.version===1&&integer(data.observedAt)&&data.sites&&typeof data.sites==='object'&&!Array.isArray(data.sites)&&Object.entries(data.sites).every(([id,row])=>
   siteById(id)&&row&&integer(row.at)&&integer(row.until)&&integer(row.revision)&&typeof row.manual==='boolean'&&row.at<=data.observedAt&&
   (row.source===undefined||responseSources.has(row.source))&&(row.context===undefined||responseContexts.has(row.context))&&(row.method===undefined||requestMethods.has(row.method))&&
-  (row.operation===undefined||id==='docple'&&authOperations.has(row.operation)));
+  (row.operation===undefined||id==='docple'&&docpleOperations.has(row.operation)));
 }
 export function waitUntil(value,now,fallback){
  const header=typeof value==='string'?value.trim():'';
@@ -64,7 +64,7 @@ export class SiteWait{
   const source=resourceType==='subFrame'?'frame':document||resourceType==='mainFrame'?
    (login&&address.origin===login.origin&&address.pathname===login.pathname&&(!login.search||address.search===login.search)?'login_document':'document'):
    (site==='docple'&&docpleApiSources.get(address.pathname)||'site_api');
-  const operation=site==='docple'&&docpleAuthOperation(address,method);
+  const operation=site==='docple'&&(docpleAuthOperation(address,method)||(docplePageViewRequest(address,method)?'page_view':''));
   const observation={source,context:responseContexts.has(context)?context:undefined,method:requestMethods.has(method)?method:undefined,...(operation?{operation}:{})};
   const at=this.now();if(!this.clockTrusted(at)){
    // A restriction received during rollback is timed from the last trusted instant.

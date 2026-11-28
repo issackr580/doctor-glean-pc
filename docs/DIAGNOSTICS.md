@@ -43,6 +43,7 @@ preview.12의 예약 검증은 [PC 검증 방법](ENTRY_VALIDATION.md)을 따른
 | `currentState.update` | 현재 실행의 업데이트 상태, 고정 실패 분류, 확인된 버전. 로그인 주소·파일 경로·세션 정보는 제외 |
 | `currentState.serverWait` | 사이트 제한 상태·시각, 고정 요청 분류, 수동 창·작업 창·읽기 API 구분과 HTTP 메서드. 요청 주소·헤더·본문은 제외 |
 | `currentState.docpleManualAuthResponses` | 닥플 수동 창의 통합회원 로그인과 세션 갱신 각각에 대해 현재 실행에서 관측한 최근 HTTP 상태와 시각. 2xx 응답만으로 로그인 성공을 기록하지 않음 |
+| `currentState.docpleValidationPageViewsOmitted` | 현재 실행에서 닥플 계정 저장용 임시 로그인 창의 방문 기록 요청을 보내지 않은 횟수. 인증 시도 횟수와 별개 |
 | `status`, `events` | 기록 동의 기간, 수집/창/제어 단계, 고정 사이트 코드·시각·수치 |
 | `currentState.collection`, `sites`, `pendingQueries` | 선택 날짜·진행·판독 개수·종료 범위·대기열 |
 | `currentState.siteSessions`, `browserEvents` | 로그인 관찰과 세션 보관 요청, 차단·로드 실패. 세션 저장 요청은 로그인 성공과 다름 |

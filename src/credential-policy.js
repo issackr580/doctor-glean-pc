@@ -10,16 +10,22 @@ export function settlingDoctorvilleProvider(raw){
 export function bareDoctorvilleProvider(raw){
  try{const u=new URL(raw);return u.origin==='https://mims-account.shop.co.kr'&&!u.username&&!u.password&&!u.port&&!u.search&&!u.hash&&['/','/login'].includes(u.pathname);}catch{return false;}
 }
-export function docpleAuthOperation(raw,method){
+function docplePostPath(raw,method){
  if(method!=='POST')return '';
  try{
   const url=raw instanceof URL?raw:new URL(raw);
   if(url.origin!=='https://docple-plus.com'||url.username||url.password||url.search||url.hash)return '';
-  if(url.pathname==='/api/season2/auth/login')return 'login';
-  if(url.pathname==='/api/season2/auth/token/refresh')return 'session_refresh';
+  return url.pathname;
  }catch{}
  return '';
 }
+export function docpleAuthOperation(raw,method){
+ const path=docplePostPath(raw,method);
+ if(path==='/api/season2/auth/login')return 'login';
+ if(path==='/api/season2/auth/token/refresh')return 'session_refresh';
+ return '';
+}
+export function docplePageViewRequest(raw,method){return docplePostPath(raw,method)==='/api/log/pageLogInsert';}
 export function isCredentialRequest(site,raw){
  if(site==='docple')return docpleAuthOperation(raw,'POST')==='login';
  try{const u=new URL(raw);return u.protocol==='https:'&&!u.username&&!u.password&&!u.port&&!u.search&&!u.hash&&(site==='doctorville'&&u.origin==='https://mims-account.shop.co.kr'&&u.pathname==='/apis/auth/login'||site==='dtalks'&&u.origin==='https://www.dtalks.kr'&&u.pathname==='/member/loginConfirm.do'||site==='whodadoc'&&u.origin==='https://hcp.whodadoc.com'&&u.pathname==='/auth/login'||site==='hmp'&&u.origin==='https://www.hmp.co.kr'&&u.pathname==='/login/loginProcess.hm');}catch{return false;}
