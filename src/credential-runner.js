@@ -78,7 +78,10 @@ export class CredentialRunner{
      observe('refresh',{status:'loading'});await page.load(policy.entry);continue;
     }
     let reply;
-    if(attempted){reply=await verify();}
+    if(attempted||site==='docple'&&docpleHomeChecked&&page.url===policy.entry){
+     reply=await verify();
+     if(!attempted&&reply.status!=='authenticated'){status=safeCredentialStatus(reply.status);break;}
+    }
     else{reply=await page.call('credential-login.js',[request('probe')]);reads++;observe('probe',reply);}
     if(!attempted&&!validation&&site==='dtalks'&&['unknown','manual'].includes(reply.status)&&!reply.evidence?.barrierReason){
      const supplement=await page.call('credential-page-state.js',[{...request('verify'),validation:false}]);

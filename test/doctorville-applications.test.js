@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {DoctorvilleApplicationNotices} from '../src/doctorville-applications.js';
+import {DoctorvilleApplicationNotices,doctorvilleApplicationTargets} from '../src/doctorville-applications.js';
 import {sanitiseResult} from '../src/catalog-store.js';
 import {EntryRunner} from '../src/entry-runner.js';
 import {LocalState} from '../src/local-state.js';
@@ -19,15 +19,13 @@ function directory(t){
  return path;
 }
 
-test('registration notices are durable per official ID and ignore past, stale and conflicting rows',t=>{
+test('registration notices are durable per official ID and ignore same-day, registered and conflicting rows',t=>{
  const file=join(directory(t),'notices.json'),notices=new DoctorvilleApplicationNotices(file);
- const old={...lecture('2'),time:'12:00'};
- const eligible=collection([lecture('1'),old,lecture('3','registered'),lecture('4'),{...lecture('4','closed'),time:'19:00'}]);
- assert.deepEqual(notices.accept({...eligible,stale:true},now),[]);
- assert.deepEqual(notices.accept({...eligible,reason:'site_wait'},now),[]);
- assert.deepEqual(notices.accept(eligible,now).map(event=>event.lectureIdentity.id),['1']);
- const repeat=collection([{...lecture('1'),title:'제목 변경',time:'18:10'},lecture('5')]);
- assert.deepEqual(new DoctorvilleApplicationNotices(file).accept(repeat,now).map(event=>event.lectureIdentity.id),['5']);
+ const future=(id,status)=>({...lecture(id,status),date:'2026-12-15'});
+ const eligible=doctorvilleApplicationTargets([future('1'),lecture('2'),future('3','registered'),future('4'),future('4','closed')],now);
+ assert.deepEqual(notices.accept(eligible,now).map(event=>event.id),['1']);
+ const repeat=doctorvilleApplicationTargets([{...future('1'),title:'제목 변경',time:'18:10'},future('5')],now);
+ assert.deepEqual(new DoctorvilleApplicationNotices(file).accept(repeat,now).map(event=>event.id),['5']);
 });
 
 test('Doctorville waits for confirmed registration on a known unregistered lecture without opening a page',async t=>{

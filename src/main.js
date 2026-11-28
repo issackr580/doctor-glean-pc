@@ -33,6 +33,7 @@ import {AutomationPage} from './automation-page.js';
 import {pageRole} from './page-role.js';
 import {DAILY_TASKS} from './automation-policy.js';
 import {watchManualEntry} from './manual-entry-watch.js';
+import {automaticEntrySite} from './entry-support.js';
 import {DoctorvilleApplicationNotices,doctorvilleApplicationTargets} from './doctorville-applications.js';
 import {CredentialManager} from './credential-manager.js';
 import {credentialSite,safeCredentialStatus} from './credential-policy.js';
@@ -124,6 +125,7 @@ const buildState=()=>({
   maxDate:kstDate(kstInstant(kstDate(),'00:00')+7*86_400_000),paused:state.snapshot().paused,
   sites:SITES.map(({id,name,loginUrl})=>({id,name,serverWait:siteWait?.status(id),open:[...manualOwners.values()].includes(id),loginEntry:!!loginUrl,session:effectiveSession(id),catalog:true,selected:catalog.selected().includes(id)})),
   collection:collector.snapshot(),results:catalog.view(validQueryDate(viewDate)?viewDate:kstDate()).results,
+  doctorvilleApplications:doctorvilleApplicationOffers().map(({id,date,time,title})=>({id,date,time,title})),
   pendingQueries:catalogQueue?.snapshot()??[],
   siteWaitUntrusted:!!siteWait&&!siteWait.clockTrusted(Date.now()),dataAccess:dataAccess.snapshot(),usage:resourceUse(),options:pcOptions?.snapshot(),credentials:credentials?.snapshot(),update:updater?.snapshot(),
   medigateCounterPage:medigateCountPages?.get(kstDate().slice(0,7)),automationAvailable:true,automation:automation?.snapshot(),registration:registrationState(),dailyTasks:DAILY_TASKS.map(({key,label,site})=>({key,label,site})),
@@ -330,7 +332,7 @@ function hardenSiteWindow(window,id){
   if(remoteWindows.has(window))return;
   remoteWindows.add(window);manualOwners.set(window,id);notify();
   const contents=window.webContents;
-  watchManualEntry(window,id,{jobs:()=>automation?.store.entries()??[],surveyScope:url=>{
+  if(automaticEntrySite(id))watchManualEntry(window,id,{jobs:()=>automation?.store.entries()??[],surveyScope:url=>{
    const key=manualSurveyKeys.get(window)??null;
    return dataAccess.allowed()&&automation?.survey.wantsObservation(url,key)?surveyContext()+'/'+(key??''):null;
   },onSurvey:(url,raw)=>automation?.survey.observe(url,raw,manualSurveyKeys.get(window)??null),onClick:key=>{automation?.entry.cancelJob(key,true);browserEvent(id,'manual_entry_observed');}});
@@ -413,27 +415,36 @@ function openSurvey(key){
  const url=automation.survey.target(key);if(!url)return {ok:false};
  openSite('doctorville',false,{surveyKey:key,url});return {ok:true};
 }
-let doctorvilleNotices;
-function openDoctorvilleApplication(date,id){
- if(!validQueryDate(date)||typeof id!=='string'||!/^\d{1,10}$/.test(id))return {ok:false};
- const target=doctorvilleApplicationTargets(catalog.view(date).results.doctorville).find(event=>event.lectureIdentity?.id===id);
+let doctorvilleNotices,doctorvilleOffers=[];
+const doctorvilleCatalogOwner=()=>[credentials?.vault.epoch('doctorville'),profileEpochs.get('doctorville')??0].join('/');
+let doctorvilleOffersOwner;
+function doctorvilleApplicationOffers(){
+ if(!catalog.selected().includes('doctorville')||doctorvilleOffersOwner!==doctorvilleCatalogOwner())return [];
+ const today=kstDate();
+ return doctorvilleOffers.filter(event=>event.date>today);
+}
+function openDoctorvilleApplication(id){
+ if(typeof id!=='string'||!/^\d{1,10}$/.test(id))return {ok:false};
+ const target=doctorvilleApplicationOffers().find(event=>event.id===id);
  if(!target)return {ok:false};
  openSite('doctorville',false,{url:target.url});
  return {ok:true};
 }
-function notifyDoctorvilleApplications(row){
- if(row.site!=='doctorville'||!catalog.selected().includes(row.site)||quitting||!Notification.isSupported())return;
+function notifyDoctorvilleApplications(row,observed){
+ if(row?.site!=='doctorville'||!catalog.selected().includes(row.site)||quitting)return;
+ doctorvilleOffersOwner=doctorvilleCatalogOwner();
+ doctorvilleOffers=row.stale||!['ok','review'].includes(row.status)||!['list_read','list_unconfirmed'].includes(row.reason)?[]:doctorvilleApplicationTargets(observed);
+ if(!doctorvilleOffers.length||!Notification.isSupported())return;
  try{
   doctorvilleNotices??=new DoctorvilleApplicationNotices(join(dataDirectory,'doctorville-application-notices-v1.json'));
-  const targets=doctorvilleNotices.accept(row);
+  const targets=doctorvilleNotices.accept(doctorvilleOffers);
   if(!targets.length)return;
   const [first]=targets;
   const notification=new Notification({title:'닥터빌 신청 가능 강의 '+targets.length+'개',
-   body:row.date.slice(5).replace('-','/')+' '+first.time+' '+first.title+(targets.length>1?' 외 '+(targets.length-1)+'개':'')});
+   body:first.date.slice(5).replace('-','/')+' '+first.time+' '+first.title+(targets.length>1?' 외 '+(targets.length-1)+'개':'')});
   notification.once('click',()=>{
    if(quitting)return;
-   try{if(targets.length===1&&!updater?.guarded&&openDoctorvilleApplication(row.date,first.lectureIdentity.id).ok)return;}catch{}
-   if(validQueryDate(row.date)){viewDate=row.date;catalogSelectionEpoch++;notify();}
+   try{if(targets.length===1&&!updater?.guarded&&openDoctorvilleApplication(first.id).ok)return;}catch{}
    showControl();
   });
   notification.show();
@@ -557,7 +568,7 @@ function ipc(){
   registerIPC('pc:entry-preflight',key=>automation.preflightEntry(key));
   registerIPC('pc:entry-preflight-upcoming',()=>automation.preflightUpcoming());
   registerIPC('pc:registration-request',(source,key)=>registration.request(source,key));
-  registerIPC('pc:doctorville-application',id=>openDoctorvilleApplication(viewDate,id));
+  registerIPC('pc:doctorville-application',openDoctorvilleApplication);
   registerIPC('pc:quit',()=>{setImmediate(()=>app.quit());return {ok:true};});
   registerIPC('pc:open-site',id=>{
     if(!siteById(id))return {ok:false,reason:'invalid_site'};

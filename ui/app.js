@@ -47,6 +47,18 @@ function setupNavigation(){
  }
 }
 const dateLabel=new Intl.DateTimeFormat('ko-KR',{month:'long',day:'numeric',weekday:'long',timeZone:'UTC'});
+function renderDoctorvilleApplications(targets){
+ const panel=document.getElementById('doctorville-applications');
+ panel.hidden=!targets.length;
+ document.getElementById('doctorville-applications-title').textContent='닥터빌 사전 신청 '+targets.length+'개';
+ document.getElementById('doctorville-application-list').replaceChildren(...targets.map(event=>{
+  const row=node('article',undefined,'agenda-row');
+  row.append(node('p',dateLabel.format(new Date(event.date+'T00:00:00Z'))+' '+event.time+' · '+event.title,'lecture-title'));
+  const apply=node('button','신청 페이지 열기');apply.type='button';
+  apply.onclick=()=>perform(()=>api.openDoctorvilleApplication(event.id),'닥터빌 신청 페이지를 열었어요.');
+  row.append(apply);return row;
+ }));
+}
 function renderAgenda(state,events){
  const isToday=state.date===state.today;
  document.getElementById('schedule-title').textContent=isToday?'오늘 강의':'선택일 강의';
@@ -74,13 +86,6 @@ function renderAgenda(state,events){
     const status=event.lectureEnded?'강의 종료':({registered:'신청완료',not_registered:'미신청',closed:'신청마감',unknown:'신청 상태 미확인'})[event.registrationStatus];
     const meta=node('div',undefined,'agenda-registration');
     if(status)meta.append(node('span',status,'site-status'));
-    if(event.site==='doctorville'&&event.registrationStatus==='not_registered'&&!event.lectureEnded&&event.lectureIdentity?.id&&api.openDoctorvilleApplication){
-     const apply=node('button','신청 페이지 열기');
-     apply.type='button';
-     apply.disabled=event.stale||new Date(state.date+'T'+event.time+':00+09:00').getTime()<=Date.now();
-     apply.onclick=()=>perform(()=>api.openDoctorvilleApplication(event.lectureIdentity.id),'닥터빌 신청 페이지를 열었어요.');
-     meta.append(apply);
-    }
     if(event.site==='hmp'&&event.registrationStatus==='not_registered'&&!event.lectureEnded&&api.requestRegistration){
      const apply=node('button',registrationButtonLabel(state.registration?.lectures[event.id]));
      apply.type='button';
@@ -166,6 +171,7 @@ async function refresh(){
   });document.getElementById('sites').replaceChildren(...rows);
   const selected=state.sites.filter(site=>site.selected),events=selected.flatMap(site=>(state.results[site.id]?.events??[]).map(event=>({...event,siteName:site.name,stale:state.results[site.id].stale}))).sort((a,b)=>a.time.localeCompare(b.time)||a.siteName.localeCompare(b.siteName));
   renderAgenda(state,events);
+  renderDoctorvilleApplications(state.doctorvilleApplications??[]);
   const progress=document.getElementById('progress');
   progress.textContent=state.collection.running?`조회 ${state.collection.completed}/${state.collection.total} · ${state.sites.find(site=>site.id===state.collection.site)?.name??''}`:state.collection.reason==='finished'?'조회 종료 · '+collectionSummary(state.results,selected.map(site=>site.id)):reasonLabels[state.collection.reason]??'';
   if(state.pendingQueries?.length)progress.textContent+=' · 로그인 후 조회 대기 '+state.pendingQueries.length+'곳';
