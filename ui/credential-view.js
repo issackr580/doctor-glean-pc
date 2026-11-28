@@ -35,12 +35,18 @@ function display(){
  const now=Date.now(),wait=site.serverWait,waitLabel=siteWaitLabel(wait,now);
  const lastResult=snapshot?.results.find(row=>row.site===currentSite);
  const info=document.getElementById('credential-site-wait');
+ const manual=document.getElementById('credential-manual-login');
+ const todayStart=Date.parse(state.today+'T00:00:00+09:00');
+ const recentLimit=wait?.status===429&&wait.at>=todayStart&&wait.at<=now;
+ const offerDirectLogin=site.id==='docple'&&(waitLabel||lastResult?.status==='site_wait'||(recentLimit&&!saved&&site.session?.login!=='authenticated'));
  info.textContent=waitLabel||(lastResult?.status==='site_wait'?'이전 계정 작업이 사이트 요청 제한으로 보류됐어요.':'');
- if(site.id==='docple'&&(waitLabel||lastResult?.status==='site_wait')){
-  info.textContent+=' 대기가 끝난 뒤 앱의 「로그인 화면」에서 직접 로그인하고 「로그인 마침」을 눌러 이 PC판에서 세션을 이어서 사용할 수 있어요.';
+ if(offerDirectLogin){
+  info.textContent+= (info.textContent?' ':'')+'직접 로그인한 뒤 사이트 창의 「로그인 마침」을 누르면 PC판에서 세션을 이어서 사용할 수 있어요.';
  }
  info.hidden=!info.textContent;
- if(!wait?.manual&&wait?.until>now)waitTimer=setTimeout(()=>{if(dialog().open)display();},Math.min(wait.until-now,2147483647));
+ manual.hidden=!offerDirectLogin;
+ manual.disabled=busy||wait?.until>now||!state.dataAccess.allowed||state.siteWaitUntrusted;
+ if(wait?.until>now)waitTimer=setTimeout(()=>{if(dialog().open)display();},Math.min(wait.until-now,2147483647));
  document.getElementById('credential-title').textContent=site.name+' 계정 저장·복구';
  document.getElementById('credential-storage').textContent=snapshot?.vault.available?'Windows 계정 보호로 암호화해 이 PC에 저장해요. 로그인 검증을 통과한 계정만 저장해요.':'Windows 계정 보호 저장소를 사용할 수 없어요. 계정·비밀번호를 저장하거나 복구하지 않아요.';
  document.getElementById('credential-saved').textContent=(saved?'검증된 계정이 저장되어 있어요. 아래 입력은 기존 계정을 바꿀 때만 필요해요.':'저장된 계정이 없어요.')+(snapshot?.attempts.policy?' 직접 재시도 간격 '+snapshot.attempts.policy.manualGapMs/1000+'초 · 사이트별 하루 '+snapshot.attempts.policy.dailyLimit+'회. 대기 중에도 현재 로그인 상태는 확인할 수 있어요.':'');
@@ -55,9 +61,21 @@ export function openCredential(site){currentSite=site;document.getElementById('c
 export function setupCredentials(bridge,refreshState){
  api=bridge;refresh=refreshState;
  const clear=()=>{document.getElementById('credential-id').value='';document.getElementById('credential-password').value='';};
- const close=()=>{clearTimeout(waitTimer);clear();if(currentSite)api.cancelCredential(currentSite);dialog().close();};
+ const hide=()=>{clearTimeout(waitTimer);clear();dialog().close();};
+ const close=()=>{if(currentSite)api.cancelCredential(currentSite);hide();};
  document.getElementById('credential-close').onclick=close;dialog().addEventListener('cancel',event=>{event.preventDefault();close();});
- const perform=async action=>{busy=true;display();document.getElementById('credential-result').textContent='로그인 확인 중…';try{const r=await action();document.getElementById('credential-result').textContent=resultLabel(r);}catch{document.getElementById('credential-result').textContent='계정 작업을 완료하지 못했어요.';}finally{busy=false;await refresh();display();}};
+ const perform=async(action,label=resultLabel)=>{busy=true;display();document.getElementById('credential-result').textContent='로그인 확인 중…';try{const r=await action();document.getElementById('credential-result').textContent=label(r);}catch{document.getElementById('credential-result').textContent='계정 작업을 완료하지 못했어요.';}finally{busy=false;await refresh();if(dialog().open)display();}};
+ const manual=document.getElementById('credential-manual-login');
+ manual.onclick=()=>{
+  if(manual.hidden||manual.disabled)return;
+  const site=currentSite;clear();
+  return perform(()=>api.openLogin(site),result=>{
+   if(result?.ok){if(currentSite===site&&dialog().open)hide();return '';}
+   if(result?.reason==='site_wait')return '사이트 대기 기한이 끝나면 로그인 화면을 열 수 있어요.';
+   if(result?.reason==='data_blocked')return '앱 데이터 사용 설정으로 로그인 화면을 보류했어요.';
+   return '로그인 화면을 열지 못했어요.';
+  });
+ };
  document.getElementById('credential-form').onsubmit=event=>{
   event.preventDefault();if(document.getElementById('credential-save').disabled)return;
   let id=document.getElementById('credential-id').value,password=document.getElementById('credential-password').value;const automatic=document.getElementById('credential-new-automatic').checked,site=currentSite;

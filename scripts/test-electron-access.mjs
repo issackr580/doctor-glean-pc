@@ -159,13 +159,21 @@ async function sharedWait(){
 }
 async function mainIpc(){
  writeFileSync(join(data,'data-access-v1.json'),JSON.stringify({mode:'off'}));
- const pref=(await load('security')).remotePreferences('doctorville',metadata.doctorGleanEdition);
+ const {remotePreferences}=await load('security'),pref=remotePreferences('doctorville',metadata.doctorGleanEdition);
  let requests=0,external=0;
  const profile=session.fromPartition(pref.partition);
  await profile.protocol.handle('https',()=>{requests++;return html('<main>합성 목록</main>');});
+ const docpleRequests=[];
+ const docpleProfile=session.fromPartition(remotePreferences('docple',metadata.doctorGleanEdition).partition);
+ await docpleProfile.protocol.handle('https',request=>{
+  if(new URL(request.url).pathname==='/auth/login')docpleRequests.push(request.method);
+  return html('<form><input type="password"></form>');
+ });
  shell.openExternal=async()=>{external++;};
  const {SiteWait}=await load('site-wait');
- new SiteWait(join(data,'site-wait-v1.json')).observe('doctorville',{url:'https://www.doctorville.co.kr/seminar/main',status:429,document:true,retryAfter:'120'});
+ const gate=new SiteWait(join(data,'site-wait-v1.json'));
+ gate.observe('doctorville',{url:'https://www.doctorville.co.kr/seminar/main',status:429,document:true,retryAfter:'120'});
+ gate.observe('docple',{url:'https://docple-plus.com/auth/login',status:429,document:true,retryAfter:'4'});
  await load('main');
  const control=await until(()=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/ui/index.html')));
  const call=expr=>control.webContents.executeJavaScript('window.doctorGlean.'+expr);
@@ -188,6 +196,27 @@ async function mainIpc(){
   equal((await call("openLogin('doctorville')")).reason,'site_wait');
   await call("collectSite('doctorville')");await sleep(300);
   equal(requests,after429);report.network.persisted429={additionalReads:requests-after429,status:429};
+  const evaluate=code=>control.webContents.executeJavaScript(code);
+  await until(()=>evaluate('document.querySelectorAll("#sites .site-name").length===10'));
+  await evaluate(`document.getElementById('tab-sites').click();
+   const row=[...document.querySelectorAll('#sites .site')].find(el=>el.querySelector('.site-name').textContent.includes('닥플 플러스'));
+   [...row.querySelectorAll('button')].find(button=>button.textContent==='계정 저장·복구').click();`);
+  equal(await evaluate(`(()=>{const button=document.getElementById('credential-manual-login');button.click();return [button.hidden,button.disabled];})()`),[false,true]);
+  equal(docpleRequests.length,0);
+  await until(()=>evaluate(`!document.getElementById('credential-manual-login').disabled`));
+  equal(docpleRequests.length,0);
+  await evaluate("document.getElementById('credential-manual-login').click()");
+  await until(()=>docpleRequests.length>0);
+  const manual=await until(()=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL()==='https://docple-plus.com/auth/login'));
+  try{
+   await until(()=>evaluate("!document.getElementById('credential-dialog').open"));
+   equal(docpleRequests,['GET']);
+   equal((await call('checkUpdate()')).status,'unsupported');
+   const savedReport=JSON.parse((await call('previewReport()')).text);
+   equal(savedReport.update,{status:'unsupported'});
+   equal(savedReport.serverWait.find(row=>row.site==='docple').active,false);
+   equal(savedReport.serverWait.find(row=>row.site==='docple').source,'login_document');
+  }finally{manual.destroy();}
  }
 }
 app.on('window-all-closed',()=>{});

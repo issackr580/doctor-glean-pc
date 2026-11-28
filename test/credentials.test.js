@@ -130,19 +130,24 @@ test('Docple can get a new 429 before submitting login, and the wait survives re
   siteAvailable:id=>gate.allowed(id),automaticAllowed:()=>true,isManualOpen:()=>false,createPage:async(id,signal)=>{
    opened++;
    const traffic=workerWait(gate,id,signal,()=>0);
-   return fakePage(id,async(_name,[input])=>{
+   const page=fakePage(id,async(_name,[input])=>{
     if(input.mode==='fill'){
      filled++;
      return {status:'submitted',submitted:true};
     }
-    if(input.mode==='verify'||opened===2){
-     traffic.response({url:opened===1?'https://docple-plus.com/api/season2/mission/attendance/calendar':'https://docple-plus.com/auth/login?fixture=PRIVATE',
-      resourceType:opened===1?'xhr':'mainFrame',statusCode:429,responseHeaders:{'Retry-After':['60']}});
+    if(input.mode==='verify'){
+     traffic.response({url:'https://docple-plus.com/api/season2/mission/attendance/calendar',resourceType:'xhr',statusCode:429,responseHeaders:{'Retry-After':['60']}});
      assert.equal(traffic.allowed(),false);
      throw Error('site_wait');
     }
     return {status:'ready'};
    });
+   if(opened===2)page.load=async()=>{
+    traffic.response({url:'https://docple-plus.com/auth/login?fixture=PRIVATE',resourceType:'mainFrame',statusCode:429,responseHeaders:{'Retry-After':['60']}});
+    assert.equal(traffic.allowed(),false);
+    throw Error('site_wait');
+   };
+   return page;
   }});
  manager.runner.sleep=clock.sleep;
  const save=()=>manager.save(site,account.id,account.password,true);
@@ -156,6 +161,7 @@ test('Docple can get a new 429 before submitting login, and the wait survives re
  assert.equal(second.status,'site_wait');
  assert.equal(second.attempted,false);
  assert.equal(second.submitted,false);
+ assert.equal(second.reads,0);
  assert.match(resultLabel({...second,kind:'save'}),/로그인 정보를 전송하지 않았어요/);
  assert.match(resultLabel({...second,attempted:true,kind:'save'}),/전송 여부를 확인하지 못했어요/);
  gate=new SiteWait(waitFile,clock);

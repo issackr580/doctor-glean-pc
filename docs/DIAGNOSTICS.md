@@ -40,6 +40,7 @@ preview.12의 예약 검증은 [PC 검증 방법](ENTRY_VALIDATION.md)을 따른
 |---|---|
 | `appVersion`, `edition`, `applicationId` | 실행 빌드·개발자/배포용 구분. Git commit은 별도 기록 |
 | `currentState.runtime` | Windows/아키텍처·Electron·Chromium 버전 |
+| `currentState.update` | 현재 실행의 업데이트 상태, 고정 실패 분류, 확인된 버전. 로그인 주소·파일 경로·세션 정보는 제외 |
 | `status`, `events` | 기록 동의 기간, 수집/창/제어 단계, 고정 사이트 코드·시각·수치 |
 | `currentState.collection`, `sites`, `pendingQueries` | 선택 날짜·진행·판독 개수·종료 범위·대기열 |
 | `currentState.siteSessions`, `browserEvents` | 로그인 관찰과 세션 보관 요청, 차단·로드 실패. 세션 저장 요청은 로그인 성공과 다름 |

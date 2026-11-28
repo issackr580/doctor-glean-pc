@@ -135,8 +135,10 @@ const buildState=()=>({
 
 function diagnosticSnapshot(){
  const snapshot=state.snapshot(),now=Date.now(),date=kstDate(now),dayStart=kstInstant(date,'00:00');
+ const {status,reason,version}=updater?.snapshot()??{};
  return {appName:EDITION.name,applicationId:EDITION.appId,edition:EDITION.id,appVersion:VERSION,build:BUILD_INFO,exportedAt:now,processStartedAt:PROCESS_STARTED_AT,date,automationPaused:snapshot.paused,
   runtime:{platform:process.platform,arch:process.arch,electron:process.versions.electron,chromium:process.versions.chrome,osRelease:release()},runtimeFaults:runtimeFaults.snapshot(),dataAccess:dataAccess.snapshot(),siteWaitUntrusted:!!siteWait&&!siteWait.clockTrusted(Date.now()),resourceUse:resourceUse(),
+  update:{status,reason,version},
   stage:'automation',automationAvailable:true,collection:collector.snapshot(),selectedCatalogSites:catalog.selected(),pendingQueries:catalogQueue?.snapshot()??[],sites:catalog.diagnostics(viewDate),automation:automation?.diagnostics(),
   serverWait:SITES.flatMap(({id})=>{
    const wait=siteWait?.status(id);if(!wait)return [];
