@@ -1,10 +1,12 @@
 # PC판 현재 상태와 다음 작업
 
-현재 공개 배포용과 협업자용 Draft는 **0.1.0-preview.44**입니다. 실행 소스는 `cf11c9df129c4a91ba65f4890860aee3e534b841`입니다. [배포용](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.44) · [개발자용 Draft](https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-1299cbcb0541000d267f) · [검증 및 게시 기록](releases/0.1.0-preview.44.md)
+현재 공개 배포용과 협업자용 Draft는 **0.1.0-preview.45**입니다. 실행 소스는 `fe87e26a697168dc69dd43a88283827cef3b1ba7`입니다. [배포용](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.45) · [개발자용 Draft](https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-8ee55abcef0b2682285c) · [검증 및 게시 기록](releases/0.1.0-preview.45.md)
 
 ## 개발자판 패치 설치
 
 업데이트 때 저장된 GitHub 세션을 먼저 확인하고 인증이 필요할 때 로그인 창을 표시한다. 평소 브라우저에서 받은 작은 패치 ZIP은 개발자판의 파일 선택으로 설치할 수 있다. 고정 서명 피드, 해시, app 전체 인벤토리와 Windows 실행 환경을 대조하고 기존 재시작·복구 도우미를 사용한다. 설치 전 사이트 작업이 바쁘면 기다리며 결과를 분리해 표시한다.
+
+Node 510개와 Electron 합성 검사, 두 Windows 빌드와 서명 피드를 확인했다. [배포와 검사 기록](releases/0.1.0-preview.45.md)
 
 ## 닥터빌 사전 신청 반복 조회
 
