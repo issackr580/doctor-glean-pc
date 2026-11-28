@@ -57,6 +57,23 @@ test('Docple pending calendar leaves the automatic claim on the browser path',as
  assert.equal(s.store.day(date).daily['docple:attendance'].attempted,false);
  assert.equal(Object.keys(s.ledger.snapshot().jobs).length,0);
 });
+test('Docple already-open receipt records completion even during server wait without a fetch, page or claim',async t=>{
+ const s=setup(t);let inspections=0;
+ s.gate.observe('docple',{url:'https://docple-plus.com/offerwall/attendance',status:429,retryAfter:'600',document:true});
+ await s.daily.run(['docple:attendance']);
+ assert.equal(s.store.day(date).daily['docple:attendance'].reason,'site_wait');
+ assert.equal(s.store.day(date).daily['docple:attendance'].waitUntil,now()+600000);
+ s.daily.isManualOpen=()=>true;
+ s.daily.readOpenDocpleAttendance=async day=>{assert.equal(day,date);inspections++;return true;};
+ await s.daily.run(['docple:attendance'],{readOnly:true});
+ assert.equal(s.store.day(date).daily['docple:attendance'].status,'complete');
+ assert.equal(s.store.day(date).daily['docple:attendance'].attempted,false);
+ assert.equal(inspections,1);
+ assert.equal(s.requestCount(),0);
+ assert.equal(s.cookieCount(),0);
+ assert.equal(s.pageCount(),0);
+ assert.equal(Object.keys(s.ledger.snapshot().jobs).length,0);
+});
 test('Docple complete fast read requires a single token and a matching clean calendar',async t=>{
  for(const names of [[],['accessToken','check-accessToken']]){
   const s=setup(t,{cookieNames:names});

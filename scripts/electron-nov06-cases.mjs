@@ -71,9 +71,12 @@ export async function nov06Cases({root,date,title,clock,check,inspect,job,detail
   });
   const page=new AutomationPage('dtalks',controller.signal,{...remotePreferences('dtalks'),partition});
   if(scenario==='recovery_target')CredentialManager.prototype.wrapPage.call({automaticAllowed:()=>true,vault:{enabled:()=>true},verifyPage:async(_site,p)=>p.route==='login'?'login_required':'authenticated',recover:async()=>{authenticated=true;recoveries++;return {status:'authenticated'};}},'dtalks',page);
-  if(scenario==='armed')page.armEntryDispatch();if(scenario==='credential')page.credentialNetwork=true;
+  if(scenario==='credential')page.credentialNetwork=true;
   try{
-   if(scenario==='recovery_target'){
+   if(scenario==='armed'){
+    assert.throws(()=>page.armEntryDispatch(),e=>e.code==='disabled');
+    check('DTalks cannot arm a retired dispatch or generate a provider request',logins===0&&posts===0);
+   }else if(scenario==='recovery_target'){
     await page.load('https://www.dtalks.kr/websim/vodList.do');
     check('DTalks recovery returns to the original catalog without a second submission',page.url==='https://www.dtalks.kr/websim/vodList.do'&&recoveries===1&&logins===1&&posts===0);
    }else if(['login_get','repeated'].includes(scenario)){

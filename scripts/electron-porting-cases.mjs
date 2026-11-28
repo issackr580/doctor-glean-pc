@@ -65,8 +65,8 @@ export async function portingCases(check){
    ['unknown modal',detail({extra:'<div role="dialog" aria-modal="true">동의가 필요합니다</div>'})],['login return query','<input type="password">','/auth/login?returnTo=opaque-synthetic'],
    ['different public id',detail(),'/webinar/702'],['watch is not an entry control','<h1>검증용 닥플 웨비나</h1>','/webinar/701/watch'],
   ]){
-   const {page,state}=await provider(body,{route});const result=await page.call('auto-entry.js',[baseJob,'inspect']);
-   check('Docple refuses '+name,result.status!=='ready');check('Docple '+name+' has no submission',state.posts===0);page.close();
+   const {page,state}=await provider(body,{route});const result=await page.call('auto-entry.js',[baseJob,'inspect']).catch(error=>error.code);
+   check('Docple worker stays disabled with '+name,result==='disabled');check('Docple '+name+' has no submission',state.posts===0);page.close();
   }
   for(const [name,body,query] of [
    ['missing broadcast date',docpleList({cards:card().replace('aria-label="방송일 ','aria-label="포스터 ')}),'category=C01&mode=LIVE'],
@@ -79,9 +79,9 @@ export async function portingCases(check){
    const page=electronCatalogPage({...profile,url:'https://docple-plus.com/webinar?'+query},s.controller.signal,s.prefs);await page.open();let row;for(let i=0;i<30;i++){row=await page.read(date,null);if(row.state)break;await new Promise(r=>setTimeout(r,50));}page.close();check('Docple catalog rejects '+name,row.events.length===0&&!(row.status==='ok'&&row.coverage));s.page.close();
   }
   {
-   const s=await provider(detail()),first=await s.page.call('auto-entry.js',[baseJob,'inspect']);check('Docple original detail binds ID, full date, clock and registered title',first.status==='ready'&&first.targetMatched);
-   await s.page.call('auto-entry.js',[baseJob,'click'],{navigation:true});await new Promise(r=>setTimeout(r,100));
-   const second=await s.page.call('auto-entry.js',[baseJob,'click']);check('Docple original entry posts once and moves to watch',s.state.posts===1&&s.page.url.includes('/701/watch'));check('Docple watch never reauthorizes a second click',second.status!=='clicked');s.page.close();
+   const s=await provider(detail());
+   const result=await s.page.call('auto-entry.js',[baseJob,'click'],{navigation:true}).catch(error=>error.code);
+   check('Docple original entry control remains available to the user without granting the worker dispatch',result==='disabled'&&s.state.posts===0&&s.page.url.endsWith('/701'));s.page.close();
   }
   {
    const s=await provider(detail()),observed=[];s.page.root.show();s.page.root.focus();
@@ -99,11 +99,16 @@ export async function portingCases(check){
    check('Docple trusted original manual entry is observed without an observer-generated submit',observed.length===1&&observed[0]===baseJob.key&&s.state.posts===2);await new Promise(r=>setTimeout(r,1100));check('manual notification and polling deliver one observation across immediate navigation',observed.length===1&&s.state.posts===2);stop();s.page.close();
   }
   {
-   const s=await provider(u=>u.pathname==='/webinar'?docpleList({cards:card()}):detail(),{route:'/webinar?category=C01&mode=LIVE&sort=START_ASC'}),ledger=new LocalState(join(root,'host-state.json')),store=new WorkflowStore(join(root,'host-workflows.json'));ledger.setPaused(false);store.setFeature('entry',true);store.setEntrySites(['docple']);let clock=at;
-   const runner=new EntryRunner({ledger,store,now:()=>clock,sleep:async ms=>{clock+=ms;await new Promise(r=>setTimeout(r,Math.min(ms,100)));},createPage:async()=>s.page});runner.reserveCatalog(date,{docple:{status:'ok',stale:false,events:[{...baseJob,registrationStatus:'registered'}]}});
-   const job=store.entries()[0];await runner.run(job);check('PC Docple host dispatches only after durable attempt',s.state.posts===1&&Object.values(ledger.snapshot().jobs)[0]?.state==='unknown');
-   const row=store.entries()[0];check('PC Docple host records click independently from playback/credit',row.status==='clicked'&&row.receipt.attempted&&row.receipt.navigationObserved&&row.receipt.watchObserved===true&&row.receipt.playback===undefined);
-   const before=s.state.posts;runner.ledger=new LocalState(join(root,'host-state.json'));runner.reserveCatalog(date,{docple:{status:'ok',stale:false,events:[{...baseJob,title:'표제 변경',registrationStatus:'registered'}]}});check('PC Docple catalog rename does not clear consumed identity',store.entries().length===1&&store.entries()[0].key===job.key&&s.state.posts===before);
+   const ledger=new LocalState(join(root,'host-state.json')),file=join(root,'host-workflows.json'),now=()=>at,store=new WorkflowStore(file,{now});
+   ledger.setPaused(false);store.setFeature('entry',true);store.setEntrySites(['docple']);
+   const legacy={...baseJob,key:store.entryKey(baseJob),registrationStatus:'registered',start:at,nextAt:baseJob.due,status:'reserved',retries:0,entryAttempted:false,attempts:[]};
+   store.putEntry(legacy);
+   let pagesOpened=0;
+   const restarted=new WorkflowStore(file,{now});
+   const runner=new EntryRunner({ledger,store:restarted,now,createPage:async()=>{pagesOpened++;throw Error('disabled');}});
+   runner.reserveCatalog(date,{docple:{status:'ok',stale:false,events:[legacy]}});
+   check('PC Docple legacy reservation is closed on restart without a hidden window or ledger change',restarted.entries()[0]?.status==='cancelled'&&restarted.entries()[0]?.key===legacy.key&&pagesOpened===0&&Object.keys(ledger.snapshot().jobs).length===0);
+   check('PC Docple old alarms and retries cannot create a window',(await runner.run(legacy))===false&&runner.retryJob(legacy.key)===false&&pagesOpened===0);
   }
   {
    const partition='pc-v139-external-'+randomUUID(),prefs={...remotePreferences('medigate'),partition},controller=new AbortController();let allowed=false,posts=0,bodyPreserved=false;

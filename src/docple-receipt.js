@@ -14,6 +14,7 @@ export function docpleTodayReceipt(date){
  const {e,m}=titles[0];if(Number(m[2])!==month||m[1]&&Number(m[1])!==year)return false;
  const days=new Date(Date.UTC(year,month,0)).getUTCDate();
  const scope=e.closest('section')??e.parentElement;
- const grids=[...scope.querySelectorAll('div,ul,ol,[role=grid]')].map(grid=>[...grid.children].filter(visible)).filter(cells=>cells.length===days&&cells.every((cell,i)=>text(cell)===(i+1).toString()||i<day&&text(cell)==='출석'));
- return grids.length===1&&text(grids[0][day-1])==='출석';
+ const attended=(cell,n)=>text(cell)==='출석'||text(cell).replace(/\s/g,'')===n+'출석';
+ const grids=[...scope.querySelectorAll('div,ul,ol,[role=grid]')].map(grid=>[...grid.children].filter(visible)).filter(cells=>cells.length===days&&cells.every((cell,i)=>text(cell)===(i+1).toString()||i<day&&attended(cell,i+1)));
+ return grids.length===1&&attended(grids[0][day-1],day);
 }

@@ -62,6 +62,8 @@ async function attendance(){
    await page.load('https://docple-plus.com/offerwall/attendance');
    const body=await page.current.webContents.executeJavaScript('document.body.innerHTML');
    const count=requests.length;equal(await page.hasDocpleReceipt(date),true);
+   await page.current.webContents.executeJavaScript("document.querySelectorAll('section div div')[22].textContent='23 출석'");
+   equal(await page.hasDocpleReceipt(date),true);
    for(const edit of ["document.querySelector('button').remove()","document.querySelector('button').disabled=false","document.querySelector('h2').innerText='2025년 11월 출석 달력'","document.querySelector('h2').innerText='12월 출석 달력'","document.querySelector('section').remove()","document.querySelectorAll('section div div')[22].innerText='23'","document.body.append('보안 확인')","document.querySelector('button').after(document.querySelector('button').cloneNode(true))","document.querySelectorAll('section div div')[23].innerText='출석'","document.querySelector('button').insertAdjacentHTML('beforebegin','<button>로그인</button>')"]){
     await page.current.webContents.executeJavaScript('document.body.innerHTML='+JSON.stringify(body)+';'+edit);
     equal(await page.hasDocpleReceipt(date),false,edit);

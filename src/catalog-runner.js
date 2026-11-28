@@ -17,8 +17,8 @@ function wait(ms,signal){return new Promise(resolve=>{
 
 /** Host-owned bounded collection. No page result may schedule a submit task. */
 export class CatalogRunner{
- constructor({online=()=>true,context=()=>0,gate,store,createPage,isManualOpen=()=>false,recoverLogin=async()=>false,prepareCollection=async()=>{},nativeRead=async()=>null,onChange=()=>{},now=Date.now,sleep=wait,elapsed=()=>performance.now()}){
-  Object.assign(this,{online,context,gate,store,createPage,isManualOpen,recoverLogin,prepareCollection,nativeRead,onChange,now,sleep,elapsed});this.active=null;this.last={running:false,date:kstDate(now()),site:'',reason:'idle'};
+ constructor({online=()=>true,context=()=>0,gate,store,createPage,isManualOpen=()=>false,recoverLogin=async()=>false,prepareCollection=async()=>{},nativeRead=async()=>null,onResult=()=>{},onChange=()=>{},now=Date.now,sleep=wait,elapsed=()=>performance.now()}){
+  Object.assign(this,{online,context,gate,store,createPage,isManualOpen,recoverLogin,prepareCollection,nativeRead,onResult,onChange,now,sleep,elapsed});this.active=null;this.last={running:false,date:kstDate(now()),site:'',reason:'idle'};
  }
  suspend(){this.sleeping=true;if(this.active)this.active.interrupted=true;}
  resume(){this.sleeping=false;}
@@ -62,7 +62,8 @@ export class CatalogRunner{
     siteTimer.unref?.();run.controller.signal.addEventListener('abort',abortSite,{once:true});
     try{
      const checkWait=()=>{if(this.gate&&!this.gate.allowed(id))throw Object.assign(Error(),{code:'site_wait'});};
-     let checkpoint=null;
+     let checkpoint=null,applicationOwner;
+     const applicationPages=new Map();
      const assertCurrent=()=>{
       if(!this.#owns(run)||this.isManualOpen(id))throw Object.assign(Error(),{code:'cancelled'});
       if(siteController.signal.aborted||remaining()<=0)throw Object.assign(Error(),{code:'time_limit'});
@@ -114,6 +115,11 @@ export class CatalogRunner{
       if(!reply||typeof reply!=='object'||!Array.isArray(reply.events))throw Object.assign(Error(),{code:'invalid_response'});
       if(run.interrupted||this.sleeping||!this.online()){await ready();continue;}
       assertCurrent();
+      if(id==='doctorville'&&owner===this.context(id)&&Array.isArray(reply.applicationRows)&&
+         reply.applicationRows.length<=500&&Number.isSafeInteger(reply.state?.pages)&&reply.state.pages>=0&&reply.state.pages<=8){
+       if(applicationOwner!==owner){applicationOwner=owner;applicationPages.clear();}
+       applicationPages.set(reply.state.pages,reply.applicationRows);
+      }
       if(reply.status==='login'&&!recoveryAttempted){
        recoveryAttempted=true;run.page.close();run.page=null;
        const recovered=await boundCatalog(this.recoverLogin(id,siteController.signal),siteController.signal,remaining());
@@ -129,7 +135,11 @@ export class CatalogRunner{
       checkpoint=reply.state&&!['loading','login','blocked'].includes(reply.status)&&before&&after&&before.url===after.url&&before.version===after.version&&owner===this.context(id)?{document:after,owner}:null;
       previous=reply.state??previous;run.lastRead=reply;if(reply.events.length)run.partialRead=reply;
       this.#publish(run,{observed:Math.min(reply.events.length,400)});
-      if(reply.done===true){this.store.record(id,date,reply,this.now());break;}
+      if(reply.done===true){
+       const saved=this.store.record(id,date,reply,this.now());
+       if(owner===this.context(id))this.onResult(saved,applicationOwner===owner?[...applicationPages.values()].flat():[]);
+       break;
+      }
       if(reply.action){await ready();checkpoint=null;}
       if(reply.action&&!await run.page.act(reply.action,previous))throw Object.assign(Error(),{code:'action_rejected'});
       if(!this.#owns(run))return;

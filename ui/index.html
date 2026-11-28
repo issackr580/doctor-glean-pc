@@ -46,6 +46,10 @@
         </div>
       </div>
       <p id="progress" role="status" aria-live="polite"></p>
+      <details id="doctorville-applications" class="control" hidden>
+        <summary id="doctorville-applications-title">닥터빌 사전 신청</summary>
+        <div id="doctorville-application-list"></div>
+      </details>
       <section class="agenda-card" aria-labelledby="schedule-title">
         <div class="agenda-columns" aria-hidden="true"><span>시작</span><span>강의</span><span>사이트</span></div>
         <div id="lectures"></div>
@@ -59,7 +63,7 @@
         <p id="automation-state">자동 실행을 중지한 상태예요.</p>
         <p class="muted">기능을 선택하고 자동 실행을 허용해 주세요. PC가 켜져 있고 이 프로그램이 실행 중이어야 해요. 절전·종료로 기한을 놓친 작업은 몰아서 실행하지 않아요.</p>
         <div id="features" class="features"></div>
-        <h3>자동 입장 사이트</h3><div id="entry-sites" class="features"></div><p class="muted">조회 후 오늘 예약을 갱신해요. 클릭·강의창 이동·재생 확인은 각각 기록해요. 한미는 시작·25분에 입장하고, 25분 회차의 명확한 실패 때만 35분에 한 번 더 확인해요. 디톡스 자동 입장은 중단하며 직접 열기·조회는 유지해요.</p>
+        <h3>자동 입장 사이트</h3><div id="entry-sites" class="features"></div><p class="muted">조회 후 오늘 예약을 갱신해요. 클릭·강의창 이동·재생 확인은 각각 기록해요. 한미는 시작·25분에 입장하고, 25분 회차의 명확한 실패 때만 35분에 한 번 더 확인해요. 후다닥·디톡스·닥플은 직접 열기와 조회를 이용할 수 있어요.</p>
       </details>
       <section class="schedule"><h2>오늘 자동 입장 예약·실행</h2><div id="entry-results"></div><p id="lounge-result" class="muted"></p></section>
       <section class="control section-space"><div class="section-heading"><h2>오늘 출석·퀴즈·브랜드관</h2><button id="daily-check" type="button">상태만 확인</button></div><p id="daily-progress" role="status"></p><div id="daily-selection" class="features"></div><div id="daily-results"></div></section>

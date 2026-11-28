@@ -33,6 +33,8 @@ import {AutomationPage} from './automation-page.js';
 import {pageRole} from './page-role.js';
 import {DAILY_TASKS} from './automation-policy.js';
 import {watchManualEntry} from './manual-entry-watch.js';
+import {automaticEntrySite} from './entry-support.js';
+import {DoctorvilleApplicationNotices,doctorvilleApplicationTargets} from './doctorville-applications.js';
 import {CredentialManager} from './credential-manager.js';
 import {credentialSite,safeCredentialStatus} from './credential-policy.js';
 import {credentialPageState} from './credential-page-state.js';
@@ -123,6 +125,7 @@ const buildState=()=>({
   maxDate:kstDate(kstInstant(kstDate(),'00:00')+7*86_400_000),paused:state.snapshot().paused,
   sites:SITES.map(({id,name,loginUrl})=>({id,name,serverWait:siteWait?.status(id),open:[...manualOwners.values()].includes(id),loginEntry:!!loginUrl,session:effectiveSession(id),catalog:true,selected:catalog.selected().includes(id)})),
   collection:collector.snapshot(),results:catalog.view(validQueryDate(viewDate)?viewDate:kstDate()).results,
+  doctorvilleApplications:doctorvilleApplicationOffers().map(({id,date,time,title})=>({id,date,time,title})),
   pendingQueries:catalogQueue?.snapshot()??[],
   siteWaitUntrusted:!!siteWait&&!siteWait.clockTrusted(Date.now()),dataAccess:dataAccess.snapshot(),usage:resourceUse(),options:pcOptions?.snapshot(),credentials:credentials?.snapshot(),update:updater?.snapshot(),
   medigateCounterPage:medigateCountPages?.get(kstDate().slice(0,7)),automationAvailable:true,automation:automation?.snapshot(),registration:registrationState(),dailyTasks:DAILY_TASKS.map(({key,label,site})=>({key,label,site})),
@@ -133,6 +136,7 @@ function diagnosticSnapshot(){
  return {appName:EDITION.name,applicationId:EDITION.appId,edition:EDITION.id,appVersion:VERSION,build:BUILD_INFO,exportedAt:now,processStartedAt:PROCESS_STARTED_AT,date:kstDate(now),automationPaused:snapshot.paused,
   runtime:{platform:process.platform,arch:process.arch,electron:process.versions.electron,chromium:process.versions.chrome,osRelease:release()},runtimeFaults:runtimeFaults.snapshot(),dataAccess:dataAccess.snapshot(),siteWaitUntrusted:!!siteWait&&!siteWait.clockTrusted(Date.now()),resourceUse:resourceUse(),
   stage:'automation',automationAvailable:true,collection:collector.snapshot(),selectedCatalogSites:catalog.selected(),pendingQueries:catalogQueue?.snapshot()??[],sites:catalog.diagnostics(viewDate),automation:automation?.diagnostics(),
+  serverWait:SITES.flatMap(({id})=>{const wait=siteWait?.status(id);return wait&&(wait.manual||wait.until>now)?[{site:id,status:wait.status,manual:wait.manual,until:wait.until}]:[];}),
   recentActivity:recentDiagnostics(now,{catalog,workflows:automation.store,survey:automation.survey}),
   siteSessions:SITES.map(({id})=>({site:id,open:[...manualOwners.values()].includes(id),...effectiveSession(id)})),credentials:credentials?.snapshot(),registration:registration?.store.snapshot(),browserEvents:[...browserEvents],developerDiagnostics:developerTools?.status(),
   attempts:Object.values(snapshot.jobs).map(({site,kind,date,slot,state,updatedAt})=>({site,kind,date,slot,state,updatedAt}))};
@@ -302,18 +306,25 @@ function prepareSession(id){
   }
   return preferences;
 }
-async function observeDocple(window,id){
+async function readOpenDocpleReceipt(window,id){
  const permitted=()=>id==='docple'&&!window.isDestroyed()&&dataAccess.allowed()&&!state.snapshot().paused&&pcOptions.snapshot().dailyKeys.includes('docple:attendance')&&manualOwners.get(window)===id;
  if(!permitted())return;
  const contents=window.webContents,url=contents.getURL(),version=navigationVersions.get(window),date=kstDate(),profile=profileEpochs.get(id),account=credentials.vault.epoch(id),epoch=state.snapshot().epoch,selection=attendanceSelectionEpoch;
  if(!/^https:\/\/docple-plus\.com\/offerwall\/attendance\/?$/.test(url))return;
  try{
   const ok=await boundedWork(contents.executeJavaScriptInIsolatedWorld(1003,[{code:'('+docpleTodayReceipt+')('+JSON.stringify(date)+')'}]),new AbortController().signal,3000);
-  if(ok!==true||!permitted()||kstDate()!==date||contents.getURL()!==url||navigationVersions.get(window)!==version||profileEpochs.get(id)!==profile||credentials.vault.epoch(id)!==account||state.snapshot().epoch!==epoch||selection!==attendanceSelectionEpoch)return;
-  const old=automation.store.day(date).daily['docple:attendance'];
-  if(old?.status!=='complete')automation.store.record(date,'docple:attendance',{status:'complete',reason:'docple_visible_receipt',attempted:old?.attempted===true||state.consumed(dailyTicket({site:id,kind:'attendance'},date,0))});
-  notify();
+  return ok===true&&permitted()&&kstDate()===date&&contents.getURL()===url&&navigationVersions.get(window)===version&&profileEpochs.get(id)===profile&&credentials.vault.epoch(id)===account&&state.snapshot().epoch===epoch&&selection===attendanceSelectionEpoch;
  }catch{}
+}
+async function observeDocple(window,id){
+ const date=kstDate();
+ if(!await readOpenDocpleReceipt(window,id)||date!==kstDate())return;
+ const old=automation.store.day(date).daily['docple:attendance'];
+ if(old?.status==='complete')return;
+ try{
+  automation.store.record(date,'docple:attendance',{status:'complete',reason:'docple_visible_receipt',attempted:old?.attempted===true||state.consumed(dailyTicket({site:id,kind:'attendance'},date,0))});
+  notify();
+ }catch(error){operationError(error,'control');}
 }
 let attendanceSelectionEpoch=0,catalogSelectionEpoch=0;
 const surveyContext=()=>[kstDate(),credentials?.vault.epoch('doctorville'),profileEpochs.get('doctorville')??0,state?.snapshot().epoch].join('/');
@@ -321,7 +332,7 @@ function hardenSiteWindow(window,id){
   if(remoteWindows.has(window))return;
   remoteWindows.add(window);manualOwners.set(window,id);notify();
   const contents=window.webContents;
-  watchManualEntry(window,id,{jobs:()=>automation?.store.entries()??[],surveyScope:url=>{
+  if(automaticEntrySite(id))watchManualEntry(window,id,{jobs:()=>automation?.store.entries()??[],surveyScope:url=>{
    const key=manualSurveyKeys.get(window)??null;
    return dataAccess.allowed()&&automation?.survey.wantsObservation(url,key)?surveyContext()+'/'+(key??''):null;
   },onSurvey:(url,raw)=>automation?.survey.observe(url,raw,manualSurveyKeys.get(window)??null),onClick:key=>{automation?.entry.cancelJob(key,true);browserEvent(id,'manual_entry_observed');}});
@@ -329,7 +340,10 @@ function hardenSiteWindow(window,id){
   contents.on('page-title-updated',event=>event.preventDefault());
   window.setAutoHideMenuBar(false);
   window.setMenu(Menu.buildFromTemplate([
-    ...(id==='docple'?[{label:'지금 열린 달력에서 오늘 출석 확인',click:()=>observeDocple(window,id)}]:[]),
+    ...(id==='docple'?[
+     {label:'출석 달력 열기',click:()=>navigateSite(window,id,credentialSite(id).entry)},
+     {label:'지금 열린 달력에서 오늘 출석 확인',click:()=>observeDocple(window,id)},
+    ]:[]),
     {id:'finish-login',label:'로그인 마침 · 선택한 사이트 조회',click:()=>finishSiteLogin(id).then(result=>{if(!result.ok)dialog.showMessageBox(window,{type:'error',message:'사이트의 세션 저장 요청을 마치지 못했어요. 이 창을 유지하고 다시 시도해 주세요.'});}).catch(()=>{})},
     {id:'open-login',label:'로그인 화면',enabled:!!siteById(id).loginUrl,click:()=>{armLoginVisit(window,id);navigateSite(window,id,siteById(id).loginUrl);}},
     {label:'다시 열기',click:()=>navigateSite(window,id,siteById(id).url)},
@@ -341,7 +355,7 @@ function hardenSiteWindow(window,id){
     const target=typeof url==='string'?url:event.url;
     if(!allowedNavigation(id,target)){event.preventDefault();sessionChange(id,{lastError:'navigation_blocked'});browserEvent(id,'navigation_blocked');}
   };
-  contents.on('did-navigate-in-page',()=>{if(loginVisits.has(window))void inspectSession(window,id);});
+  contents.on('did-navigate-in-page',(_event,_url,main)=>{if(main!==false){void observeDocple(window,id);if(loginVisits.has(window))void inspectSession(window,id);}});
   contents.on('did-finish-load',()=>{
     if(!allowedNavigation(id,contents.getURL()))return;
     sessionChange(id,{load:'ready'});browserEvent(id,'document_ready');void observeDocple(window,id);void inspectSession(window,id);
@@ -376,7 +390,7 @@ function hardenSiteWindow(window,id){
     if(!quitting&&!manualOwners.size)showControl();
   });
 }
-function openSite(id,login=false,survey){
+function openSite(id,login=false,{surveyKey,url:targetUrl}={}){
   dataAccess.require();if(siteWait.status(id)?.until>Date.now())throw Error('site_wait');
   const site=siteById(id);if(!site)throw Error('invalid_site');
   if(collector.snapshot().running&&collector.snapshot().site===id)collector.cancel();
@@ -385,7 +399,7 @@ function openSite(id,login=false,survey){
   const existing=siteWindows.get(id);
   if(existing&&!existing.isDestroyed()){
     if(existing.isMinimized())existing.restore();existing.show();existing.focus();
-    if(survey){manualSurveyKeys.set(existing,survey.key);navigateSite(existing,id,survey.url);}
+    if(targetUrl){if(surveyKey)manualSurveyKeys.set(existing,surveyKey);else manualSurveyKeys.delete(existing);navigateSite(existing,id,targetUrl);}
     else if(login&&site.loginUrl){armLoginVisit(existing,id);navigateSite(existing,id,site.loginUrl);}
     return;
   }
@@ -394,12 +408,47 @@ function openSite(id,login=false,survey){
   siteWindows.set(id,window);hardenSiteWindow(window,id);
   browserEvent(id,'window_opened');
   if(login)armLoginVisit(window,id);
-  if(survey)manualSurveyKeys.set(window,survey.key);
-  navigateSite(window,id,survey?.url??(login&&site.loginUrl?site.loginUrl:site.url));
+  if(surveyKey)manualSurveyKeys.set(window,surveyKey);
+  navigateSite(window,id,targetUrl??(login&&site.loginUrl?site.loginUrl:site.url));
 }
 function openSurvey(key){
  const url=automation.survey.target(key);if(!url)return {ok:false};
- openSite('doctorville',false,{key,url});return {ok:true};
+ openSite('doctorville',false,{surveyKey:key,url});return {ok:true};
+}
+let doctorvilleNotices,doctorvilleOffers=[];
+const doctorvilleCatalogOwner=()=>[credentials?.vault.epoch('doctorville'),profileEpochs.get('doctorville')??0].join('/');
+let doctorvilleOffersOwner;
+function doctorvilleApplicationOffers(){
+ if(!catalog.selected().includes('doctorville')||doctorvilleOffersOwner!==doctorvilleCatalogOwner())return [];
+ const today=kstDate();
+ return doctorvilleOffers.filter(event=>event.date>today);
+}
+function openDoctorvilleApplication(id){
+ if(typeof id!=='string'||!/^\d{1,10}$/.test(id))return {ok:false};
+ const target=doctorvilleApplicationOffers().find(event=>event.id===id);
+ if(!target)return {ok:false};
+ openSite('doctorville',false,{url:target.url});
+ return {ok:true};
+}
+function notifyDoctorvilleApplications(row,observed){
+ if(row?.site!=='doctorville'||!catalog.selected().includes(row.site)||quitting)return;
+ doctorvilleOffersOwner=doctorvilleCatalogOwner();
+ doctorvilleOffers=row.stale||!['ok','review'].includes(row.status)||!['list_read','list_unconfirmed'].includes(row.reason)?[]:doctorvilleApplicationTargets(observed);
+ if(!doctorvilleOffers.length||!Notification.isSupported())return;
+ try{
+  doctorvilleNotices??=new DoctorvilleApplicationNotices(join(dataDirectory,'doctorville-application-notices-v1.json'));
+  const targets=doctorvilleNotices.accept(doctorvilleOffers);
+  if(!targets.length)return;
+  const [first]=targets;
+  const notification=new Notification({title:'닥터빌 신청 가능 강의 '+targets.length+'개',
+   body:first.date.slice(5).replace('-','/')+' '+first.time+' '+first.title+(targets.length>1?' 외 '+(targets.length-1)+'개':'')});
+  notification.once('click',()=>{
+   if(quitting)return;
+   try{if(targets.length===1&&!updater?.guarded&&openDoctorvilleApplication(first.id).ok)return;}catch{}
+   showControl();
+  });
+  notification.show();
+ }catch(error){runtimeFaults.record('control',error);}
 }
 function notifySurvey({key,title,phase,minutesLeft}){
  if(quitting||!Notification.isSupported())return false;
@@ -418,7 +467,7 @@ function registerIPC(channel,handler){
     catch(error){if(pcOptions?.failed){try{state.setPaused(true);automation?.cancel();notify();}catch{}}return {ok:false,reason:['invalid_selection','invalid_date','collection_busy','window_unavailable','data_blocked','site_wait'].includes(error.message)?error.message:'operation_unavailable'};}
   });
 }
-const remoteChannels=new Set('update-check update-install update-page collect collect-site daily quick-run survey-open credential-save credential-recover entry-preflight entry-preflight-upcoming registration-request open-site open-login finish-login'.split(' ').map(k=>'pc:'+k));
+const remoteChannels=new Set('update-check update-install update-page collect collect-site daily quick-run survey-open doctorville-application credential-save credential-recover entry-preflight entry-preflight-upcoming registration-request open-site open-login finish-login'.split(' ').map(k=>'pc:'+k));
 function ipc(){
   registerIPC('pc:data-mode',mode=>{
    const before=dataAccess.allowed();
@@ -495,7 +544,9 @@ function ipc(){
    sessionChange(site,{login:'authenticated',authSource:'verified_profile',checkedAt:Date.now(),lastError:''});
    await flushProfile(site);
    if(catalog.selected().includes(site)){if(!validQueryDate(viewDate))viewDate=kstDate();catalogQueue.request(viewDate,[site]);}
-   const keys=DAILY_TASKS.filter(task=>task.site===site&&pcOptions.snapshot().dailyKeys.includes(task.key)&&automation.store.day().daily[task.key]?.status==='login').map(task=>task.key);
+   const daily=automation.store.day().daily;
+   const keys=DAILY_TASKS.filter(task=>task.site===site&&pcOptions.snapshot().dailyKeys.includes(task.key)&&
+    (daily[task.key]?.status==='login'||task.key==='docple:attendance'&&daily[task.key]?.status!=='complete')).map(task=>task.key);
    if(keys.length)automation.requestDaily({readOnly:true,keys});
   };
   const prepareCredential=id=>{if(!credentialSite(id))throw Error('invalid_site');if(collector.snapshot().running&&collector.snapshot().site===id)collector.cancel();automation.manualOpened(id);registration?.cancel(id);};
@@ -517,6 +568,7 @@ function ipc(){
   registerIPC('pc:entry-preflight',key=>automation.preflightEntry(key));
   registerIPC('pc:entry-preflight-upcoming',()=>automation.preflightUpcoming());
   registerIPC('pc:registration-request',(source,key)=>registration.request(source,key));
+  registerIPC('pc:doctorville-application',openDoctorvilleApplication);
   registerIPC('pc:quit',()=>{setImmediate(()=>app.quit());return {ok:true};});
   registerIPC('pc:open-site',id=>{
     if(!siteById(id))return {ok:false,reason:'invalid_site'};
@@ -569,7 +621,7 @@ else{
       preload=fileURLToPath(new URL('./'+developerTools.preloadName,import.meta.url));
       credentials=new CredentialManager({directory:dataDirectory,applicationId:EDITION.appId,developer:EDITION.developer,
        protect:{available:()=>process.platform==='win32'&&safeStorage.isEncryptionAvailable(),encrypt:text=>safeStorage.encryptString(text),decrypt:bytes=>safeStorage.decryptString(bytes)},
-       automaticAllowed:id=>dataAccess.allowed()&&(!id||siteWait.allowed(id))&&!state.snapshot().paused&&!updater.guarded,isManualOpen:id=>[...manualOwners.values()].includes(id),
+       siteAvailable:id=>siteWait.allowed(id),automaticAllowed:id=>dataAccess.allowed()&&(!id||siteWait.allowed(id))&&!state.snapshot().paused&&!updater.guarded,isManualOpen:id=>[...manualOwners.values()].includes(id),
        createPage:async(id,signal,{validation,partition}={})=>{
         dataAccess.require();const prefs=validation?{...remotePreferences(id,EDITION.id),partition}:prepareSession(id);
         if(validation){const profile=session.fromPartition(partition);configureNetwork(profile,id);profile.setPermissionRequestHandler((_c,_p,callback)=>callback(false));profile.setPermissionCheckHandler(()=>false);profile.on('will-download',event=>event.preventDefault());}
@@ -580,7 +632,7 @@ else{
       const nativeCatalog=new NativeCatalogRead({gate:siteWait,sessionOwner:id=>session.fromPartition(prepareSession(id).partition),accountEpoch:id=>credentials.vault.epoch(id),profileEpoch:id=>profileEpochs.get(id)??0});
       collector=new CatalogRunner({online:()=>net.isOnline(),context:id=>credentials.vault.epoch(id)+':'+(profileEpochs.get(id)??0),gate:siteWait,store:catalog,createPage:(profile,signal)=>electronCatalogPage(profile,signal,prepareSession(profile.id),workerTraffic(profile.id,signal)),
         prepareCollection:async(id,signal)=>{const admission=await credentials.prepareCollection(id,signal);if(id==='ckd')nativeCatalog.admitCkd(admission);},nativeRead:(...args)=>nativeCatalog.read(...args),
-        recoverLogin:async(id,signal)=>(await credentials.recover(id,{automatic:true,signal})).status==='authenticated',
+        recoverLogin:async(id,signal)=>(await credentials.recover(id,{automatic:true,signal})).status==='authenticated',onResult:notifyDoctorvilleApplications,
         isManualOpen:id=>[...manualOwners.values()].includes(id)||credentials.active?.site===id,onChange:snapshot=>{developerTools.observe(snapshot);notify();if(!snapshot.running)queueMicrotask(()=>catalogQueue?.pump());}});
       catalogQueue=new CatalogQueue({context:id=>credentials.vault.epoch(id)+':'+(profileEpochs.get(id)??0),resultValid:(date,id)=>{const row=catalog.view(date).results[id];return row?.coverage===true&&!row.stale&&row.status==='ok';},start:async(date,ids,morningAt)=>{const run=collector.start(date,ids);if(collector.snapshot().running)automation?.catalogStarted(date,morningAt);await run;automation?.catalogFinished(date,ids,collector.snapshot(),morningAt);},busy:()=>!dataAccess.allowed()||updater.guarded||collector.sleeping||collector.snapshot().running||!!automation?.busy||credentials.busy,validDate:validQueryDate,onChange:notify});
       medigateCountPages=new MedigateCountPages(join(dataDirectory,'medigate-counter-pages-v1.json'));
@@ -604,6 +656,11 @@ else{
        return nativeCatalog.readAttendance(date,signal,{...options,current:()=>options.current()&&dataAccess.allowed()&&!updater.guarded&&net.isOnline()});
       };
       automation.daily.siteWait=siteWait;
+      automation.daily.readOpenDocpleAttendance=async date=>{
+       if(date!==kstDate())return false;
+       for(const [window,id] of manualOwners)if(id==='docple'&&await readOpenDocpleReceipt(window,id))return date===kstDate();
+       return false;
+      };
       automation.daily.receiptContext=site=>[credentials.vault.epoch(site),profileEpochs.get(site)??0,state.snapshot().epoch,attendanceSelectionEpoch].join('/');
       registration=new RegistrationController({store:new RegistrationStore(join(dataDirectory,'registration-attempts-v1.json')),
        resolve:(source,key)=>{

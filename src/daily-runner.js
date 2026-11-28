@@ -29,7 +29,15 @@ export class DailyRunner{
      if(this.store.day(date).daily[key]?.status!=='complete')this.store.record(date,key,{status:'scheduled',reason:'intermd_quiz_before_open'},this.now());
      completed++;continue;
     }
-    if(this.isManualOpen(task.site)){this.store.record(date,key,{status:'busy',reason:'manual_view_open'});completed++;continue;}
+    if(this.isManualOpen(task.site)){
+     const context=this.receiptContext?.(task.site);
+     const observed=key==='docple:attendance'&&this.taskSelected(key)&&await this.readOpenDocpleAttendance?.(date);
+     if(!allowed())break;
+     if(context!==this.receiptContext?.(task.site)){completed++;continue;}
+     if(observed&&this.taskSelected(key))this.store.record(date,key,{status:'complete',reason:'docple_visible_receipt',attempted:this.ledger.consumed(dailyTicket(task,date,0,this.now()))},this.now());
+     else this.store.record(date,key,{status:'busy',reason:'manual_view_open'});
+     completed++;continue;
+    }
     const old=this.store.day(date).daily[key];
     if(!readOnly&&(old?.status==='complete'||task.kind.startsWith('brand')&&['ended','none'].includes(old?.status))&&task.kind!=='quiz'){completed++;continue;}
     if(key==='keymedi:brand2'){
@@ -44,15 +52,16 @@ export class DailyRunner{
     const mayAct=()=>!readOnly&&this.taskSelected(key)&&!this.ledger.snapshot().paused&&(task.kind.startsWith('brand')?this.store.features().brand:this.store.features().dailyClaim)&&allowed();
     publish(task.label+' 확인 중');
     try{
-     if(key==='docple:attendance'&&this.readDocpleAttendance&&(readOnly?!this.ledger.snapshot().paused&&this.taskSelected(key):mayAct())){
+     if(key==='docple:attendance'&&this.readDocpleAttendance&&!this.ledger.snapshot().paused&&this.taskSelected(key)){
       const context=this.receiptContext?.(task.site);
       const current=()=>allowed()&&!this.isManualOpen(task.site)&&this.taskSelected(key)&&
-       !this.ledger.snapshot().paused&&(readOnly||mayAct())&&context===this.receiptContext?.(task.site);
+       !this.ledger.snapshot().paused&&context===this.receiptContext?.(task.site);
       const result=await this.readDocpleAttendance(date,controller.signal,{remainingMs:540000-(this.now()-began),current});
+      if(!current()){staleReceipt=true;receipt={status:'unknown',reason:'scope_changed'};continue;}
       if(result?.restricted){receipt={status:'unknown',reason:'site_wait'};continue;}
-      if(result?.abandoned||!current()){staleReceipt=true;receipt={status:'unknown',reason:'scope_changed'};continue;}
+      if(result?.abandoned){receipt={status:'unknown',reason:'scope_changed'};continue;}
       const consumed=this.ledger.consumed(dailyTicket(task,date,0,this.now()));
-      if(result?.status==='complete'||result?.status==='pending'&&readOnly&&!consumed&&!old?.attempted){
+      if(result?.status==='complete'||result?.status==='pending'&&!mayAct()&&!consumed&&!old?.attempted){
        receipt={...result,attempted:consumed};continue;
       }
      }

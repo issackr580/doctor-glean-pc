@@ -175,8 +175,8 @@ test('a lounge GET begun before opening cannot become fresh just by finishing af
 });
 test('a blocked entry load is terminal before dispatch, but uncertain dispatch remains consumed',async t=>{
  for(const dispatch of [false,true]){
-  const {clock,ledger,store}=setup(t);store.setFeature('entry',true);store.setEntrySites(['whodadoc']);
-  const entry={key:'a'.repeat(64),site:'whodadoc',date,time:'12:00',title:'합성 입장',due:clock.now()-1000,deadline:clock.now()+600000,start:clock.now(),status:'reserved',slot:0,nextAt:clock.now()-1,retries:0,attempts:[],entryAttempted:false};store.putEntry(entry);let clicks=0;
+  const {clock,ledger,store}=setup(t);store.setFeature('entry',true);store.setEntrySites(['bluepharm']);
+  const entry={key:'a'.repeat(64),site:'bluepharm',date,time:'12:00',title:'합성 입장',due:clock.now()-1000,deadline:clock.now()+600000,start:clock.now(),status:'reserved',slot:0,nextAt:clock.now()-1,retries:0,attempts:[],entryAttempted:false};store.putEntry(entry);let clicks=0;
   const p=page(async(_name,[_job,mode])=>{if(mode==='click'){clicks++;throw Object.assign(Error('policy_rejected'),{code:'policy_rejected'});}return {status:'ready',targetMatched:true,matchedTargets:1,entryControls:1};});
   if(!dispatch)p.load=async()=>{throw Object.assign(Error('policy_rejected'),{code:'policy_rejected'});};
   const runner=new EntryRunner({ledger,store,now:clock.now,sleep:clock.sleep,createPage:async()=>p});await runner.run(entry);

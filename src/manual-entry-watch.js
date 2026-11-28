@@ -31,12 +31,13 @@ export function watchManualEntry(window,site,{jobs,onClick,onSurvey=()=>{},surve
  // navigation. It conveys a trusted-click observation only: no URL, command,
  // credential, submission, or remote Node/IPC API is exposed. Polling remains
  // a fallback when a debugger is unavailable.
- const wire=(async()=>{try{
+ let wire;
+ const connect=async()=>{try{
   if(!debuggerWire.isAttached()){debuggerWire.attach('1.3');ownDebugger=true;}
   debuggerWire.on('message',messages);
   mainFrame=(await debuggerWire.sendCommand('Page.getFrameTree')).frameTree.frame.id;
   await debuggerWire.sendCommand('Runtime.enable');
- }catch{}})();
+ }catch{}};
  const bind=async()=>{for(const id of candidates)if(!contexts.has(id)&&!closed)try{
   const value=await debuggerWire.sendCommand('Runtime.evaluate',{expression:'globalThis.__doctorGleanManualObserver?.token',contextId:id,returnByValue:true});
   if(value.result?.value!==token)continue;
@@ -46,10 +47,21 @@ export function watchManualEntry(window,site,{jobs,onClick,onSurvey=()=>{},surve
  const tick=async()=>{
   if(closed||running||window.isDestroyed())return;const contents=window.webContents,url=contents.getURL();
   if(contents.isLoadingMainFrame()||!allowedNavigation(site,url))return;
+  const eligible=jobs().filter(job=>job.site===site&&!['manual_clicked','cancelled','lecture_ended','expired'].includes(job.status)).map(job=>({...job,...(officialIdentity(job)?{lectureIdentity:officialIdentity(job)}:{}),...(site==='hmp'?{hmpRepeatSchema:job.hmpRepeatSchema??1,hmpSlot:job.slot}:job.repeatSchema===1?{repeatSlot:job.slot}:{})}));
+  const scope=site==='doctorville'&&(surveyGeneration!==generation||Date.now()-lastSurvey>=15000)&&surveyScope(url);
+  const surveyId=scope&&doctorvilleSurveyId(url);
+  if(!eligible.length&&!surveyId)return;
   running=true;const boundGeneration=generation;
   try{
-   await wire;if(closed||window.isDestroyed())return;
-   const eligible=jobs().filter(job=>job.site===site&&!['manual_clicked','cancelled','lecture_ended','expired'].includes(job.status)).map(job=>({...job,...(officialIdentity(job)?{lectureIdentity:officialIdentity(job)}:{}),...(site==='hmp'?{hmpRepeatSchema:job.hmpRepeatSchema??1,hmpSlot:job.slot}:job.repeatSchema===1?{repeatSlot:job.slot}:{})}));
+   if(surveyId){
+    surveyGeneration=generation;lastSurvey=Date.now();
+    const code='('+doctorvilleSurveySource+')('+JSON.stringify(surveyId)+','+JSON.stringify(url)+')';
+    const raw=await contents.executeJavaScriptInIsolatedWorld(WORLD,[{code}]);
+    if(!closed&&!window.isDestroyed()&&contents.getURL()===url&&boundGeneration===generation&&scope===surveyScope(url))onSurvey(url,raw);
+   }
+   if(!eligible.length||closed||window.isDestroyed()||contents.getURL()!==url||boundGeneration!==generation)return;
+   wire??=connect();
+   await wire;if(closed||window.isDestroyed()||contents.getURL()!==url||boundGeneration!==generation)return;
    const install=`(()=>{
     const name='__doctorGleanManualObserver';let state=window[name];
     if(!state){state={jobs:${JSON.stringify(eligible)},clicks:[],sequence:0,tag:${JSON.stringify(randomUUID().replaceAll('-',''))},token:${JSON.stringify(token)}};window[name]=state;const legacy=${engine},official=${identityEngine},pc=${pcEntrySource()};const inspect=(job,mode,target)=>job.lectureIdentity?(mode==='manual_click'&&['doctorville','keymedi','medigate','hmp'].includes(job.site)?pc(job,mode,target):official(job,mode,target)):legacy(job,mode,target);
@@ -74,15 +86,6 @@ export function watchManualEntry(window,site,{jobs,onClick,onSurvey=()=>{},surve
    if(result===null){await contents.executeJavaScriptInIsolatedWorld(WORLD,[{code:install}]);await bind();return;}
    await bind();
    if(closed||window.isDestroyed()||contents.getURL()!==url||boundGeneration!==generation||!Array.isArray(result?.clicks))return;
-   if(site==='doctorville'&&(surveyGeneration!==generation||Date.now()-lastSurvey>=15000)){
-    const scope=surveyScope(url),id=scope&&doctorvilleSurveyId(url);
-    if(id){
-     surveyGeneration=generation;lastSurvey=Date.now();
-     const code='('+doctorvilleSurveySource+')('+JSON.stringify(id)+','+JSON.stringify(url)+')';
-     const raw=await contents.executeJavaScriptInIsolatedWorld(WORLD,[{code}]);
-     if(!closed&&!window.isDestroyed()&&contents.getURL()===url&&boundGeneration===generation&&scope===surveyScope(url))onSurvey(url,raw);
-    }
-   }
    for(const item of result.clicks)report(item,result.tag);
   }catch{}finally{running=false;if(!closed&&boundGeneration!==generation)queueMicrotask(()=>tick());}
  };

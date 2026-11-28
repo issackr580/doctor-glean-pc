@@ -4,9 +4,10 @@ import {allowedNavigation,siteById} from './security.js';
 import {loginNoticeStatus} from './entry-dialog.js';
 import {pageRole} from './page-role.js';
 import {ID_SITES,officialIdentity} from './entry-identity.js';
+import {doctorvilleCatalogSource} from './doctorville-applications.js';
 
 const ASSETS=new Map();
-function asset(name,site){const family=site==='dtalks'&&name==='reader-additional.js'?'direction169':site==='bluepharm'?'direction161':ID_SITES.includes(site)?'identity':'engine',key=family+'/'+name;if(!ASSETS.has(key))ASSETS.set(key,readFileSync(new URL('../vendor/'+key,import.meta.url),'utf8'));return ASSETS.get(key);}
+function asset(name,site){const family=site==='dtalks'&&name==='reader-additional.js'?'direction169':site==='bluepharm'?'direction161':ID_SITES.includes(site)?'identity':'engine',key=(site==='doctorville'?'doctorville/':'')+family+'/'+name;if(!ASSETS.has(key)){const source=readFileSync(new URL('../vendor/'+family+'/'+name,import.meta.url),'utf8');ASSETS.set(key,site==='doctorville'&&name==='reader-catalog.js'?doctorvilleCatalogSource(source):source);}return ASSETS.get(key);}
 const readerName=profile=>profile.id==='dtalks'?'reader-additional.js':profile.id==='ckd'?'reader-ckd.js':profile.id==='keymedi'?'reader-keymedi.js':['additional-catalog-v1','docple-live-v1'].includes(profile.crawler)?'reader-additional.js':'reader-catalog.js';
 const fail=code=>Object.assign(Error(code),{code});
 export function safeCatalogNavigation(profile,action,state){
@@ -95,7 +96,8 @@ export class CatalogPage{
   if(!allowedNavigation(this.profile.id,before.url))throw fail('navigation_changed');
   if(before.notice==='blocked')return {site:site.id,status:'blocked',done:true,events:[],coverage:false};
   if(!site.hosts.includes(new URL(before.url).hostname)||/\/login(?:\/|\.|$)|\/auth\/login|\/sign.?in/i.test(new URL(before.url).pathname))return {site:site.id,status:'login',done:true,events:[],coverage:false};
-  const source=`(()=>{if(document.readyState!=='complete')return JSON.stringify({status:'loading',done:false,events:[]});const notice=(${catalogNotice})(${JSON.stringify(before.notice??'')},${loginNoticeStatus});if(notice)return JSON.stringify({site:${JSON.stringify(site.id)},status:notice,done:true,events:[],coverage:false});const read=${asset(readerName(this.profile),this.profile.id)};const result=read(${JSON.stringify(this.profile)},${JSON.stringify(date)},${JSON.stringify(previous)});return JSON.stringify(${site.id==='dtalks'?`(${dtalksCalendarCoverage})(result)`:'result'});})()`;
+  const supplement=site.id==='dtalks'?dtalksCalendarCoverage:null;
+  const source=`(()=>{if(document.readyState!=='complete')return JSON.stringify({status:'loading',done:false,events:[]});const notice=(${catalogNotice})(${JSON.stringify(before.notice??'')},${loginNoticeStatus});if(notice)return JSON.stringify({site:${JSON.stringify(site.id)},status:notice,done:true,events:[],coverage:false});const read=${asset(readerName(this.profile),this.profile.id)};const result=read(${JSON.stringify(this.profile)},${JSON.stringify(date)},${JSON.stringify(previous)});return JSON.stringify(${supplement?`(${supplement})(result)`:'result'});})()`;
   let encoded;
   try{resourceCount('domReads');encoded=await this.#evaluate(source);}catch(error){
    const after=this.#current();

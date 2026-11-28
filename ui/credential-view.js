@@ -1,6 +1,7 @@
 const labels={saved:'로그인 검증 후 계정을 암호화 저장했어요.',authenticated:'현재 로그인된 상태를 확인했어요.',rejected:'아이디·비밀번호가 거절됐어요. 계정을 확인해 다시 저장해 주세요.',challenge:'사이트에서 추가 인증을 직접 진행해 주세요.',manual:'로그인 화면이나 추가 안내를 직접 확인해 주세요.',unknown:'로그인 결과를 확인하지 못했어요. 다시 제출하지 않았어요.',time_limit:'확인 시간이 지났어요. 로그인 결과는 직접 확인해 주세요.',cooldown:'로그인 요청 사이의 대기 시간이에요. 표시된 시각에 직접 다시 시도할 수 있어요.',daily_limit:'오늘 로그인 시도 제한에 도달했어요.',disabled:'자동 복구가 꺼져 있거나 거절된 계정이에요.',busy:'이 사이트의 열린 창이나 진행 중인 작업을 마친 뒤 다시 시도해 주세요.',not_saved:'저장된 계정이 없어요.',storage_unavailable:'Windows 계정 보호 저장소를 사용할 수 없어 계정을 저장하거나 읽지 않았어요.',storage_error:'계정 저장소를 읽거나 쓰지 못했어요. 기존 파일을 지우지 말고 오류보고를 저장해 주세요.',network_error:'사이트 연결을 마치지 못했어요.',cancelled:'계정 작업을 중지했어요.',blocked:'허용된 로그인 화면과 입력값을 확인하지 못했어요.',removed:'저장된 계정을 삭제했어요.'};
 labels.stale='로그인 화면이 바뀌어 입력·제출을 중단했어요. 계정은 저장하지 않았어요.';
 labels.login_required='로그인 화면이 남아 성공을 확인하지 못했어요. 사이트 화면과 추가 안내를 직접 확인해 주세요.';
+labels.site_wait='사이트의 접속 제한으로 로그인 복구를 보류했어요. 「사이트·계정」에서 대기 기한 또는 직접 확인 안내를 확인해 주세요.';
 let currentSite='',state=null,api,refresh,busy=false;
 const dialog=()=>document.getElementById('credential-dialog');
 export function resultLabel(result){
@@ -16,7 +17,7 @@ export function credentialLabel(site,snapshot){
  const saved=snapshot?.vault.sites.find(row=>row.site===site),result=snapshot?.results.find(row=>row.site===site),attempt=snapshot?.attempts.sites.find(row=>row.site===site);
  if(snapshot?.active?.site===site)return snapshot.active.kind==='save'?'계정 로그인 검증 중':'저장 계정으로 로그인 복구 중';
  if(!saved)return result?resultLabel(result):'';
- return '계정 암호화 저장됨 · 자동 복구 '+(saved.automatic?'허용':'꺼짐')+(attempt?.disabled?' · 비밀번호 오류로 복구 중단':attempt&&['unknown','time_limit','network_error','manual','challenge','login_required'].includes(attempt.status)?' · 이전 로그인 실패·미확인으로 자동 재시도 중단 · 저장 계정으로 로그인에서 직접 확인':result&&['challenge','manual','storage_error','storage_unavailable'].includes(result.status)?' · '+(labels[result.status]??'직접 확인 필요'):'');
+ return '계정 암호화 저장됨 · 자동 복구 '+(saved.automatic?'허용':'꺼짐')+(result?.status==='site_wait'?' · 사이트 접속 대기':attempt?.disabled?' · 비밀번호 오류로 복구 중단':attempt&&['unknown','time_limit','network_error','manual','challenge','login_required'].includes(attempt.status)?' · 이전 로그인 실패·미확인으로 자동 재시도 중단 · 저장 계정으로 로그인에서 직접 확인':result&&['challenge','manual','storage_error','storage_unavailable'].includes(result.status)?' · '+(labels[result.status]??'직접 확인 필요'):'');
 }
 function display(){
  if(!currentSite||!state)return;const site=state.sites.find(row=>row.id===currentSite),snapshot=state.credentials,saved=snapshot?.vault.sites.find(row=>row.site===currentSite);

@@ -13,7 +13,7 @@ export function credentialObservation(site,page,phase,reply,elapsedMs){
    const values=u.searchParams.getAll('cb');result.callbackState=values.length>1?'repeated':!values.length?'missing':values[0]===expected?'expected':'mismatch';
   }
  }catch{}
- if(['policy_rejected','invalid_response','page_changed','time_limit','network_error','cancelled','worker_closed','navigation_changed','stale','scope_changed'].includes(reply?.failure))result.failure=reply.failure;
+ if(['policy_rejected','invalid_response','page_changed','time_limit','network_error','cancelled','worker_closed','navigation_changed','stale','scope_changed','site_wait'].includes(reply?.failure))result.failure=reply.failure;
  if(['provider','login','catalog','daily','lounge','brand','quiz','home','other'].includes(page.route))result.route=page.route;
  try{if(site==='doctorville'&&new URL(page.url).pathname==='/mims/directLogin')result.route='callback';}catch{}
  try{if(site==='dtalks'){const path=new URL(page.url).pathname;if(path==='/member/loginConfirm.do')result.route='login_result';else if(path==='/main.do')result.route='home';}}catch{}

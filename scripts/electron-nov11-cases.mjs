@@ -72,8 +72,8 @@ export async function nov11Cases({root,date,title,clock,check,inspect,job,detail
    await page.current.webContents.executeJavaScript(`setTimeout(()=>alert(${JSON.stringify(message)}),0);void 0`);
    for(let i=0;i<30&&!page.entryObstacle();i++)await new Promise(resolve=>setTimeout(resolve,20));
    check('Nov11 site alert classifies '+status+' without accepting a confirmation',page.entryObstacle()?.status===status);
-   const result=await page.call('auto-entry.js',[{...job('whodadoc'),repeatSchema:1,repeatSlot:0},'inspect']);
-   check('Nov11 '+status+' obstacle crosses the existing recovery wrapper boundary',result.status===status);
+   const result=await page.call('auto-entry.js',[{...job('whodadoc'),repeatSchema:1,repeatSlot:0},'inspect']).catch(error=>error.code);
+   check('Nov11 '+status+' obstacle cannot reactivate retired Whodadoc entry',result==='disabled');
    check('Nov11 stored alert observation excludes raw text',!JSON.stringify(page.lastEntryDialog).includes(message));
    await page.load('https://hcp.whodadoc.com/hcp/main');
    check('Nov11 old '+status+' alert cannot affect a replacement document',page.entryObstacle()===null);
