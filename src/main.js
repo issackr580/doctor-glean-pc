@@ -37,7 +37,7 @@ import {watchManualEntry} from './manual-entry-watch.js';
 import {automaticEntrySite} from './entry-support.js';
 import {DoctorvilleApplicationNotices,doctorvilleApplicationTargets} from './doctorville-applications.js';
 import {CredentialManager} from './credential-manager.js';
-import {credentialSite,safeCredentialStatus} from './credential-policy.js';
+import {credentialSite,safeCredentialStatus,docpleAuthOperation} from './credential-policy.js';
 import {credentialPageState} from './credential-page-state.js';
 import {manualLoadRecovery} from './site-load-policy.js';
 import {RuntimeFaults,faultNotice} from './runtime-faults.js';
@@ -87,9 +87,15 @@ const configureNetwork=(profile,id)=>{
   },
   response:(details,worker)=>{
    const site=requestSite(details.url)??id;
-   if(!site||!siteWait||!(details.webContentsId>0)||worker&&site===id||![403,429,503].includes(details.statusCode))return;
+   if(!site||!siteWait||!(details.webContentsId>0)||worker&&site===id||details.fromCache)return;
+   const {statusCode:status}=details;
+   const limited=[403,429,503].includes(status),operation=site==='docple'&&docpleAuthOperation(details.url,details.method);
+   if(!limited&&!operation)return;
    const manual=[...manualOwners].some(([window,owner])=>owner===site&&!window.isDestroyed()&&window.webContents.id===details.webContentsId);
-   observeSiteResponse(siteWait,site,details,manual?'manual_browser':worker?'background_browser':undefined);
+   if(limited)observeSiteResponse(siteWait,site,details,manual?'manual_browser':worker?'background_browser':undefined);
+   if(manual&&operation&&Number.isInteger(status)&&status>=100&&status<=599){
+    docpleManualAuthResponses.set(operation,{operation,status,at:Date.now()});notify();
+   }
   }
  });
  if(!dataAccess.allowed())profile.enableNetworkEmulation({offline:true});
@@ -105,6 +111,7 @@ const registrationWindows=new Map(),registrationConfirmed=new Map();
 const siteWindows=new Map(),remoteWindows=new Set(),configuredSessions=new Set();
 const manualOwners=new Map();
 const siteSessions=new Map(),navigationVersions=new WeakMap(),loadRequests=new WeakMap(),closingWindows=new WeakSet(),flushingSessions=new Map();
+const docpleManualAuthResponses=new Map();
 const sessionState=id=>siteSessions.get(id)??{load:'not_opened',login:'not_confirmed',save:'not_requested',route:'other',checkedAt:0,lastError:''};
 const runtimeFaults=new RuntimeFaults({onFault:fault=>{
  try{developerTools?.event({area:'process',phase:'fault',site:'',...fault,appVersion:VERSION,sourceCommit:BUILD_INFO.sourceCommit});}catch{}
@@ -145,8 +152,9 @@ function diagnosticSnapshot(){
   serverWait:SITES.flatMap(({id})=>{
    const wait=siteWait?.status(id);if(!wait)return [];
    const active=wait.manual||wait.until>now;
-   return active||wait.at>=dayStart&&wait.at<=now?[{site:id,status:wait.status,manual:wait.manual,until:wait.until,observedAt:wait.at,source:wait.source??'unknown',context:wait.context,method:wait.method,active}]:[];
+   return active||wait.at>=dayStart&&wait.at<=now?[{site:id,status:wait.status,manual:wait.manual,until:wait.until,observedAt:wait.at,source:wait.source??'unknown',context:wait.context,method:wait.method,operation:wait.operation,active}]:[];
   }),
+  docpleManualAuthResponses:[...docpleManualAuthResponses.values()],
   recentActivity:recentDiagnostics(now,{catalog,workflows:automation.store,survey:automation.survey}),
   siteSessions:SITES.map(({id})=>({site:id,open:[...manualOwners.values()].includes(id),...effectiveSession(id)})),credentials:credentials?.snapshot(),registration:registration?.store.snapshot(),browserEvents:[...browserEvents],developerDiagnostics:developerTools?.status(),
   attempts:Object.values(snapshot.jobs).map(({site,kind,date,slot,state,updatedAt})=>({site,kind,date,slot,state,updatedAt}))};
@@ -587,7 +595,10 @@ function ipc(){
    prepareCredential(site);try{
     const saved=await credentials.save(site,id,password,automatic);id='';password='';if(saved.status!=='saved')return credentialReply(saved,'save');
     let profileStatus='not_checked';
-    if(automatic&&!state.snapshot().paused){const recovered=await credentials.recover(site,{automatic:true});profileStatus=recovered.status;await refreshCredentialProfile(site,recovered);}
+    if(automatic&&!state.snapshot().paused){
+     if(site==='docple')profileStatus='deferred';
+     else{const recovered=await credentials.recover(site,{automatic:true});profileStatus=recovered.status;await refreshCredentialProfile(site,recovered);}
+    }
     return {...credentialReply(saved,'save'),profileStatus};
    }finally{id='';password='';}
   });

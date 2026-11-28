@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {SiteWait} from '../src/site-wait.js';
+import {SiteWait,observeSiteResponse} from '../src/site-wait.js';
 import {CatalogRunner} from '../src/catalog-runner.js';
 import {NativeCatalogRead} from '../src/native-catalog.js';
 import {kstInstant} from '../src/schedule.js';
@@ -24,6 +24,24 @@ test('429 stops fallback at the catalog entry point',async t=>{
  const bRun=new CatalogRunner({gate,now:()=>now,store:{record(){}},createPage:async()=>({open(){bLoads++;},read:()=>({status:'ok',events:[],coverage:true,done:true}),close(){}})});
  await bRun.start(date,['hmp']);assert.equal(bLoads,1);assert.deepEqual({http,browser,login},beforeB);
  now++;assert.equal(gate.allowed('docple'),true);
+});
+
+test('Docple attributes the first authentication 429 and persists its wait even without Retry-After',t=>{
+ const root=mkdtempSync(join(tmpdir(),'pc-wait-docple-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
+ const file=join(root,'site.json'),options={now:()=>1800000000000},gate=new SiteWait(file,options);
+ const login='https://docple-plus.com/api/season2/auth/login',refresh='https://docple-plus.com/api/season2/auth/token/refresh';
+ const reply={url:login,method:'POST',resourceType:'xhr',statusCode:429};
+ for(const invalid of [{url:login+'?private=unsafe'},{url:login.replace('docple-plus.com','docple-plus.com.invalid')},{method:'GET'},{statusCode:403}]){
+  assert.equal(observeSiteResponse(gate,'docple',{...reply,...invalid},'manual_browser'),false);
+ }
+ assert.equal(observeSiteResponse(gate,'docple',reply,'manual_browser'),true);
+ const restarted=new SiteWait(file,options);
+ assert.equal(restarted.allowed('docple'),false);
+ assert.equal(restarted.status('docple').operation,'login');
+ assert.equal(restarted.status('docple').until,options.now()+300000);
+ assert.equal(observeSiteResponse(gate,'docple',{...reply,url:refresh,responseHeaders:{'Retry-After':['60']}},'manual_browser'),true);
+ assert.equal(gate.status('docple').operation,'session_refresh');
+ assert.equal(gate.status('docple').until,options.now()+300000);
 });
 
 import {workerWait,waitUntil} from '../src/site-wait.js';

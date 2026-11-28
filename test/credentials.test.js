@@ -316,6 +316,8 @@ test('credential network counters recognize only the reviewed exact endpoints',a
  const {isCredentialRequest}=await import('../src/credential-policy.js');
  assert.ok(isCredentialRequest('doctorville','https://mims-account.shop.co.kr/apis/auth/login'));
  assert.ok(isCredentialRequest('dtalks','https://www.dtalks.kr/member/loginConfirm.do'));
+ assert.ok(isCredentialRequest('docple','https://docple-plus.com/api/season2/auth/login'));
+ assert.equal(isCredentialRequest('docple','https://docple-plus.com/api/season2/auth/token/refresh'),false);
  for(const url of ['https://mims-account.shop.co.kr.evil.invalid/apis/auth/login','http://mims-account.shop.co.kr/apis/auth/login','https://mims-account.shop.co.kr/apis/auth/login?password=private','https://user:pass@mims-account.shop.co.kr/apis/auth/login'])assert.equal(isCredentialRequest('doctorville',url),false);
  assert.equal(isCredentialRequest('keymedi','https://mims-account.shop.co.kr/apis/auth/login'),false);
 });

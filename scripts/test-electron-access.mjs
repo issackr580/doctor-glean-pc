@@ -164,6 +164,7 @@ async function mainIpc(){
  const profile=session.fromPartition(pref.partition);
  await profile.protocol.handle('https',()=>{requests++;return html('<main>합성 목록</main>');});
  const docpleRequests=[];
+ const loginApi='/api/season2/auth/login',sessionApi='/api/season2/auth/token/refresh';
  const docpleProfile=session.fromPartition(remotePreferences('docple',metadata.doctorGleanEdition).partition);
  const docpleWebRequests=docpleProfile.webRequest,installHeaders=docpleWebRequests.onHeadersReceived;
  let docpleHeaders;
@@ -171,7 +172,8 @@ async function mainIpc(){
  await docpleProfile.protocol.handle('https',request=>{
   const {pathname}=new URL(request.url);
   docpleRequests.push(request.method+' '+pathname);
-  if(pathname==='/synthetic-limit')return new Response('wait',{status:429,headers:{'Retry-After':'2'}});
+  if(pathname===sessionApi)return new Response(null,{status:204});
+  if(pathname===loginApi)return new Response('wait',{status:429,headers:{'Retry-After':'2'}});
   if(pathname==='/auth/login')return html('<form><input type="password"></form><div role="alert">로그인에 실패했습니다</div>');
   return html('<main>합성 강의 목록</main><a href="/logout">로그아웃</a>');
  });
@@ -228,23 +230,40 @@ async function mainIpc(){
    equal(savedReport.update,{status:'unsupported'});
    equal(savedReport.serverWait.find(row=>row.site==='docple').active,false);
    equal(savedReport.serverWait.find(row=>row.site==='docple').source,'login_document');
-   await manual.webContents.executeJavaScript('fetch("/synthetic-limit",{method:"POST"}).then(()=>{}).catch(()=>{})');
    // Custom protocol responses omit Chromium's header callback. Deliver the
    // fixture response through the callback installed on the app's actual session.
-   docpleHeaders({url:'https://docple-plus.com/synthetic-limit',method:'POST',resourceType:'xhr',statusCode:429,
-    responseHeaders:{'Retry-After':['2']},webContentsId:manual.webContents.id},()=>{});
+   for(const [path,statusCode] of [[sessionApi,204],[loginApi,429]]){
+    await manual.webContents.executeJavaScript(`fetch(${JSON.stringify(path)},{method:'POST'}).then(()=>{}).catch(()=>{})`);
+    docpleHeaders({url:'https://docple-plus.com'+path,method:'POST',resourceType:'xhr',statusCode,
+     responseHeaders:statusCode===429?{'Retry-After':['2']}:undefined,webContentsId:manual.webContents.id},()=>{});
+   }
    equal(await call("finishLogin('docple')"),{ok:false,reason:'site_wait'});
    equal(manual.isDestroyed(),false);
-   equal(docpleRequests,['GET /auth/login','POST /synthetic-limit']);
-   const waitReport=JSON.parse((await call('previewReport()')).text).serverWait.find(row=>row.site==='docple');
-   equal([waitReport.context,waitReport.method,waitReport.source,waitReport.active],['manual_browser','POST','site_api',true]);
+   equal(docpleRequests,['GET /auth/login','POST '+sessionApi,'POST '+loginApi]);
+   const loginReport=JSON.parse((await call('previewReport()')).text),waitReport=loginReport.serverWait.find(row=>row.site==='docple');
+   equal([waitReport.context,waitReport.method,waitReport.source,waitReport.operation,waitReport.active],['manual_browser','POST','site_api','login',true]);
+   equal(loginReport.docpleManualAuthResponses.map(({operation,status})=>[operation,status]),[['session_refresh',204],['login',429]]);
+   equal(JSON.stringify(loginReport.docpleManualAuthResponses).includes('/api/'),false);
    await until(()=>Date.now()>=waitReport.until);
    await manual.loadURL('https://docple-plus.com/');
    equal(await call("finishLogin('docple')"),{ok:true,queryStarted:true});
    equal(manual.isDestroyed(),true);
    await until(()=>docpleRequests.includes('GET /webinar'));
-   equal(docpleRequests,['GET /auth/login','POST /synthetic-limit','GET /','GET /webinar']);
+   equal(docpleRequests,['GET /auth/login','POST '+sessionApi,'POST '+loginApi,'GET /','GET /webinar']);
   }finally{docpleWebRequests.onHeadersReceived=installHeaders;if(!manual.isDestroyed())manual.destroy();}
+  const {CredentialManager}=await load('credential-manager'),proto=CredentialManager.prototype,{save,recover}=proto;
+  let recoveries=0;
+  // Substitute the successful save result because Linux does not have DPAPI.
+  // The trusted app IPC still owns the post-save decision.
+  proto.save=async()=>({status:'saved',attempted:true,submitted:true});
+  proto.recover=async()=>{recoveries++;return {status:'not_saved'};};
+  try{
+   await call('setPaused(false)');
+   equal((await call("saveCredential('docple','synthetic','synthetic',true)")).profileStatus,'deferred');
+   equal(recoveries,0);
+   equal((await call("saveCredential('doctorville','synthetic','synthetic',true)")).profileStatus,'not_saved');
+   equal(recoveries,1);
+  }finally{proto.save=save;proto.recover=recover;await call('setPaused(true)');}
  }
 }
 app.on('window-all-closed',()=>{});
