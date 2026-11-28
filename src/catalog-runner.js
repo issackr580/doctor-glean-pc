@@ -1,6 +1,7 @@
 import {boundedWork} from './async-work.js';
 import {initialSettings} from '../vendor/engine/core.js';
 import {kstDate,kstInstant} from './schedule.js';
+import {DoctorvilleApplicationRefresh,doctorvilleApplicationPageSignature} from './doctorville-applications.js';
 
 const PROFILES=initialSettings().profiles;
 const REASONS=new Set(['redirect_limit','connection_context_changed','network_error','time_limit','cancelled','invalid_response','date_mismatch','navigation_changed','action_rejected','storage_error','suspended','entry_priority','site_wait']);
@@ -19,11 +20,13 @@ function wait(ms,signal){return new Promise(resolve=>{
 export class CatalogRunner{
  constructor({online=()=>true,context=()=>0,gate,store,createPage,isManualOpen=()=>false,recoverLogin=async()=>false,prepareCollection=async()=>{},nativeRead=async()=>null,onResult=()=>{},onChange=()=>{},now=Date.now,sleep=wait,elapsed=()=>performance.now()}){
   Object.assign(this,{online,context,gate,store,createPage,isManualOpen,recoverLogin,prepareCollection,nativeRead,onResult,onChange,now,sleep,elapsed});this.active=null;this.last={running:false,date:kstDate(now()),site:'',reason:'idle'};
+  this.doctorvilleRefresh=new DoctorvilleApplicationRefresh();
  }
  suspend(){this.sleeping=true;if(this.active)this.active.interrupted=true;}
  resume(){this.sleeping=false;}
  snapshot(){return structuredClone(this.last);}
  remainingSites(){return this.active?.ids.slice(this.active.completed)??[];}
+ get fullDoctorvilleApplications(){return this.active?.fullDoctorvilleApplications===true;}
  #publish(run,extra={}){
   if(this.active!==run)return;
   this.last={running:true,date:run.date,site:run.site,completed:run.completed,total:run.ids.length,reason:'reading',...extra};
@@ -41,12 +44,12 @@ export class CatalogRunner{
    this.last={running:false,date:run.date,site:run.site,reason,completed:run.completed,total:run.ids.length};this.onChange(this.snapshot());
   }
  }
- async start(date,ids){
+ async start(date,ids,{fullDoctorvilleApplications=false}={}){
   const today=kstDate(this.now()),max=kstDate(kstInstant(today,'00:00')+7*86_400_000);
   kstInstant(date,'00:00');
   if(date<today||date>max||!Array.isArray(ids)||!ids.length||ids.length>10||ids.some(id=>!Object.hasOwn(PROFILES,id))||new Set(ids).size!==ids.length)throw Error('invalid_catalog_request');
   if(this.active)throw Error('collection_busy');
-  const run={date,ids:[...ids],controller:new AbortController(),site:'',completed:0,page:null,lastRead:null,began:this.elapsed(),deadline:this.now()+720000};
+  const run={date,ids:[...ids],fullDoctorvilleApplications,controller:new AbortController(),site:'',completed:0,page:null,lastRead:null,began:this.elapsed(),deadline:this.now()+720000};
   this.active=run;this.#publish(run);
   try{
    for(const id of run.ids){
@@ -63,7 +66,7 @@ export class CatalogRunner{
     try{
      const checkWait=()=>{if(this.gate&&!this.gate.allowed(id))throw Object.assign(Error(),{code:'site_wait'});};
      let checkpoint=null,applicationOwner;
-     const applicationPages=new Map();
+     const applicationPages=new Map(),applicationSignatures=[];
      const assertCurrent=()=>{
       if(!this.#owns(run)||this.isManualOpen(id))throw Object.assign(Error(),{code:'cancelled'});
       if(siteController.signal.aborted||remaining()<=0)throw Object.assign(Error(),{code:'time_limit'});
@@ -115,10 +118,22 @@ export class CatalogRunner{
       if(!reply||typeof reply!=='object'||!Array.isArray(reply.events))throw Object.assign(Error(),{code:'invalid_response'});
       if(run.interrupted||this.sleeping||!this.online()){await ready();continue;}
       assertCurrent();
-      if(id==='doctorville'&&owner===this.context(id)&&Array.isArray(reply.applicationRows)&&
-         reply.applicationRows.length<=500&&Number.isSafeInteger(reply.state?.pages)&&reply.state.pages>=0&&reply.state.pages<=8){
-       if(applicationOwner!==owner){applicationOwner=owner;applicationPages.clear();}
-       applicationPages.set(reply.state.pages,reply.applicationRows);
+      if(id==='doctorville'&&owner===this.context(id)){
+       if(applicationOwner!==owner){applicationOwner=owner;applicationPages.clear();applicationSignatures.length=0;}
+       const pageIndex=reply.state?.pages;
+       if(Number.isSafeInteger(pageIndex)&&pageIndex>=0&&pageIndex<=8&&Array.isArray(reply.applicationRows)&&reply.applicationRows.length<=500) {
+        applicationPages.set(pageIndex,reply.applicationRows);
+       }
+       if(pageIndex===applicationSignatures.length&&reply.applicationContinuation){
+        applicationSignatures.push(doctorvilleApplicationPageSignature(reply.applicationRows,reply.applicationContinuation));
+        const boundary=this.doctorvilleRefresh.reuse({owner,now:this.now(),date,signatures:applicationSignatures,forced:fullDoctorvilleApplications});
+        if(boundary){
+         const diagnostics={...reply.diagnostics,stopReason:boundary,dateBoundary:boundary,currentListRead:true};
+         const saved=this.store.record(id,date,{...reply,status:'review',done:true,coverage:true,diagnostics},this.now());
+         this.onResult(saved,[],{reused:true});
+         break;
+        }
+       }
       }
       if(reply.status==='login'&&!recoveryAttempted){
        recoveryAttempted=true;run.page.close();run.page=null;
@@ -129,7 +144,7 @@ export class CatalogRunner{
         await ready();run.page=await this.createPage(profile,siteController.signal);
         await boundCatalog(run.page.open(),siteController.signal,remaining());previous=null;continue;
        }
-       this.store.record(id,date,reply,this.now());break;
+       this.store.record(id,date,reply,this.now());if(id==='doctorville')this.doctorvilleRefresh.invalidate();break;
       }
       const after=run.page.checkpoint?.();
       checkpoint=reply.state&&!['loading','login','blocked'].includes(reply.status)&&before&&after&&before.url===after.url&&before.version===after.version&&owner===this.context(id)?{document:after,owner}:null;
@@ -137,7 +152,14 @@ export class CatalogRunner{
       this.#publish(run,{observed:Math.min(reply.events.length,400)});
       if(reply.done===true){
        const saved=this.store.record(id,date,reply,this.now());
-       if(owner===this.context(id))this.onResult(saved,applicationOwner===owner?[...applicationPages.values()].flat():[]);
+       if(owner===this.context(id)){
+        const pageCount=reply.state?.pages;
+        const pages=Array.isArray(reply.applicationRows)&&applicationOwner===owner?Array.from(applicationPages.values()):[];
+        const complete=id==='doctorville'&&saved?.coverage===true&&!saved.stale&&saved.scope==='list_checked'&&
+         Number.isSafeInteger(pageCount)&&pages.length===pageCount+1;
+        const checkedAt=id==='doctorville'?this.doctorvilleRefresh.finish({owner,now:this.now(),signatures:applicationSignatures,pages,complete}):0;
+        this.onResult(saved,pages.flat(),{complete,checkedAt});
+       }
        break;
       }
       if(reply.action){await ready();checkpoint=null;}
@@ -148,6 +170,7 @@ export class CatalogRunner{
      }
     }catch(error){
      if(!this.#owns(run))return;
+     if(id==='doctorville')this.doctorvilleRefresh.invalidate();
      const reason=timedOut?'time_limit':REASONS.has(error.code)?error.code:'network_error';
      const partial=run.lastRead?.events?.length?run.lastRead:run.partialRead;
      this.store.record(id,date,{...partial,status:'review',coverage:false,reason,events:partial?.events??[],diagnostics:{...(partial?.diagnostics??{}),failure:error.failure}},this.now());
