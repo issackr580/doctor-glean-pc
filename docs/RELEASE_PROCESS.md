@@ -177,3 +177,7 @@ node scripts/build-app-patch.mjs --from=/old/artifact/developer --to=/new/artifa
 ## preview.45 게시 확인
 
 재다운로드한 두 에디션 자산과 서명 피드를 대조했다. [실행 소스와 검사 기록](releases/0.1.0-preview.45.md)
+
+## preview.46 게시 확인
+
+검증한 두 에디션의 서버 자산과 서명 피드를 대조했다. [실행 소스와 검사 기록](releases/0.1.0-preview.46.md)
