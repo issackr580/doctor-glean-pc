@@ -7,7 +7,7 @@ import {chooseSignedUpdate} from './update-trust.js';
 import {readSelectedPatch,validatePatch,validateInstallation,writeStagedApp,updateInventory} from './update-package.js';
 import helper from './update-helper.cjs';
 
-const failure=error=>['data_blocked','update_signature','update_hash','update_runtime','update_installation','update_path','update_package','update_size','update_file','update_private','update_cancelled','update_busy','update_boot','update_permission'].includes(error?.message)?error.message:'update_network';
+const failure=error=>['data_blocked','update_signature','update_hash','update_runtime','update_installation','update_path','update_package','update_size','update_file','update_private','update_google_browser','update_cancelled','update_busy','update_boot','update_permission'].includes(error?.message)?error.message:'update_network';
 export function pendingUpdate(appPath,version,edition){
   const resources=dirname(resolve(appPath)),pointer=join(resources,'.doctor-glean-update.json');
   try{

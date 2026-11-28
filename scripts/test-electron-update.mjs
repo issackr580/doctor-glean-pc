@@ -47,13 +47,23 @@ async function run(){
   check('helper does not replace the app while its parent is alive',readFileSync(join(current.context.appPath,'src/main.js'),'utf8')==='old application');child.kill();
   await new Promise(resolve=>child.once('exit',resolve));
 
-  for(const mode of ['warm','valid','cancel','size','no_permission']){
+  for(const mode of ['warm','valid','cancel','size','no_permission','google_redirect','google_navigation','google_popup']){
     const s=fixture('developer'),profile=session.fromPartition('update-synthetic-'+randomUUID());
-    let pageReads=0,loginReads=0,downloadReads=0,foreignReads=0,created,bridgeSafe=false,prompts=0;
+    const googleMode=mode.startsWith('google_'),google='https://accounts.google.com/o/oauth2/v2/auth?state=SYNTHETIC_STATE';
+    let pageReads=0,loginReads=0,downloadReads=0,foreignReads=0,googleReads=0,created,bridgeSafe=false,prompts=0;
     await profile.protocol.handle('https',request=>{
       const url=new URL(request.url);
       if(url.hostname==='foreign.invalid'){foreignReads++;return html('blocked');}
-      if(url.pathname==='/login'){loginReads++;return html(`<h1>Synthetic GitHub login</h1><script>setTimeout(()=>location.href='https://foreign.invalid/',80);setTimeout(()=>location.href=${JSON.stringify(s.target.page)},250)</script>`);}
+      if(url.origin==='https://accounts.google.com'){googleReads++;return html('Google OAuth');}
+      if(url.pathname==='/google-sign-in')return Response.redirect(google);
+      if(url.pathname==='/login'){
+        loginReads++;
+        if(googleMode){
+          const action=mode==='google_redirect'?'location.href="/google-sign-in"':mode==='google_navigation'?`location.href=${JSON.stringify(google)}`:`window.open(${JSON.stringify(google)})`;
+          return html(`<h1>Synthetic GitHub login</h1><script>setTimeout(()=>${action},250)</script>`);
+        }
+        return html(`<h1>Synthetic GitHub login</h1><script>setTimeout(()=>location.href='https://foreign.invalid/',80);setTimeout(()=>location.href=${JSON.stringify(s.target.page)},250)</script>`);
+      }
       if(request.url===s.target.page){
         pageReads++;
         if((mode!=='warm'&&!loginReads)||mode==='no_permission')return new Response('<title>Page not found · GitHub</title>',{status:404,headers:{'content-type':'text/html'}});
@@ -68,10 +78,13 @@ async function run(){
       const p=window.webContents.getLastWebPreferences();bridgeSafe=p.nodeIntegration===false&&p.contextIsolation===true&&p.sandbox===true&&p.webSecurity===true&&!p.preload&&await window.webContents.executeJavaScript('typeof require+":"+typeof window.doctorGlean')==='undefined:undefined';
       if(mode==='cancel'&&onLoginPage&&!window.isDestroyed())window.close();
     });};app.once('browser-window-created',capture);
-    let error,bytes;try{bytes=await downloadPrivateUpdate(s.target,()=>{},{profile,timeout:5000,onLogin:()=>prompts++});}catch(e){error=e;}
+    let error,bytes;try{bytes=await downloadPrivateUpdate(s.target,()=>{},{profile,timeout:googleMode?1800:5000,onLogin:()=>prompts++});}catch(e){error=e;}
     check('private GitHub '+mode+' window has no Node, control preload or management bridge',bridgeSafe);
     check('private GitHub '+mode+' does not navigate to an unreviewed external origin',foreignReads===0);
-    if(mode==='valid'){
+    if(googleMode){
+      check('private GitHub '+mode+' closes the blocked login window and offers a browser handoff',error?.message==='update_google_browser'&&created.isDestroyed()&&prompts===1);
+      check('private GitHub '+mode+' contacts neither Google nor a private asset in the embedded window',googleReads===0&&downloadReads===0);
+    }else if(mode==='valid'){
       check('private login reaches only the signed Draft then automatically downloads its exact asset',pageReads===2&&loginReads===1&&prompts===1&&downloadReads===1&&bytes?.equals(s.bytes));
       check('private download closes only its dedicated window after completion',created.isDestroyed());
     }else if(mode==='warm'){

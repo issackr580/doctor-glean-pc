@@ -19,6 +19,9 @@ export function registerPrivateUpdateInstaller({register,updater,owner,allowed})
 export function githubUpdateNavigation(raw){
   try{const url=new URL(raw);return url.origin==='https://github.com'&&!url.username&&!url.password&&!url.port;}catch{return false;}
 }
+function googleAccountNavigation(raw){
+  try{const url=new URL(raw);return url.origin==='https://accounts.google.com'&&!url.username&&!url.password&&!url.port;}catch{return false;}
+}
 export function privateUpdateDownloadUrls(urls,target){
   if(!Array.isArray(urls)||!urls.length||urls.length>5||urls[0]!==target.patch.url)return false;
   return urls.every((raw,i)=>{
@@ -39,6 +42,14 @@ export function downloadPrivateUpdate(target,onProgress,{parent,profile=session.
     const cleanup=()=>{clearTimeout(timer);signal?.removeEventListener('abort',abort);profile.removeListener('will-download',download);if(window&&!window.isDestroyed())window.destroy();try{rmSync(directory,{recursive:true,force:true});}catch{}active=false;};
     const finish=(error,bytes)=>{if(finished)return;finished=true;if(error)item?.cancel();cleanup();error?reject(error):resolve(bytes);};
     const abort=()=>finish(Error('data_blocked'));
+    const googleHandoff=url=>{
+      if(prompted&&!requested&&googleAccountNavigation(url))queueMicrotask(()=>finish(Error('update_google_browser')));
+    };
+    const guardNavigation=(event,url,isMainFrame)=>{
+      if(githubUpdateNavigation(url))return;
+      event.preventDefault();
+      if(isMainFrame)googleHandoff(url);
+    };
     const navigate=url=>window.loadURL(url).catch(error=>{if(!finished&&error?.errno!==-3&&error?.code!=='ERR_ABORTED')finish(Error('update_network'));});
     const prompt=()=>{
       if(prompted||finished){finish(Error('update_private'));return;}
@@ -67,9 +78,9 @@ export function downloadPrivateUpdate(target,onProgress,{parent,profile=session.
       if(signal?.aborted){abort();return;}
       profile.setPermissionRequestHandler((_contents,_permission,callback)=>callback(false));profile.setPermissionCheckHandler(()=>false);profile.on('will-download',download);
       window=new BrowserWindow({width:980,height:760,show:false,parent,title:'PC 개발자용 업데이트 · GitHub 로그인',autoHideMenuBar:true,webPreferences:{session:profile,nodeIntegration:false,nodeIntegrationInSubFrames:false,contextIsolation:true,sandbox:true,webSecurity:true,webviewTag:false,allowRunningInsecureContent:false,navigateOnDragDrop:false}});
-      window.webContents.setWindowOpenHandler(()=>({action:'deny'}));
-      window.webContents.on('will-navigate',(event,url)=>{if(!githubUpdateNavigation(url))event.preventDefault();});
-      window.webContents.on('will-redirect',(event,url)=>{if(!githubUpdateNavigation(url))event.preventDefault();});
+      window.webContents.setWindowOpenHandler(({url})=>{googleHandoff(url);return {action:'deny'};});
+      window.webContents.on('will-navigate',(event,url)=>guardNavigation(event,url,true));
+      window.webContents.on('will-redirect',(event,url,_isInPlace,isMainFrame)=>guardNavigation(event,url,isMainFrame!==false));
       window.webContents.on('will-attach-webview',event=>event.preventDefault());
       window.webContents.on('certificate-error',(event,_url,_error,_certificate,callback)=>{event.preventDefault();callback(false);finish(Error('update_network'));});
       window.webContents.on('render-process-gone',()=>finish(Error('update_network')));

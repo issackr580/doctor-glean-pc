@@ -5,6 +5,7 @@ import {dailyTicket} from './task-ticket.js';
 import {docpleTodayReceipt} from './docple-receipt.js';
 import {DataAccess} from './data-access.js';
 import {SiteWait,workerWait,observeSiteResponse} from './site-wait.js';
+import {updateBrowserPage} from './update-policy.js';
 import {NativeCatalogRead} from './native-catalog.js';
 import {configureUsage,changeUsage,flushUsage,resourceUse,trackPage} from './resource-use.js';
 import {app,BrowserWindow,Menu,Tray,nativeImage,ipcMain,session,dialog,clipboard,powerMonitor,safeStorage,net,shell,Notification} from 'electron';
@@ -501,9 +502,8 @@ function ipc(){
   if(EDITION.developer)registerPrivateUpdateInstaller({register:registerIPC,updater,owner:()=>control,allowed:()=>dataAccess.allowed()});
   registerIPC('pc:update-ready',()=>{updater.acknowledgeBoot().catch(()=>{});return {ok:true};});
   registerIPC('pc:update-page',async()=>{
-   const result=updater.snapshot();if(!result.canInstall&&result.status!=='full_required')return {ok:false};
-   const page=result.page;
-   if(!/^https:\/\/github\.com\/issackr580\/doctor-glean-pc\/releases\/tag\/(?:pc-v\d+\.\d+\.\d+(?:-preview\.\d+)?|untagged-[a-zA-Z0-9-]{1,80}|pc-developer-v\d+\.\d+\.\d+(?:-preview\.\d+)?)$/.test(page))return {ok:false};
+   const page=updateBrowserPage(updater.snapshot(),EDITION.id);
+   if(!page)return {ok:false};
    await shell.openExternal(page);return {ok:true};
   });
   developerTools.register();

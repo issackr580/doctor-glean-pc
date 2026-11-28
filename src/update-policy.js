@@ -4,6 +4,16 @@ export const PC_METADATA='https://api.github.com/repos/issackr580/doctor-glean-p
 export function pcVersion(value){
  if(typeof value!=='string')return null;const m=value.match(/^(0|[1-9]\d{0,3})\.(0|[1-9]\d{0,3})\.(0|[1-9]\d{0,3})(?:-preview\.(0|[1-9]\d{0,5}))?$/);return m?[+m[1],+m[2],+m[3],m[4]===undefined?Infinity:+m[4]]:null;
 }
+export function updateBrowserPage(result,edition){
+ const prefix=PC_RELEASES+'/tag/';
+ if(result?.signatureVerified!==true||(!result.canInstall&&result.status!=='full_required')||typeof result.page!=='string'||!result.page.startsWith(prefix))return '';
+ const tag=result.page.slice(prefix.length);
+ if(edition==='distribution')return tag.startsWith('pc-v')&&pcVersion(tag.slice(4))?result.page:'';
+ if(edition!=='developer'||!(/^untagged-[a-zA-Z0-9-]{1,80}$/.test(tag)||tag.startsWith('pc-developer-v')&&pcVersion(tag.slice(14))))return '';
+ const login=new URL('https://github.com/login');
+ login.searchParams.set('return_to',new URL(result.page).pathname);
+ return login.href;
+}
 const compare=(a,b)=>{for(let i=0;i<a.length;i++)if(a[i]!==b[i])return a[i]>b[i]?1:-1;return 0;};
 function candidate(release,channel,now){
  if(!release||release.draft!==false||release.prerelease!==(channel==='preview')||typeof release.tag_name!=='string')return null;
