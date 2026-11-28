@@ -1,6 +1,6 @@
 # PC판 현재 상태와 다음 작업
 
-현재 공개 배포용과 협업자용 Draft는 **0.1.0-preview.42**입니다. 실행 소스는 `a196d2bd0e5eda6a6d44ccee5e9330a31e875dae`입니다. [배포용](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.42) · [개발자용 Draft](https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-12c3b3344003a02dee12) · [검증 및 게시 기록](releases/0.1.0-preview.42.md)
+현재 공개 배포용과 협업자용 Draft는 **0.1.0-preview.43**입니다. 실행 소스는 `ef7088edc3f4e3140031fb95af22cb19c12fd813`입니다. [배포용](https://github.com/issackr580/doctor-glean-pc/releases/tag/pc-v0.1.0-preview.43) · [개발자용 Draft](https://github.com/issackr580/doctor-glean-pc/releases/tag/untagged-b8b6f6fca6f56d963fd8) · [검증 및 게시 기록](releases/0.1.0-preview.43.md)
 
 ## preview.43 — 자동입장 정리와 닥터빌 신청·닥플 출석
 
@@ -9,6 +9,8 @@
 닥터빌을 조회할 때 선택 날짜와 상관없이 원래 라이브 목록과 확인 가능한 다음 페이지에서 수강일 전 신청 가능 강의를 찾는다. 날짜·시각·제목·단일 공식 ID와 신청 표식을 확인하고, 수강 당일과 정원 마감은 알리지 않는다. 공식 ID로 중복 알림을 막고 일정의 닥터빌 사전 신청에서 해당 상세를 직접 열 수 있다. 기존 조회 작업의 시간과 페이지 한도 안에서 읽으며 새 상시 감시나 자동 신청은 없다. 명시적으로 선택한 설문 개시 확인과 마감 알림은 각 기존 한도를 따른다.
 
 11월 28일 Windows 보고에서 닥플 출석과 계정 복구는 전송 없이 끝났고 뒤이은 조회가 사이트 대기로 기록됐다. 보고의 정보만으로 서버 제한의 종류와 최초 발생 요청을 특정할 수 없었다. 접속 제한의 상태와 기한을 오류보고에 추가하고, 열린 공식 달력의 출석 완료는 서버에 새 요청을 보내지 않고 읽는다. 로그인 주소에서 홈으로 돌아오면 공식 달력으로 기존 인증을 한 번 확인한다. 실제 사이트에서의 복구·출석·Windows 알림과 실제 전송량은 별도 확인이 남았다.
+
+Node 506개와 Electron 합성 검사, 두 Windows 빌드와 서명 피드를 확인했다. [배포와 검사 기록](releases/0.1.0-preview.43.md)
 
 ## PC-023 — v156 자동입장 정책·읽기 API·숨은 미디어 제한 (게시 완료)
 
