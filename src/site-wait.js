@@ -8,9 +8,17 @@ import {doctorvilleSurveyId} from './survey-policy.js';
 
 const integer=n=>Number.isSafeInteger(n)&&n>=0;
 const max=Number.MAX_SAFE_INTEGER;
+const docpleApiSources=new Map([
+ ['/api/season2/webinar/list','catalog_api'],
+ ['/api/season2/mission/attendance/calendar','attendance_api']
+]);
+const responseSources=new Set(['login_document','document','frame','catalog_api','attendance_api','site_api']);
+const responseContexts=new Set(['manual_browser','background_browser','native_read']);
+const requestMethods=new Set(['GET','POST','HEAD']);
 function valid(data){
  return data?.version===1&&integer(data.observedAt)&&data.sites&&typeof data.sites==='object'&&!Array.isArray(data.sites)&&Object.entries(data.sites).every(([id,row])=>
-  siteById(id)&&row&&integer(row.at)&&integer(row.until)&&integer(row.revision)&&typeof row.manual==='boolean'&&row.at<=data.observedAt);
+  siteById(id)&&row&&integer(row.at)&&integer(row.until)&&integer(row.revision)&&typeof row.manual==='boolean'&&row.at<=data.observedAt&&
+  (row.source===undefined||responseSources.has(row.source))&&(row.context===undefined||responseContexts.has(row.context))&&(row.method===undefined||requestMethods.has(row.method)));
 }
 export function waitUntil(value,now,fallback){
  const header=typeof value==='string'?value.trim():'';
@@ -45,20 +53,25 @@ export class SiteWait{
   try{atomicJson(this.marker,{pending:true});this.write(this.file,next);unlinkSync(this.marker);this.data=next;this.high=next.observedAt;}
   catch{this.failed=true;return false;}return true;
  }
- observe(site,{url,status,retryAfter,resourceType,document=false,api=false}){
+ observe(site,{url,status,retryAfter,resourceType,document=false,api=false,context,method}){
   const provider=siteById(site);let address;try{address=new URL(url);}catch{return false;}
   if(!provider||address.protocol!=='https:'||address.port||address.username||address.password||!(allowedNavigation(site,url)||site==='doctorville'&&doctorvilleSurveyId(url)||site==='keymedi'&&address.hostname==='api.keymedi.com'||site==='medigate'&&address.origin===MEDIGATE_COUNTER_ORIGIN&&address.pathname===MEDIGATE_COUNTER_PATH))return false;
   if(!(document||api||['mainFrame','subFrame'].includes(resourceType))||![403,429,503].includes(status))return false;
+  const login=provider.loginUrl&&new URL(provider.loginUrl);
+  const source=resourceType==='subFrame'?'frame':document||resourceType==='mainFrame'?
+   (login&&address.origin===login.origin&&address.pathname===login.pathname&&(!login.search||address.search===login.search)?'login_document':'document'):
+   (site==='docple'&&docpleApiSources.get(address.pathname)||'site_api');
+  const observation={source,context:responseContexts.has(context)?context:undefined,method:requestMethods.has(method)?method:undefined};
   const at=this.now();if(!this.clockTrusted(at)){
    // A restriction received during rollback is timed from the last trusted instant.
-   if(!this.failed&&integer(this.high))return this.observeAt(site,status,retryAfter,this.high);
+   if(!this.failed&&integer(this.high))return this.observeAt(site,status,retryAfter,this.high,observation);
    return true;
   }
-  return this.observeAt(site,status,retryAfter,at);
+  return this.observeAt(site,status,retryAfter,at,observation);
  }
- observeAt(site,status,retryAfter,at){
+ observeAt(site,status,retryAfter,at,observation){
   const old=this.status(site);
-  this.save(site,{at,revision:(old?.revision??0)+1,status,manual:status===403||old?.manual===true,
+  this.save(site,{at,revision:(old?.revision??0)+1,status,...observation,manual:status===403||old?.manual===true,
    until:Math.max(old?.until??0,status===403?0:waitUntil(retryAfter,at,status===429?300000:60000))});return true;
  }
  acknowledge(site,at,revision){
@@ -78,18 +91,18 @@ export function workerWait(gate,site,signal,epoch){
   allowed:()=>!stopped&&current()&&(gate.status(site)?.revision??0)===revision&&gate.allowed(site),
   response(details){
    if(!current()||details.fromCache)return;
-   if(observeSiteResponse(gate,site,details))stopped=true;
+   if(observeSiteResponse(gate,site,details,'background_browser'))stopped=true;
   }
  };
 }
 
-export function observeSiteResponse(gate,site,details){
+export function observeSiteResponse(gate,site,details,context){
  if(details.fromCache)return false;
  const retry=Object.entries(details.responseHeaders??{}).find(([name])=>name.toLowerCase()==='retry-after')?.[1];
  const pathname=new URL(details.url).pathname;
  // A first-party data read may also carry an explicit Retry-After outside
  // the native API allowlist. This grants no permission to call that route.
  const directedRead=['xhr','fetch'].includes(details.resourceType)&&[429,503].includes(details.statusCode)&&!!retry&&!/\.(?:png|jpe?g|gif|webp|avif|svg|ico|css|js|woff2?|mp[34])$|\/(?:ad[s]?|advertising|analytics|static|assets)\//i.test(pathname);
- const api=directedRead||site==='medigate'&&details.url.split('?')[0]===MEDIGATE_COUNTER_ORIGIN+MEDIGATE_COUNTER_PATH||site==='keymedi'&&details.url==='https://api.keymedi.com/api/drlounge/getMainInfo'||site==='docple'&&['/api/season2/webinar/list','/api/season2/mission/attendance/calendar'].includes(pathname)||site==='ckd'&&['/hcpapp/webinar/webinarCalAjax.do','/hcpapp/webinar/webinarCalDtlAjax.do'].includes(pathname);
- return gate.observe(site,{url:details.url,status:details.statusCode,retryAfter:Array.isArray(retry)?retry[0]:retry,document:['mainFrame','subFrame'].includes(details.resourceType),api});
+ const api=directedRead||site==='medigate'&&details.url.split('?')[0]===MEDIGATE_COUNTER_ORIGIN+MEDIGATE_COUNTER_PATH||site==='keymedi'&&details.url==='https://api.keymedi.com/api/drlounge/getMainInfo'||site==='docple'&&docpleApiSources.has(pathname)||site==='ckd'&&['/hcpapp/webinar/webinarCalAjax.do','/hcpapp/webinar/webinarCalDtlAjax.do'].includes(pathname);
+ return gate.observe(site,{url:details.url,status:details.statusCode,retryAfter:Array.isArray(retry)?retry[0]:retry,resourceType:details.resourceType,api,context,method:details.method});
 }

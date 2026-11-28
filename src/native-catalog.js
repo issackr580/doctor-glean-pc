@@ -57,7 +57,7 @@ export class NativeCatalogRead{
    try{
     const response=await boundedWork(this.fetchImpl(path,{method,body,redirect:'manual',credentials:'omit',cache:'no-store',signal:one.signal,headers:{Accept:'application/json','Accept-Encoding':'identity',...(body?{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'}:{}),...(token?{Authorization:'Bearer '+token}:{})}}),one.signal,Math.min(2000,budget));
     if(!valid()||controller.signal.aborted){response.body?.cancel().catch(()=>{});throw Error('cancelled');}
-    if(this.gate?.observe(site,{url:path,status:response.status,retryAfter:response.headers.get('retry-after'),api:true})){
+    if(this.gate?.observe(site,{url:path,status:response.status,retryAfter:response.headers.get('retry-after'),api:true,context:'native_read',method})){
      response.body?.cancel().catch(()=>{});throw Error('site_wait');
     }
     if(response.status!==200||!/^application\/json(?:\s*;|$)/i.test(response.headers.get('content-type')||'')||!['','identity'].includes(response.headers.get('content-encoding')||'')||site==='docple'&&response.headers.has('set-cookie')){response.body?.cancel().catch(()=>{});throw Error('invalid_response');}

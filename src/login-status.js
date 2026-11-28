@@ -18,6 +18,12 @@ export function inspectLoginPage(){
 }
 
 export function safeLoginState(value){return ['authenticated','login_required','not_confirmed','loading'].includes(value)?value:'not_confirmed';}
+export function loginFinishMessage(reason){
+ if(reason==='login_required')return '로그인 화면이 열려 있어요. 사이트에서 로그인한 뒤 「로그인 마침」을 눌러 주세요.';
+ if(reason==='login_unconfirmed')return '사이트 화면이 준비되면 로그인 상태를 확인해 주세요.';
+ if(reason==='site_wait')return '사이트가 요청을 제한했어요. 관리 화면에서 대기 기한을 확인해 주세요.';
+ return '';
+}
 export function loadFailure(code){
  if(code===-3)return 'navigation_cancelled';
  if(code===-105||code===-137)return 'dns_error';

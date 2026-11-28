@@ -159,13 +159,27 @@ async function sharedWait(){
 }
 async function mainIpc(){
  writeFileSync(join(data,'data-access-v1.json'),JSON.stringify({mode:'off'}));
- const pref=(await load('security')).remotePreferences('doctorville',metadata.doctorGleanEdition);
+ const {remotePreferences}=await load('security'),pref=remotePreferences('doctorville',metadata.doctorGleanEdition);
  let requests=0,external=0;
  const profile=session.fromPartition(pref.partition);
  await profile.protocol.handle('https',()=>{requests++;return html('<main>합성 목록</main>');});
+ const docpleRequests=[];
+ const docpleProfile=session.fromPartition(remotePreferences('docple',metadata.doctorGleanEdition).partition);
+ const docpleWebRequests=docpleProfile.webRequest,installHeaders=docpleWebRequests.onHeadersReceived;
+ let docpleHeaders;
+ docpleWebRequests.onHeadersReceived=function(listener){docpleHeaders=listener;return installHeaders.call(this,listener);};
+ await docpleProfile.protocol.handle('https',request=>{
+  const {pathname}=new URL(request.url);
+  docpleRequests.push(request.method+' '+pathname);
+  if(pathname==='/synthetic-limit')return new Response('wait',{status:429,headers:{'Retry-After':'2'}});
+  if(pathname==='/auth/login')return html('<form><input type="password"></form><div role="alert">로그인에 실패했습니다</div>');
+  return html('<main>합성 강의 목록</main><a href="/logout">로그아웃</a>');
+ });
  shell.openExternal=async()=>{external++;};
  const {SiteWait}=await load('site-wait');
- new SiteWait(join(data,'site-wait-v1.json')).observe('doctorville',{url:'https://www.doctorville.co.kr/seminar/main',status:429,document:true,retryAfter:'120'});
+ const gate=new SiteWait(join(data,'site-wait-v1.json'));
+ gate.observe('doctorville',{url:'https://www.doctorville.co.kr/seminar/main',status:429,document:true,retryAfter:'120'});
+ gate.observe('docple',{url:'https://docple-plus.com/auth/login',status:429,document:true,retryAfter:'4'});
  await load('main');
  const control=await until(()=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/ui/index.html')));
  const call=expr=>control.webContents.executeJavaScript('window.doctorGlean.'+expr);
@@ -188,6 +202,49 @@ async function mainIpc(){
   equal((await call("openLogin('doctorville')")).reason,'site_wait');
   await call("collectSite('doctorville')");await sleep(300);
   equal(requests,after429);report.network.persisted429={additionalReads:requests-after429,status:429};
+  const evaluate=code=>control.webContents.executeJavaScript(code);
+  await until(()=>evaluate('document.querySelectorAll("#sites .site-name").length===10'));
+  await evaluate(`document.getElementById('tab-sites').click();
+   const row=[...document.querySelectorAll('#sites .site')].find(el=>el.querySelector('.site-name').textContent.includes('닥플 플러스'));
+   [...row.querySelectorAll('button')].find(button=>button.textContent==='계정 저장·복구').click();`);
+  equal(await evaluate(`(()=>{const button=document.getElementById('credential-manual-login');button.click();return [button.hidden,button.disabled];})()`),[false,true]);
+  equal(docpleRequests.length,0);
+  await until(()=>evaluate(`!document.getElementById('credential-manual-login').disabled`));
+  equal(docpleRequests.length,0);
+  await evaluate("document.getElementById('credential-manual-login').click()");
+  await until(()=>docpleRequests.length>0);
+  const manual=await until(()=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL()==='https://docple-plus.com/auth/login'));
+  try{
+   await until(()=>evaluate("!document.getElementById('credential-dialog').open"));
+   await until(()=>manual.webContents.executeJavaScript("document.readyState==='complete' && !!document.querySelector('input[type=password]')"));
+   equal(docpleRequests,['GET /auth/login']);
+   equal((await call("selectSites(['docple'])")).ok,true);
+   equal(await call("finishLogin('docple')"),{ok:false,reason:'login_required'});
+   equal(manual.isDestroyed(),false);
+   equal((await call('state()')).pendingQueries,[]);
+   equal(docpleRequests,['GET /auth/login']);
+   equal((await call('checkUpdate()')).status,'unsupported');
+   const savedReport=JSON.parse((await call('previewReport()')).text);
+   equal(savedReport.update,{status:'unsupported'});
+   equal(savedReport.serverWait.find(row=>row.site==='docple').active,false);
+   equal(savedReport.serverWait.find(row=>row.site==='docple').source,'login_document');
+   await manual.webContents.executeJavaScript('fetch("/synthetic-limit",{method:"POST"}).then(()=>{}).catch(()=>{})');
+   // Custom protocol responses omit Chromium's header callback. Deliver the
+   // fixture response through the callback installed on the app's actual session.
+   docpleHeaders({url:'https://docple-plus.com/synthetic-limit',method:'POST',resourceType:'xhr',statusCode:429,
+    responseHeaders:{'Retry-After':['2']},webContentsId:manual.webContents.id},()=>{});
+   equal(await call("finishLogin('docple')"),{ok:false,reason:'site_wait'});
+   equal(manual.isDestroyed(),false);
+   equal(docpleRequests,['GET /auth/login','POST /synthetic-limit']);
+   const waitReport=JSON.parse((await call('previewReport()')).text).serverWait.find(row=>row.site==='docple');
+   equal([waitReport.context,waitReport.method,waitReport.source,waitReport.active],['manual_browser','POST','site_api',true]);
+   await until(()=>Date.now()>=waitReport.until);
+   await manual.loadURL('https://docple-plus.com/');
+   equal(await call("finishLogin('docple')"),{ok:true,queryStarted:true});
+   equal(manual.isDestroyed(),true);
+   await until(()=>docpleRequests.includes('GET /webinar'));
+   equal(docpleRequests,['GET /auth/login','POST /synthetic-limit','GET /','GET /webinar']);
+  }finally{docpleWebRequests.onHeadersReceived=installHeaders;if(!manual.isDestroyed())manual.destroy();}
  }
 }
 app.on('window-all-closed',()=>{});

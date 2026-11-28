@@ -7,6 +7,8 @@ import {verifyUpdateFeed,chooseSignedUpdate,validateUpdatePayload,UPDATE_FEED} f
 import {fetchUpdateFeed,downloadUpdate} from '../src/update-download.js';
 import {validatePatch,patchZipFiles,updateHash,validateInstallation} from '../src/update-package.js';
 import {PcUpdater,pendingUpdate} from '../src/update-manager.js';
+import {updateBrowserPage} from '../src/update-policy.js';
+import {updateLabel} from '../ui/update-view.js';
 import helper from '../src/update-helper.cjs';
 import {AutomationController} from '../src/automation-controller.js';
 import {LocalState} from '../src/local-state.js';
@@ -27,6 +29,28 @@ test('updates cannot downgrade, cross channels, change runtime, or silently mix 
   const s=syntheticUpdate(t);assert.equal(chooseSignedUpdate(s.feed,s.context).status,'available');assert.equal(chooseSignedUpdate(s.feed,{...s.context,currentVersion:s.target.version}).status,'current');assert.equal(chooseSignedUpdate(s.feed,{...s.context,currentVersion:'9.0.0'}).status,'unknown');assert.equal(chooseSignedUpdate(s.feed,{...s.context,edition:'developer'}).status,'unknown');assert.equal(chooseSignedUpdate(s.feed,{...s.context,channel:'stable'}).status,'unknown');assert.equal(chooseSignedUpdate(s.feed,{...s.context,electronVersion:'46.0.0'}).status,'full_required');
 });
 test('a signed developer target retains its private untagged asset and never becomes a public distribution target',t=>{const s=syntheticUpdate(t,{edition:'developer'});validateUpdatePayload(s.feed);assert.equal(chooseSignedUpdate(s.feed,s.context).localFile,true);assert.match(s.target.patch.url,/untagged-synthetic/);});
+test('developer Google handoff opens only GitHub sign-in with the signed Draft as its return path',async t=>{
+  const s=syntheticUpdate(t,{edition:'developer'});
+  let launches=0;
+  const updater=manager(s,{privateDownload:async()=>{throw Error('update_google_browser');},launchHelper:async()=>launches++});
+  await updater.check();
+  const result=await updater.install();
+  assert.equal(result.status,'failed');
+  assert.equal(result.reason,'update_google_browser');
+  assert.equal(launches,0);
+  assert.match(updateLabel(result),/기본 브라우저.*받아 둔 패치 ZIP 설치/);
+  const outbound=new URL(updateBrowserPage(result,'developer'));
+  assert.equal(outbound.origin+outbound.pathname,'https://github.com/login');
+  assert.deepEqual([...outbound.searchParams],[['return_to',new URL(s.target.page).pathname]]);
+  assert.equal(updateBrowserPage(result,'distribution'),'');
+  assert.equal(updateBrowserPage({...result,page:s.target.page+'?return_to=https://example.com/'},'developer'),'');
+  assert.equal(updateBrowserPage({...result,page:s.target.page.replace('github.com','github.com.example.com')},'developer'),'');
+  assert.equal(updateBrowserPage({...result,signatureVerified:false},'developer'),'');
+  const publicTarget=syntheticUpdate(t);
+  const publicResult=await manager(publicTarget).check();
+  assert.equal(updateBrowserPage(publicResult,'distribution'),publicTarget.target.page);
+  assert.equal(updateBrowserPage(publicResult,'developer'),'');
+});
 test('feed lookup uses only the fixed channel path without account cookies and verifies the response',async t=>{
   const s=syntheticUpdate(t),signed=signedSyntheticFeed(s.feed);let calls=0;const feed=await fetchUpdateFeed(async(url,options)=>{calls++;assert.equal(url,UPDATE_FEED+'preview.json');assert.equal(options.credentials,'omit');assert.equal(options.redirect,'error');return response(signed.bytes);},'preview',{publicKey:signed.publicKey});assert.equal(calls,1);assert.deepEqual(feed,s.feed);
 });

@@ -5,6 +5,7 @@ import {dailyTicket} from './task-ticket.js';
 import {docpleTodayReceipt} from './docple-receipt.js';
 import {DataAccess} from './data-access.js';
 import {SiteWait,workerWait,observeSiteResponse} from './site-wait.js';
+import {updateBrowserPage} from './update-policy.js';
 import {NativeCatalogRead} from './native-catalog.js';
 import {configureUsage,changeUsage,flushUsage,resourceUse,trackPage} from './resource-use.js';
 import {app,BrowserWindow,Menu,Tray,nativeImage,ipcMain,session,dialog,clipboard,powerMonitor,safeStorage,net,shell,Notification} from 'electron';
@@ -26,7 +27,7 @@ import {BUILD_INFO} from './build-info.js';
 import {formatPcSchedule} from './catalog-format.js';
 import {resolveEdition} from './edition.js';
 import {createDeveloperTools} from './developer-tools.js';
-import {inspectLoginPage,safeLoginState,loadFailure,sessionWithDailyEvidence} from './login-status.js';
+import {inspectLoginPage,safeLoginState,loadFailure,sessionWithDailyEvidence,loginFinishMessage} from './login-status.js';
 import {CatalogQueue} from './catalog-queue.js';
 import {AutomationController} from './automation-controller.js';
 import {AutomationPage} from './automation-page.js';
@@ -86,7 +87,9 @@ const configureNetwork=(profile,id)=>{
   },
   response:(details,worker)=>{
    const site=requestSite(details.url)??id;
-   if(site&&siteWait&&details.webContentsId>0&&(!worker||site!==id))observeSiteResponse(siteWait,site,details);
+   if(!site||!siteWait||!(details.webContentsId>0)||worker&&site===id||![403,429,503].includes(details.statusCode))return;
+   const manual=[...manualOwners].some(([window,owner])=>owner===site&&!window.isDestroyed()&&window.webContents.id===details.webContentsId);
+   observeSiteResponse(siteWait,site,details,manual?'manual_browser':worker?'background_browser':undefined);
   }
  });
  if(!dataAccess.allowed())profile.enableNetworkEmulation({offline:true});
@@ -133,11 +136,17 @@ const buildState=()=>({
 });
 
 function diagnosticSnapshot(){
- const snapshot=state.snapshot(),now=Date.now();
- return {appName:EDITION.name,applicationId:EDITION.appId,edition:EDITION.id,appVersion:VERSION,build:BUILD_INFO,exportedAt:now,processStartedAt:PROCESS_STARTED_AT,date:kstDate(now),automationPaused:snapshot.paused,
+ const snapshot=state.snapshot(),now=Date.now(),date=kstDate(now),dayStart=kstInstant(date,'00:00');
+ const {status,reason,version}=updater?.snapshot()??{};
+ return {appName:EDITION.name,applicationId:EDITION.appId,edition:EDITION.id,appVersion:VERSION,build:BUILD_INFO,exportedAt:now,processStartedAt:PROCESS_STARTED_AT,date,automationPaused:snapshot.paused,
   runtime:{platform:process.platform,arch:process.arch,electron:process.versions.electron,chromium:process.versions.chrome,osRelease:release()},runtimeFaults:runtimeFaults.snapshot(),dataAccess:dataAccess.snapshot(),siteWaitUntrusted:!!siteWait&&!siteWait.clockTrusted(Date.now()),resourceUse:resourceUse(),
+  update:{status,reason,version},
   stage:'automation',automationAvailable:true,collection:collector.snapshot(),selectedCatalogSites:catalog.selected(),pendingQueries:catalogQueue?.snapshot()??[],sites:catalog.diagnostics(viewDate),automation:automation?.diagnostics(),
-  serverWait:SITES.flatMap(({id})=>{const wait=siteWait?.status(id);return wait&&(wait.manual||wait.until>now)?[{site:id,status:wait.status,manual:wait.manual,until:wait.until}]:[];}),
+  serverWait:SITES.flatMap(({id})=>{
+   const wait=siteWait?.status(id);if(!wait)return [];
+   const active=wait.manual||wait.until>now;
+   return active||wait.at>=dayStart&&wait.at<=now?[{site:id,status:wait.status,manual:wait.manual,until:wait.until,observedAt:wait.at,source:wait.source??'unknown',context:wait.context,method:wait.method,active}]:[];
+  }),
   recentActivity:recentDiagnostics(now,{catalog,workflows:automation.store,survey:automation.survey}),
   siteSessions:SITES.map(({id})=>({site:id,open:[...manualOwners.values()].includes(id),...effectiveSession(id)})),credentials:credentials?.snapshot(),registration:registration?.store.snapshot(),browserEvents:[...browserEvents],developerDiagnostics:developerTools?.status(),
   attempts:Object.values(snapshot.jobs).map(({site,kind,date,slot,state,updatedAt})=>({site,kind,date,slot,state,updatedAt}))};
@@ -225,7 +234,11 @@ async function inspectSession(window,id){
  let timer;try{
   const probe='(()=>{const state=('+inspectLoginPage.toString()+')();if('+JSON.stringify(id==='dtalks')+'&&state==="not_confirmed"){const reply=('+credentialPageState.toString()+')('+JSON.stringify({site:id,mode:'verify',expectedUrl:url,validation:false})+');if(reply.status==="authenticated")return "authenticated";}return state;})()';
   const value=await Promise.race([contents.executeJavaScript(probe,false),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('probe_timeout')),3000);})]);
-  if(!window.isDestroyed()&&contents.getURL()===url&&navigationVersions.get(window)===version){sessionChange(id,{login:safeLoginState(value),route:pageRole(url),checkedAt:Date.now()});if(value==='authenticated')await continueLoginVisit(window,id,url,version);}
+  if(!window.isDestroyed()&&contents.getURL()===url&&navigationVersions.get(window)===version){
+   const login=safeLoginState(value),route=pageRole(url);
+   sessionChange(id,{login,route,checkedAt:Date.now()});if(login==='authenticated')await continueLoginVisit(window,id,url,version);
+   return {login,route,url,version};
+  }
  }catch{}finally{clearTimeout(timer);}
 }
 function navigateSite(window,id,url,allowLoginFallback=true){
@@ -247,10 +260,21 @@ async function finishSiteLogin(id){
  if(!siteById(id))return {ok:false,reason:'invalid_site'};
  const windows=[...manualOwners].filter(([,owner])=>owner===id).map(([window])=>window);
  for(const window of windows)loginVisits.delete(window);
- await Promise.all(windows.map(async window=>{await observeDocple(window,id);await inspectSession(window,id);}));
+ const inspections=await Promise.all(windows.map(async window=>{await observeDocple(window,id);return inspectSession(window,id);}));
+ const checkDocple=()=>{
+  if(!siteWait.allowed(id))return 'site_wait';
+  if(!windows.length||[...manualOwners.values()].filter(owner=>owner===id).length!==windows.length||windows.some((window,i)=>{
+   const result=inspections[i];
+   return !result||result.login==='loading'||window.isDestroyed()||manualOwners.get(window)!==id||window.webContents.isLoadingMainFrame()||window.webContents.getURL()!==result.url||navigationVersions.get(window)!==result.version;
+  }))return 'login_unconfirmed';
+  if(!inspections.some(result=>result.login==='authenticated'&&result.route!=='login')&&inspections.some(result=>result.login==='login_required'||result.route==='login'))return 'login_required';
+  return '';
+ };
+ if(id==='docple'){const reason=checkDocple();if(reason)return {ok:false,reason};}
  // The action acknowledges the user's login step; it is not authentication proof.
  const saved=await flushProfile(id);
  if(!saved)return {ok:false,reason:'session_storage_error'};
+ if(id==='docple'){const reason=checkDocple();if(reason)return {ok:false,reason};}
  for(const window of windows)if(!window.isDestroyed()){closingWindows.add(window);window.destroy();}
  showControl();
  if(catalog.selected().includes(id)){
@@ -346,7 +370,12 @@ function hardenSiteWindow(window,id){
      {label:'출석 달력 열기',click:()=>navigateSite(window,id,credentialSite(id).entry)},
      {label:'지금 열린 달력에서 오늘 출석 확인',click:()=>observeDocple(window,id)},
     ]:[]),
-    {id:'finish-login',label:'로그인 마침 · 선택한 사이트 조회',click:()=>finishSiteLogin(id).then(result=>{if(!result.ok)dialog.showMessageBox(window,{type:'error',message:'사이트의 세션 저장 요청을 마치지 못했어요. 이 창을 유지하고 다시 시도해 주세요.'});}).catch(()=>{})},
+    {id:'finish-login',label:'로그인 마침 · 선택한 사이트 조회',click:()=>finishSiteLogin(id).then(result=>{
+     if(result.ok||window.isDestroyed())return;
+     const notice=loginFinishMessage(result.reason);
+     if(notice)window.setTitle(siteById(id).name+' · '+notice);
+     else if(result.reason==='session_storage_error')return dialog.showMessageBox(window,{type:'error',message:'사이트의 세션 저장 요청을 마치지 못했어요. 이 창을 유지하고 다시 시도해 주세요.'});
+    }).catch(()=>{})},
     {id:'open-login',label:'로그인 화면',enabled:!!siteById(id).loginUrl,click:()=>{armLoginVisit(window,id);navigateSite(window,id,siteById(id).loginUrl);}},
     {label:'다시 열기',click:()=>navigateSite(window,id,siteById(id).url)},
   ]));
@@ -497,9 +526,8 @@ function ipc(){
   if(EDITION.developer)registerPrivateUpdateInstaller({register:registerIPC,updater,owner:()=>control,allowed:()=>dataAccess.allowed()});
   registerIPC('pc:update-ready',()=>{updater.acknowledgeBoot().catch(()=>{});return {ok:true};});
   registerIPC('pc:update-page',async()=>{
-   const result=updater.snapshot();if(!result.canInstall&&result.status!=='full_required')return {ok:false};
-   const page=result.page;
-   if(!/^https:\/\/github\.com\/issackr580\/doctor-glean-pc\/releases\/tag\/(?:pc-v\d+\.\d+\.\d+(?:-preview\.\d+)?|untagged-[a-zA-Z0-9-]{1,80}|pc-developer-v\d+\.\d+\.\d+(?:-preview\.\d+)?)$/.test(page))return {ok:false};
+   const page=updateBrowserPage(updater.snapshot(),EDITION.id);
+   if(!page)return {ok:false};
    await shell.openExternal(page);return {ok:true};
   });
   developerTools.register();
@@ -543,7 +571,7 @@ function ipc(){
   registerIPC('pc:set-entry-sites',ids=>{automation.setEntrySites(ids);return {ok:true,state:buildState()};});
   registerIPC('pc:daily',readOnly=>{if(typeof readOnly!=='boolean')return {ok:false,reason:'invalid_setting'};return automation.requestDaily({readOnly});});
   registerIPC('pc:quick-run',()=>automation.quick());
-  const credentialReply=result=>({ok:['saved','authenticated'].includes(result.status),status:safeCredentialStatus(result.status),submitted:result.submitted===true,attempted:result.attempted===true,...(result.detail==='input_format'?{detail:'input_format'}:{}),...(Number.isSafeInteger(result.retryAt)?{retryAt:result.retryAt}:{})});
+  const credentialReply=(result,kind)=>({ok:['saved','authenticated'].includes(result.status),status:safeCredentialStatus(result.status),kind,submitted:result.submitted===true,attempted:result.attempted===true,...(result.detail==='input_format'?{detail:'input_format'}:{}),...(Number.isSafeInteger(result.retryAt)?{retryAt:result.retryAt}:{})});
   const refreshCredentialProfile=async(site,result)=>{
    if(result.status!=='authenticated')return;
    sessionChange(site,{login:'authenticated',authSource:'verified_profile',checkedAt:Date.now(),lastError:''});
@@ -557,13 +585,13 @@ function ipc(){
   const prepareCredential=id=>{if(!credentialSite(id))throw Error('invalid_site');if(collector.snapshot().running&&collector.snapshot().site===id)collector.cancel();automation.manualOpened(id);registration?.cancel(id);};
   registerIPC('pc:credential-save',async(site,id,password,automatic)=>{
    prepareCredential(site);try{
-    const saved=await credentials.save(site,id,password,automatic);id='';password='';if(saved.status!=='saved')return credentialReply(saved);
+    const saved=await credentials.save(site,id,password,automatic);id='';password='';if(saved.status!=='saved')return credentialReply(saved,'save');
     let profileStatus='not_checked';
     if(automatic&&!state.snapshot().paused){const recovered=await credentials.recover(site,{automatic:true});profileStatus=recovered.status;await refreshCredentialProfile(site,recovered);}
-    return {...credentialReply(saved),profileStatus};
+    return {...credentialReply(saved,'save'),profileStatus};
    }finally{id='';password='';}
   });
-  registerIPC('pc:credential-recover',async site=>{prepareCredential(site);const result=await credentials.recover(site);await refreshCredentialProfile(site,result);return credentialReply(result);});
+  registerIPC('pc:credential-recover',async site=>{prepareCredential(site);const result=await credentials.recover(site);await refreshCredentialProfile(site,result);return credentialReply(result,'recover');});
   registerIPC('pc:credential-automatic',(site,value)=>{credentials.setAutomatic(site,value);return {ok:true};});
   registerIPC('pc:credential-remove',site=>{credentials.remove(site);return {ok:true};});
   registerIPC('pc:credential-cancel',site=>{if(!credentialSite(site))return {ok:false};credentials.cancel(site);return {ok:true};});
