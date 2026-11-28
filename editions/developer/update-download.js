@@ -1,7 +1,20 @@
-import {BrowserWindow,session} from 'electron';
+import {app,BrowserWindow,dialog,session} from 'electron';
 import {mkdtempSync,readFileSync,lstatSync,rmSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
+
+export function registerPrivateUpdateInstaller({register,updater,owner,allowed}){
+  register('pc-dev:install-update-zip',()=>{
+    if(!allowed())return {ok:false,reason:'data_blocked'};
+    return updater.installSelectedPatch(async target=>{
+      const choice=await dialog.showOpenDialog(owner(),{title:'PC 개발자용 업데이트 패치 선택',
+        defaultPath:join(app.getPath('downloads'),target.patch.name),properties:['openFile'],filters:[{name:'업데이트 패치 ZIP',extensions:['zip']}]});
+      if(choice.canceled)return;
+      if(!allowed())throw Error('data_blocked');
+      return choice.filePaths[0];
+    });
+  });
+}
 
 export function githubUpdateNavigation(raw){
   try{const url=new URL(raw);return url.origin==='https://github.com'&&!url.username&&!url.password&&!url.port;}catch{return false;}
@@ -13,13 +26,25 @@ export function privateUpdateDownloadUrls(urls,target){
   });
 }
 let active=false;
-export function downloadPrivateUpdate(target,onProgress,{parent,profile=session.fromPartition('persist:doctor-glean-pc-developer-updates-v1'),timeout=600000}={}){
-  if(active||target.edition!=='developer')return Promise.reject(Error('update_private'));active=true;
+export function downloadPrivateUpdate(target,onProgress,{parent,profile=session.fromPartition('persist:doctor-glean-pc-developer-updates-v1'),timeout=600000,onLogin=()=>{},signal}={}){
+  if(active||target.edition!=='developer')return Promise.reject(Error('update_private'));
+  if(signal?.aborted)return Promise.reject(Error('data_blocked'));
+  let directory;
+  try{directory=mkdtempSync(join(tmpdir(),'doctor-glean-private-update-'));}catch{return Promise.reject(Error('update_permission'));}
+  active=true;
   return new Promise((resolve,reject)=>{
-    const directory=mkdtempSync(join(tmpdir(),'doctor-glean-private-update-')),file=join(directory,'patch.zip');let window,item,finished=false,requested=false;
+    const file=join(directory,'patch.zip'),loginUrl='https://github.com/login?return_to='+encodeURIComponent(new URL(target.page).pathname);
+    let window,item,finished=false,requested=false,prompted=false,returnedHome=false,checking=false;
     const timer=setTimeout(()=>finish(Error('update_cancelled')),timeout);
-    const cleanup=()=>{clearTimeout(timer);profile.removeListener('will-download',download);if(window&&!window.isDestroyed())window.destroy();try{rmSync(directory,{recursive:true,force:true});}catch{}active=false;};
+    const cleanup=()=>{clearTimeout(timer);signal?.removeEventListener('abort',abort);profile.removeListener('will-download',download);if(window&&!window.isDestroyed())window.destroy();try{rmSync(directory,{recursive:true,force:true});}catch{}active=false;};
     const finish=(error,bytes)=>{if(finished)return;finished=true;if(error)item?.cancel();cleanup();error?reject(error):resolve(bytes);};
+    const abort=()=>finish(Error('data_blocked'));
+    const navigate=url=>window.loadURL(url).catch(error=>{if(!finished&&error?.errno!==-3&&error?.code!=='ERR_ABORTED')finish(Error('update_network'));});
+    const prompt=()=>{
+      if(prompted||finished){finish(Error('update_private'));return;}
+      prompted=true;onLogin();window.show();
+      if(new URL(window.webContents.getURL()).pathname!=='/login')void navigate(loginUrl);
+    };
     const download=(event,candidate,contents)=>{
       if(contents!==window?.webContents||item){event.preventDefault();return;}
       if(candidate.getFilename()!==target.patch.name||!privateUpdateDownloadUrls(candidate.getURLChain(),target)){event.preventDefault();finish(Error('update_private'));return;}
@@ -38,8 +63,10 @@ export function downloadPrivateUpdate(target,onProgress,{parent,profile=session.
       });
     };
     try{
+      signal?.addEventListener('abort',abort,{once:true});
+      if(signal?.aborted){abort();return;}
       profile.setPermissionRequestHandler((_contents,_permission,callback)=>callback(false));profile.setPermissionCheckHandler(()=>false);profile.on('will-download',download);
-      window=new BrowserWindow({width:980,height:760,show:true,parent,title:'PC 개발자용 업데이트 · GitHub 로그인',autoHideMenuBar:true,webPreferences:{session:profile,nodeIntegration:false,nodeIntegrationInSubFrames:false,contextIsolation:true,sandbox:true,webSecurity:true,webviewTag:false,allowRunningInsecureContent:false,navigateOnDragDrop:false}});
+      window=new BrowserWindow({width:980,height:760,show:false,parent,title:'PC 개발자용 업데이트 · GitHub 로그인',autoHideMenuBar:true,webPreferences:{session:profile,nodeIntegration:false,nodeIntegrationInSubFrames:false,contextIsolation:true,sandbox:true,webSecurity:true,webviewTag:false,allowRunningInsecureContent:false,navigateOnDragDrop:false}});
       window.webContents.setWindowOpenHandler(()=>({action:'deny'}));
       window.webContents.on('will-navigate',(event,url)=>{if(!githubUpdateNavigation(url))event.preventDefault();});
       window.webContents.on('will-redirect',(event,url)=>{if(!githubUpdateNavigation(url))event.preventDefault();});
@@ -48,19 +75,27 @@ export function downloadPrivateUpdate(target,onProgress,{parent,profile=session.
       window.webContents.on('render-process-gone',()=>finish(Error('update_network')));
       window.on('closed',()=>finish(Error('update_cancelled')));
       window.webContents.on('did-finish-load',async()=>{
-        // Only the exact signed private release page can trigger its one fixed
-        // download. Login/password/2FA contents are never read or scripted.
-        if(!requested&&window.webContents.getURL()===target.page){
-          requested=true;
-          try{
-            // Inspect only the fixed release page's title, never a login form.
-            const missing=await window.webContents.executeJavaScript('/page not found|404/i.test(document.title)',false);
-            if(missing){finish(Error('update_private'));return;}
-            if(!finished&&!window.isDestroyed()&&window.webContents.getURL()===target.page)window.webContents.downloadURL(target.patch.url);
-          }catch{finish(Error('update_network'));}
+        if(finished||requested||checking)return;
+        const contents=window.webContents,url=contents.getURL();
+        if(url!==target.page){
+          if(!prompted)prompt();
+          else if(url==='https://github.com/'&&!returnedHome){returnedHome=true;void navigate(target.page);}
+          return;
         }
+        checking=true;
+        try{
+          // GitHub can return a generic 404 page for an unsigned-in session.
+          // A live login page is never inspected or scripted.
+          const missing=await contents.executeJavaScript(`location.href===${JSON.stringify(url)}&&/page not found|404/i.test(document.title)`,false);
+          if(finished||window.isDestroyed()||contents.getURL()!==url)return;
+          if(missing){prompt();return;}
+          requested=true;
+          window.hide();
+          contents.downloadURL(target.patch.url);
+        }catch{if(!finished&&contents.getURL()===url)finish(Error('update_network'));}
+        finally{checking=false;}
       });
-      window.loadURL('https://github.com/login?return_to='+encodeURIComponent(new URL(target.page).pathname)).catch(()=>finish(Error('update_network')));
+      void navigate(target.page);
     }catch(error){finish(error);}
   });
 }

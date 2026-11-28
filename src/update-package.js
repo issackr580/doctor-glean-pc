@@ -1,10 +1,31 @@
 import {inflateRawSync,crc32} from 'node:zlib';
 import {createHash} from 'node:crypto';
 import {readdirSync,readFileSync,lstatSync,realpathSync,mkdirSync,writeFileSync} from 'node:fs';
+import {lstat,open} from 'node:fs/promises';
 import {resolve,join,dirname,sep,basename} from 'node:path';
 import {resolveEdition} from './edition.js';
 const fail=()=>{throw Error('update_package');};
 export const updateHash=bytes=>createHash('sha256').update(bytes).digest('hex');
+export async function readSelectedPatch(path,size){
+  const selected=await lstat(path).catch(()=>null);
+  if(!selected?.isFile())throw Error('update_file');
+  if(selected.size!==size)throw Error('update_size');
+  const file=await open(path,'r').catch(()=>{throw Error('update_file');});
+  try{
+    const actual=await file.stat();
+    if(!actual.isFile()||actual.dev!==selected.dev||actual.ino!==selected.ino)throw Error('update_file');
+    if(actual.size!==size)throw Error('update_size');
+    const bytes=Buffer.alloc(size+1);
+    let received=0;
+    while(received<bytes.length){
+      const {bytesRead}=await file.read(bytes,received,bytes.length-received,received);
+      if(!bytesRead)break;
+      received+=bytesRead;
+    }
+    if(received!==size)throw Error('update_size');
+    return bytes.subarray(0,size);
+  }finally{await file.close();}
+}
 export const safeUpdatePath=value=>typeof value==='string'&&value.length<400&&!/[\\:\x00-\x1f\x7f]/.test(value)&&value.split('/').every(part=>part&&part!=='.'&&part!=='..'&&!/[. ]$/.test(part)&&!/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part));
 export function patchZipFiles(bytes){
   if(!Buffer.isBuffer(bytes)||bytes.length<22||bytes.length>16*1024*1024)fail();
