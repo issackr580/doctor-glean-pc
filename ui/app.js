@@ -6,6 +6,7 @@ import {setupCredentials,renderCredentials,openCredential,credentialLabel,result
 import {setupReports} from './report-view.js';
 import {setupPortOptions} from './port-options.js';
 import {setupUpdates} from './update-view.js';
+import {loginFinishMessage} from '../src/login-status.js';
 const api=window.doctorGlean,message=document.getElementById('message');let refreshing=false,repeat=false,updateReadySent=false;
 const renderUpdate=setupUpdates(api);
 const renderPortOptions=setupPortOptions(api,perform);
@@ -163,7 +164,7 @@ async function refresh(){
     if(wait.manual){const ack=document.createElement('button');ack.textContent='직접 확인했어요';ack.onclick=()=>perform(()=>api.confirmSiteWait(site.id,wait.at,wait.revision),'현재 사이트 상태를 확인했어요.');actions.append(ack);}
    }
    if(site.loginEntry){const login=node('button','로그인 화면');login.type='button';login.addEventListener('click',()=>perform(()=>api.openLogin(site.id),'로그인 화면을 열었어요. 로그인 뒤 상단의 「로그인 마침」을 눌러 주세요.'));actions.append(login);}
-   if(site.open){const finish=node('button',site.catalog?'로그인 마침 · 조회':'로그인 마침');finish.type='button';finish.addEventListener('click',()=>perform(()=>api.finishLogin(site.id),'세션 저장 요청을 마쳤어요. 조회 결과에서 로그인 상태를 확인해 주세요.'));actions.append(finish);}
+   if(site.open){const finish=node('button',site.catalog?'로그인 마침 · 조회':'로그인 마침');finish.type='button';finish.addEventListener('click',async()=>{const r=await perform(()=>api.finishLogin(site.id),'세션 저장 요청을 마쳤어요. 조회 결과에서 로그인 상태를 확인해 주세요.');const notice=loginFinishMessage(r?.reason);if(notice)say(notice);});actions.append(finish);}
    const account=node('button','계정 저장·복구');account.type='button';account.addEventListener('click',()=>openCredential(site.id));actions.append(account);
    const occupied=!!state.automation?.active||!!state.credentials?.active||state.collection.running||site.open;
    if(site.catalog){

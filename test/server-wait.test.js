@@ -17,6 +17,7 @@ test('429 stops fallback at the catalog entry point',async t=>{
   return new CatalogRunner({gate,now:()=>now,store:{record(){}},nativeRead:(...args)=>reader.read(...args),createPage:async()=>{browser++;return {open(){},read:()=>({status:'login',events:[],done:true}),close(){}};},recoverLogin:async()=>{login++;return false;}});
  };
  const file=join(root,'site.json');let gate=new SiteWait(file,{now:()=>now});const run=setup(gate);await run.start(date,['docple']);assert.deepEqual({http,browser,login},{http:1,browser:0,login:0});
+ assert.equal(gate.status('docple').context,'native_read');assert.equal(gate.status('docple').method,'GET');
  const first=now;now+=10000;gate.observe('docple',{url:'https://docple-plus.com/api/season2/webinar/list',status:429,retryAfter:'10',api:true});
  gate=new SiteWait(file,{now:()=>now});const restarted=setup(gate);now=first+599999;await restarted.start(date,['docple']);
  assert.equal(gate.allowed('hmp'),true);assert.deepEqual({http,browser,login},{http:1,browser:0,login:0});const beforeB={http,browser,login};let bLoads=0;

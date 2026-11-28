@@ -27,7 +27,7 @@ import {BUILD_INFO} from './build-info.js';
 import {formatPcSchedule} from './catalog-format.js';
 import {resolveEdition} from './edition.js';
 import {createDeveloperTools} from './developer-tools.js';
-import {inspectLoginPage,safeLoginState,loadFailure,sessionWithDailyEvidence} from './login-status.js';
+import {inspectLoginPage,safeLoginState,loadFailure,sessionWithDailyEvidence,loginFinishMessage} from './login-status.js';
 import {CatalogQueue} from './catalog-queue.js';
 import {AutomationController} from './automation-controller.js';
 import {AutomationPage} from './automation-page.js';
@@ -87,7 +87,9 @@ const configureNetwork=(profile,id)=>{
   },
   response:(details,worker)=>{
    const site=requestSite(details.url)??id;
-   if(site&&siteWait&&details.webContentsId>0&&(!worker||site!==id))observeSiteResponse(siteWait,site,details);
+   if(!site||!siteWait||!(details.webContentsId>0)||worker&&site===id||![403,429,503].includes(details.statusCode))return;
+   const manual=[...manualOwners].some(([window,owner])=>owner===site&&!window.isDestroyed()&&window.webContents.id===details.webContentsId);
+   observeSiteResponse(siteWait,site,details,manual?'manual_browser':worker?'background_browser':undefined);
   }
  });
  if(!dataAccess.allowed())profile.enableNetworkEmulation({offline:true});
@@ -143,7 +145,7 @@ function diagnosticSnapshot(){
   serverWait:SITES.flatMap(({id})=>{
    const wait=siteWait?.status(id);if(!wait)return [];
    const active=wait.manual||wait.until>now;
-   return active||wait.at>=dayStart&&wait.at<=now?[{site:id,status:wait.status,manual:wait.manual,until:wait.until,observedAt:wait.at,source:wait.source??'unknown',active}]:[];
+   return active||wait.at>=dayStart&&wait.at<=now?[{site:id,status:wait.status,manual:wait.manual,until:wait.until,observedAt:wait.at,source:wait.source??'unknown',context:wait.context,method:wait.method,active}]:[];
   }),
   recentActivity:recentDiagnostics(now,{catalog,workflows:automation.store,survey:automation.survey}),
   siteSessions:SITES.map(({id})=>({site:id,open:[...manualOwners.values()].includes(id),...effectiveSession(id)})),credentials:credentials?.snapshot(),registration:registration?.store.snapshot(),browserEvents:[...browserEvents],developerDiagnostics:developerTools?.status(),
@@ -232,7 +234,11 @@ async function inspectSession(window,id){
  let timer;try{
   const probe='(()=>{const state=('+inspectLoginPage.toString()+')();if('+JSON.stringify(id==='dtalks')+'&&state==="not_confirmed"){const reply=('+credentialPageState.toString()+')('+JSON.stringify({site:id,mode:'verify',expectedUrl:url,validation:false})+');if(reply.status==="authenticated")return "authenticated";}return state;})()';
   const value=await Promise.race([contents.executeJavaScript(probe,false),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('probe_timeout')),3000);})]);
-  if(!window.isDestroyed()&&contents.getURL()===url&&navigationVersions.get(window)===version){sessionChange(id,{login:safeLoginState(value),route:pageRole(url),checkedAt:Date.now()});if(value==='authenticated')await continueLoginVisit(window,id,url,version);}
+  if(!window.isDestroyed()&&contents.getURL()===url&&navigationVersions.get(window)===version){
+   const login=safeLoginState(value),route=pageRole(url);
+   sessionChange(id,{login,route,checkedAt:Date.now()});if(login==='authenticated')await continueLoginVisit(window,id,url,version);
+   return {login,route,url,version};
+  }
  }catch{}finally{clearTimeout(timer);}
 }
 function navigateSite(window,id,url,allowLoginFallback=true){
@@ -254,10 +260,21 @@ async function finishSiteLogin(id){
  if(!siteById(id))return {ok:false,reason:'invalid_site'};
  const windows=[...manualOwners].filter(([,owner])=>owner===id).map(([window])=>window);
  for(const window of windows)loginVisits.delete(window);
- await Promise.all(windows.map(async window=>{await observeDocple(window,id);await inspectSession(window,id);}));
+ const inspections=await Promise.all(windows.map(async window=>{await observeDocple(window,id);return inspectSession(window,id);}));
+ const checkDocple=()=>{
+  if(!siteWait.allowed(id))return 'site_wait';
+  if(!windows.length||[...manualOwners.values()].filter(owner=>owner===id).length!==windows.length||windows.some((window,i)=>{
+   const result=inspections[i];
+   return !result||result.login==='loading'||window.isDestroyed()||manualOwners.get(window)!==id||window.webContents.isLoadingMainFrame()||window.webContents.getURL()!==result.url||navigationVersions.get(window)!==result.version;
+  }))return 'login_unconfirmed';
+  if(!inspections.some(result=>result.login==='authenticated'&&result.route!=='login')&&inspections.some(result=>result.login==='login_required'||result.route==='login'))return 'login_required';
+  return '';
+ };
+ if(id==='docple'){const reason=checkDocple();if(reason)return {ok:false,reason};}
  // The action acknowledges the user's login step; it is not authentication proof.
  const saved=await flushProfile(id);
  if(!saved)return {ok:false,reason:'session_storage_error'};
+ if(id==='docple'){const reason=checkDocple();if(reason)return {ok:false,reason};}
  for(const window of windows)if(!window.isDestroyed()){closingWindows.add(window);window.destroy();}
  showControl();
  if(catalog.selected().includes(id)){
@@ -353,7 +370,12 @@ function hardenSiteWindow(window,id){
      {label:'출석 달력 열기',click:()=>navigateSite(window,id,credentialSite(id).entry)},
      {label:'지금 열린 달력에서 오늘 출석 확인',click:()=>observeDocple(window,id)},
     ]:[]),
-    {id:'finish-login',label:'로그인 마침 · 선택한 사이트 조회',click:()=>finishSiteLogin(id).then(result=>{if(!result.ok)dialog.showMessageBox(window,{type:'error',message:'사이트의 세션 저장 요청을 마치지 못했어요. 이 창을 유지하고 다시 시도해 주세요.'});}).catch(()=>{})},
+    {id:'finish-login',label:'로그인 마침 · 선택한 사이트 조회',click:()=>finishSiteLogin(id).then(result=>{
+     if(result.ok||window.isDestroyed())return;
+     const notice=loginFinishMessage(result.reason);
+     if(notice)window.setTitle(siteById(id).name+' · '+notice);
+     else if(result.reason==='session_storage_error')return dialog.showMessageBox(window,{type:'error',message:'사이트의 세션 저장 요청을 마치지 못했어요. 이 창을 유지하고 다시 시도해 주세요.'});
+    }).catch(()=>{})},
     {id:'open-login',label:'로그인 화면',enabled:!!siteById(id).loginUrl,click:()=>{armLoginVisit(window,id);navigateSite(window,id,siteById(id).loginUrl);}},
     {label:'다시 열기',click:()=>navigateSite(window,id,siteById(id).url)},
   ]));

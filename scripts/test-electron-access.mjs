@@ -165,9 +165,15 @@ async function mainIpc(){
  await profile.protocol.handle('https',()=>{requests++;return html('<main>합성 목록</main>');});
  const docpleRequests=[];
  const docpleProfile=session.fromPartition(remotePreferences('docple',metadata.doctorGleanEdition).partition);
+ const docpleWebRequests=docpleProfile.webRequest,installHeaders=docpleWebRequests.onHeadersReceived;
+ let docpleHeaders;
+ docpleWebRequests.onHeadersReceived=function(listener){docpleHeaders=listener;return installHeaders.call(this,listener);};
  await docpleProfile.protocol.handle('https',request=>{
-  if(new URL(request.url).pathname==='/auth/login')docpleRequests.push(request.method);
-  return html('<form><input type="password"></form>');
+  const {pathname}=new URL(request.url);
+  docpleRequests.push(request.method+' '+pathname);
+  if(pathname==='/synthetic-limit')return new Response('wait',{status:429,headers:{'Retry-After':'2'}});
+  if(pathname==='/auth/login')return html('<form><input type="password"></form><div role="alert">로그인에 실패했습니다</div>');
+  return html('<main>합성 강의 목록</main><a href="/logout">로그아웃</a>');
  });
  shell.openExternal=async()=>{external++;};
  const {SiteWait}=await load('site-wait');
@@ -210,13 +216,35 @@ async function mainIpc(){
   const manual=await until(()=>BrowserWindow.getAllWindows().find(w=>w.webContents.getURL()==='https://docple-plus.com/auth/login'));
   try{
    await until(()=>evaluate("!document.getElementById('credential-dialog').open"));
-   equal(docpleRequests,['GET']);
+   await until(()=>manual.webContents.executeJavaScript("document.readyState==='complete' && !!document.querySelector('input[type=password]')"));
+   equal(docpleRequests,['GET /auth/login']);
+   equal((await call("selectSites(['docple'])")).ok,true);
+   equal(await call("finishLogin('docple')"),{ok:false,reason:'login_required'});
+   equal(manual.isDestroyed(),false);
+   equal((await call('state()')).pendingQueries,[]);
+   equal(docpleRequests,['GET /auth/login']);
    equal((await call('checkUpdate()')).status,'unsupported');
    const savedReport=JSON.parse((await call('previewReport()')).text);
    equal(savedReport.update,{status:'unsupported'});
    equal(savedReport.serverWait.find(row=>row.site==='docple').active,false);
    equal(savedReport.serverWait.find(row=>row.site==='docple').source,'login_document');
-  }finally{manual.destroy();}
+   await manual.webContents.executeJavaScript('fetch("/synthetic-limit",{method:"POST"}).then(()=>{}).catch(()=>{})');
+   // Custom protocol responses omit Chromium's header callback. Deliver the
+   // fixture response through the callback installed on the app's actual session.
+   docpleHeaders({url:'https://docple-plus.com/synthetic-limit',method:'POST',resourceType:'xhr',statusCode:429,
+    responseHeaders:{'Retry-After':['2']},webContentsId:manual.webContents.id},()=>{});
+   equal(await call("finishLogin('docple')"),{ok:false,reason:'site_wait'});
+   equal(manual.isDestroyed(),false);
+   equal(docpleRequests,['GET /auth/login','POST /synthetic-limit']);
+   const waitReport=JSON.parse((await call('previewReport()')).text).serverWait.find(row=>row.site==='docple');
+   equal([waitReport.context,waitReport.method,waitReport.source,waitReport.active],['manual_browser','POST','site_api',true]);
+   await until(()=>Date.now()>=waitReport.until);
+   await manual.loadURL('https://docple-plus.com/');
+   equal(await call("finishLogin('docple')"),{ok:true,queryStarted:true});
+   equal(manual.isDestroyed(),true);
+   await until(()=>docpleRequests.includes('GET /webinar'));
+   equal(docpleRequests,['GET /auth/login','POST /synthetic-limit','GET /','GET /webinar']);
+  }finally{docpleWebRequests.onHeadersReceived=installHeaders;if(!manual.isDestroyed())manual.destroy();}
  }
 }
 app.on('window-all-closed',()=>{});
