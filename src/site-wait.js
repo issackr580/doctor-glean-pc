@@ -8,9 +8,15 @@ import {doctorvilleSurveyId} from './survey-policy.js';
 
 const integer=n=>Number.isSafeInteger(n)&&n>=0;
 const max=Number.MAX_SAFE_INTEGER;
+const docpleApiSources=new Map([
+ ['/api/season2/webinar/list','catalog_api'],
+ ['/api/season2/mission/attendance/calendar','attendance_api']
+]);
+const responseSources=new Set(['login_document','document','frame','catalog_api','attendance_api','site_api']);
 function valid(data){
  return data?.version===1&&integer(data.observedAt)&&data.sites&&typeof data.sites==='object'&&!Array.isArray(data.sites)&&Object.entries(data.sites).every(([id,row])=>
-  siteById(id)&&row&&integer(row.at)&&integer(row.until)&&integer(row.revision)&&typeof row.manual==='boolean'&&row.at<=data.observedAt);
+  siteById(id)&&row&&integer(row.at)&&integer(row.until)&&integer(row.revision)&&typeof row.manual==='boolean'&&row.at<=data.observedAt&&
+  (row.source===undefined||responseSources.has(row.source)));
 }
 export function waitUntil(value,now,fallback){
  const header=typeof value==='string'?value.trim():'';
@@ -49,16 +55,20 @@ export class SiteWait{
   const provider=siteById(site);let address;try{address=new URL(url);}catch{return false;}
   if(!provider||address.protocol!=='https:'||address.port||address.username||address.password||!(allowedNavigation(site,url)||site==='doctorville'&&doctorvilleSurveyId(url)||site==='keymedi'&&address.hostname==='api.keymedi.com'||site==='medigate'&&address.origin===MEDIGATE_COUNTER_ORIGIN&&address.pathname===MEDIGATE_COUNTER_PATH))return false;
   if(!(document||api||['mainFrame','subFrame'].includes(resourceType))||![403,429,503].includes(status))return false;
+  const login=provider.loginUrl&&new URL(provider.loginUrl);
+  const source=resourceType==='subFrame'?'frame':document||resourceType==='mainFrame'?
+   (login&&address.origin===login.origin&&address.pathname===login.pathname&&(!login.search||address.search===login.search)?'login_document':'document'):
+   (site==='docple'&&docpleApiSources.get(address.pathname)||'site_api');
   const at=this.now();if(!this.clockTrusted(at)){
    // A restriction received during rollback is timed from the last trusted instant.
-   if(!this.failed&&integer(this.high))return this.observeAt(site,status,retryAfter,this.high);
+   if(!this.failed&&integer(this.high))return this.observeAt(site,status,retryAfter,this.high,source);
    return true;
   }
-  return this.observeAt(site,status,retryAfter,at);
+  return this.observeAt(site,status,retryAfter,at,source);
  }
- observeAt(site,status,retryAfter,at){
+ observeAt(site,status,retryAfter,at,source){
   const old=this.status(site);
-  this.save(site,{at,revision:(old?.revision??0)+1,status,manual:status===403||old?.manual===true,
+  this.save(site,{at,revision:(old?.revision??0)+1,status,source,manual:status===403||old?.manual===true,
    until:Math.max(old?.until??0,status===403?0:waitUntil(retryAfter,at,status===429?300000:60000))});return true;
  }
  acknowledge(site,at,revision){
@@ -90,6 +100,6 @@ export function observeSiteResponse(gate,site,details){
  // A first-party data read may also carry an explicit Retry-After outside
  // the native API allowlist. This grants no permission to call that route.
  const directedRead=['xhr','fetch'].includes(details.resourceType)&&[429,503].includes(details.statusCode)&&!!retry&&!/\.(?:png|jpe?g|gif|webp|avif|svg|ico|css|js|woff2?|mp[34])$|\/(?:ad[s]?|advertising|analytics|static|assets)\//i.test(pathname);
- const api=directedRead||site==='medigate'&&details.url.split('?')[0]===MEDIGATE_COUNTER_ORIGIN+MEDIGATE_COUNTER_PATH||site==='keymedi'&&details.url==='https://api.keymedi.com/api/drlounge/getMainInfo'||site==='docple'&&['/api/season2/webinar/list','/api/season2/mission/attendance/calendar'].includes(pathname)||site==='ckd'&&['/hcpapp/webinar/webinarCalAjax.do','/hcpapp/webinar/webinarCalDtlAjax.do'].includes(pathname);
- return gate.observe(site,{url:details.url,status:details.statusCode,retryAfter:Array.isArray(retry)?retry[0]:retry,document:['mainFrame','subFrame'].includes(details.resourceType),api});
+ const api=directedRead||site==='medigate'&&details.url.split('?')[0]===MEDIGATE_COUNTER_ORIGIN+MEDIGATE_COUNTER_PATH||site==='keymedi'&&details.url==='https://api.keymedi.com/api/drlounge/getMainInfo'||site==='docple'&&docpleApiSources.has(pathname)||site==='ckd'&&['/hcpapp/webinar/webinarCalAjax.do','/hcpapp/webinar/webinarCalDtlAjax.do'].includes(pathname);
+ return gate.observe(site,{url:details.url,status:details.statusCode,retryAfter:Array.isArray(retry)?retry[0]:retry,resourceType:details.resourceType,api});
 }

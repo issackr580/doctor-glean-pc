@@ -105,6 +105,7 @@
   <dialog id="report-dialog"><h2>오류보고 미리보기</h2><p>버전·작업 상태와 시도 결과를 확인해 주세요. 복사·저장은 현재 미리 본 내용을 사용해요.</p><textarea id="report-preview" rows="18" readonly aria-label="오류보고 미리보기"></textarea><div class="query-controls"><button id="report-copy" type="button">복사</button><button id="report-save" type="button">TXT 저장</button><button id="report-close" type="button">닫기</button></div></dialog>
   <dialog id="credential-dialog" aria-labelledby="credential-title">
     <h2 id="credential-title">계정 저장·복구</h2><p id="credential-storage"></p><p id="credential-saved"></p>
+    <p id="credential-site-wait" role="status" hidden></p>
     <form id="credential-form">
       <label>아이디<input id="credential-id" type="text" autocomplete="username" maxlength="512" required></label>
       <label>비밀번호<input id="credential-password" type="password" autocomplete="current-password" maxlength="4096" required></label>

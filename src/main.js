@@ -133,11 +133,15 @@ const buildState=()=>({
 });
 
 function diagnosticSnapshot(){
- const snapshot=state.snapshot(),now=Date.now();
- return {appName:EDITION.name,applicationId:EDITION.appId,edition:EDITION.id,appVersion:VERSION,build:BUILD_INFO,exportedAt:now,processStartedAt:PROCESS_STARTED_AT,date:kstDate(now),automationPaused:snapshot.paused,
+ const snapshot=state.snapshot(),now=Date.now(),date=kstDate(now),dayStart=kstInstant(date,'00:00');
+ return {appName:EDITION.name,applicationId:EDITION.appId,edition:EDITION.id,appVersion:VERSION,build:BUILD_INFO,exportedAt:now,processStartedAt:PROCESS_STARTED_AT,date,automationPaused:snapshot.paused,
   runtime:{platform:process.platform,arch:process.arch,electron:process.versions.electron,chromium:process.versions.chrome,osRelease:release()},runtimeFaults:runtimeFaults.snapshot(),dataAccess:dataAccess.snapshot(),siteWaitUntrusted:!!siteWait&&!siteWait.clockTrusted(Date.now()),resourceUse:resourceUse(),
   stage:'automation',automationAvailable:true,collection:collector.snapshot(),selectedCatalogSites:catalog.selected(),pendingQueries:catalogQueue?.snapshot()??[],sites:catalog.diagnostics(viewDate),automation:automation?.diagnostics(),
-  serverWait:SITES.flatMap(({id})=>{const wait=siteWait?.status(id);return wait&&(wait.manual||wait.until>now)?[{site:id,status:wait.status,manual:wait.manual,until:wait.until}]:[];}),
+  serverWait:SITES.flatMap(({id})=>{
+   const wait=siteWait?.status(id);if(!wait)return [];
+   const active=wait.manual||wait.until>now;
+   return active||wait.at>=dayStart&&wait.at<=now?[{site:id,status:wait.status,manual:wait.manual,until:wait.until,observedAt:wait.at,source:wait.source??'unknown',active}]:[];
+  }),
   recentActivity:recentDiagnostics(now,{catalog,workflows:automation.store,survey:automation.survey}),
   siteSessions:SITES.map(({id})=>({site:id,open:[...manualOwners.values()].includes(id),...effectiveSession(id)})),credentials:credentials?.snapshot(),registration:registration?.store.snapshot(),browserEvents:[...browserEvents],developerDiagnostics:developerTools?.status(),
   attempts:Object.values(snapshot.jobs).map(({site,kind,date,slot,state,updatedAt})=>({site,kind,date,slot,state,updatedAt}))};
@@ -543,7 +547,7 @@ function ipc(){
   registerIPC('pc:set-entry-sites',ids=>{automation.setEntrySites(ids);return {ok:true,state:buildState()};});
   registerIPC('pc:daily',readOnly=>{if(typeof readOnly!=='boolean')return {ok:false,reason:'invalid_setting'};return automation.requestDaily({readOnly});});
   registerIPC('pc:quick-run',()=>automation.quick());
-  const credentialReply=result=>({ok:['saved','authenticated'].includes(result.status),status:safeCredentialStatus(result.status),submitted:result.submitted===true,attempted:result.attempted===true,...(result.detail==='input_format'?{detail:'input_format'}:{}),...(Number.isSafeInteger(result.retryAt)?{retryAt:result.retryAt}:{})});
+  const credentialReply=(result,kind)=>({ok:['saved','authenticated'].includes(result.status),status:safeCredentialStatus(result.status),kind,submitted:result.submitted===true,attempted:result.attempted===true,...(result.detail==='input_format'?{detail:'input_format'}:{}),...(Number.isSafeInteger(result.retryAt)?{retryAt:result.retryAt}:{})});
   const refreshCredentialProfile=async(site,result)=>{
    if(result.status!=='authenticated')return;
    sessionChange(site,{login:'authenticated',authSource:'verified_profile',checkedAt:Date.now(),lastError:''});
@@ -557,13 +561,13 @@ function ipc(){
   const prepareCredential=id=>{if(!credentialSite(id))throw Error('invalid_site');if(collector.snapshot().running&&collector.snapshot().site===id)collector.cancel();automation.manualOpened(id);registration?.cancel(id);};
   registerIPC('pc:credential-save',async(site,id,password,automatic)=>{
    prepareCredential(site);try{
-    const saved=await credentials.save(site,id,password,automatic);id='';password='';if(saved.status!=='saved')return credentialReply(saved);
+    const saved=await credentials.save(site,id,password,automatic);id='';password='';if(saved.status!=='saved')return credentialReply(saved,'save');
     let profileStatus='not_checked';
     if(automatic&&!state.snapshot().paused){const recovered=await credentials.recover(site,{automatic:true});profileStatus=recovered.status;await refreshCredentialProfile(site,recovered);}
-    return {...credentialReply(saved),profileStatus};
+    return {...credentialReply(saved,'save'),profileStatus};
    }finally{id='';password='';}
   });
-  registerIPC('pc:credential-recover',async site=>{prepareCredential(site);const result=await credentials.recover(site);await refreshCredentialProfile(site,result);return credentialReply(result);});
+  registerIPC('pc:credential-recover',async site=>{prepareCredential(site);const result=await credentials.recover(site);await refreshCredentialProfile(site,result);return credentialReply(result,'recover');});
   registerIPC('pc:credential-automatic',(site,value)=>{credentials.setAutomatic(site,value);return {ok:true};});
   registerIPC('pc:credential-remove',site=>{credentials.remove(site);return {ok:true};});
   registerIPC('pc:credential-cancel',site=>{if(!credentialSite(site))return {ok:false};credentials.cancel(site);return {ok:true};});

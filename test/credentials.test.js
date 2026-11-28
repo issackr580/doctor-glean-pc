@@ -10,6 +10,8 @@ import {CredentialRunner} from '../src/credential-runner.js';
 import {CredentialManager} from '../src/credential-manager.js';
 import {credentialSite,allowedCredentialPage} from '../src/credential-policy.js';
 import {atomicJson} from '../src/atomic-json.js';
+import {SiteWait,workerWait} from '../src/site-wait.js';
+import {resultLabel,siteWaitLabel} from '../ui/credential-view.js';
 const account={id:'SYNTHETIC_PRIVATE_ACCOUNT',password:'SYNTHETIC_PRIVATE_PASSWORD'};
 test('HMP conflicting result markup needs one actual auth response and a fresh protected-page proof',async t=>{
  for(const validation of [false,true]){
@@ -121,6 +123,68 @@ test('rejected credentials stay locked while candidate validation retains rate h
 test('rate limits and reversed clocks stay in force across explicit updates',t=>{const s=setup(t),a=new CredentialAttempts(join(s.root,'a.json'));for(let i=0;i<3;i++){assert.equal(a.reserve('hmp',s.now(),{automatic:true}),'ready');a.finish('hmp','authenticated',s.now());s.advance(61000);}a.reset('hmp');assert.equal(a.decision('hmp',s.now(),false,true),'cooldown');assert.equal(a.decision('hmp',s.now()-500000,false,true),'cooldown');});
 test('candidate cannot be saved from an existing session without submission proof',async t=>{const s=setup(t),attempts=new CredentialAttempts(join(s.root,'a.json'));const p=fakePage('hmp',async()=>({status:'authenticated'}));const r=await new CredentialRunner({...s,attempts}).run('hmp',p,{candidate:account,validation:true,signal:new AbortController().signal});assert.equal(r.status,'manual');assert.equal(r.submitted,false);assert.equal(Object.keys(attempts.data.sites).length,0);});
 test('manager validates in a unique temporary profile and stores only the same verified candidate',async t=>{const s=setup(t);let options,page;const m=new CredentialManager({directory:s.root,applicationId:'developer',protect:protector(),automaticAllowed:()=>true,isManualOpen:()=>false,now:s.now,createPage:async(site,_signal,o)=>{options=o;page=fakePage(site,async()=>({status:'ready'}));return page;}});m.runner.run=async(_site,_p,{candidate,validation})=>{assert.equal(validation,true);assert.deepEqual(candidate,account);return {status:'authenticated',submitted:true};};const r=await m.save('hmp',account.id,account.password,true);assert.equal(r.status,'saved');assert.equal(options.validation,true);assert.match(options.partition,/^credential-validation-/);assert.equal(options.partition.startsWith('persist:'),false);assert.deepEqual(m.vault.read('hmp'),account);assert.ok(page.closed);assert.doesNotMatch(JSON.stringify(m.snapshot()),/SYNTHETIC_PRIVATE|ciphertext/);});
+test('Docple can get a new 429 before submitting login, and the wait survives restart',async t=>{
+ const clock=setup(t),site='docple',waitFile=join(clock.root,'wait.json');
+ let gate=new SiteWait(waitFile,clock),opened=0,filled=0;
+ const manager=new CredentialManager({directory:clock.root,applicationId:'developer',protect:protector(),now:clock.now,
+  siteAvailable:id=>gate.allowed(id),automaticAllowed:()=>true,isManualOpen:()=>false,createPage:async(id,signal)=>{
+   opened++;
+   const traffic=workerWait(gate,id,signal,()=>0);
+   return fakePage(id,async(_name,[input])=>{
+    if(input.mode==='fill'){
+     filled++;
+     return {status:'submitted',submitted:true};
+    }
+    if(input.mode==='verify'||opened===2){
+     traffic.response({url:opened===1?'https://docple-plus.com/api/season2/mission/attendance/calendar':'https://docple-plus.com/auth/login?fixture=PRIVATE',
+      resourceType:opened===1?'xhr':'mainFrame',statusCode:429,responseHeaders:{'Retry-After':['60']}});
+     assert.equal(traffic.allowed(),false);
+     throw Error('site_wait');
+    }
+    return {status:'ready'};
+   });
+  }});
+ manager.runner.sleep=clock.sleep;
+ const save=()=>manager.save(site,account.id,account.password,true);
+ const first=await save();
+ assert.equal(first.status,'site_wait');
+ assert.equal(first.submitted,true);
+ assert.equal(gate.status(site).source,'attendance_api');
+ assert.match(resultLabel({...first,kind:'save'}),/로그인 제출 뒤.*저장하지 않았어요/);
+ clock.advance(gate.status(site).until-clock.now()+1);
+ const second=await save();
+ assert.equal(second.status,'site_wait');
+ assert.equal(second.attempted,false);
+ assert.equal(second.submitted,false);
+ assert.match(resultLabel({...second,kind:'save'}),/로그인 정보를 전송하지 않았어요/);
+ assert.match(resultLabel({...second,attempted:true,kind:'save'}),/전송 여부를 확인하지 못했어요/);
+ gate=new SiteWait(waitFile,clock);
+ const wait=gate.status(site);
+ assert.equal(wait.source,'login_document');
+ assert.equal(gate.allowed(site),false);
+ assert.match(siteWaitLabel(wait,clock.now()),/429.*까지 대기/);
+ assert.equal(siteWaitLabel(wait,wait.until),'');
+ assert.doesNotMatch(readFileSync(waitFile,'utf8'),/https:|fixture|PRIVATE/);
+ assert.equal((await save()).status,'site_wait');
+ assert.equal(opened,2);
+ assert.equal(filled,1);
+ assert.equal(manager.vault.has(site),false);
+ assert.equal(manager.attempts.snapshot().sites.find(row=>row.site===site).attemptsToday,1);
+});
+test('a Docple limit observed after authentication evidence blocks writing the new account',async t=>{
+ const clock=setup(t),site='docple',gate=new SiteWait(join(clock.root,'wait.json'),clock);
+ const manager=new CredentialManager({directory:clock.root,applicationId:'developer',protect:protector(),now:clock.now,
+  siteAvailable:id=>gate.allowed(id),automaticAllowed:()=>true,isManualOpen:()=>false,
+  createPage:async id=>fakePage(id,async()=>({status:'ready'}))});
+ manager.vault.save(site,account,true);
+ manager.runner.run=async()=>{
+  gate.observe(site,{url:'https://docple-plus.com/api/season2/mission/attendance/calendar',status:429,api:true});
+  return {status:'authenticated',submitted:true,attempted:true};
+ };
+ assert.equal((await manager.save(site,'replacement','replacement',false)).status,'site_wait');
+ assert.deepEqual(manager.vault.read(site),account);
+ assert.equal(manager.vault.enabled(site),true);
+});
 test('failed replacement preserves encrypted credentials and does not clear rejection lock',async t=>{const s=setup(t);const m=new CredentialManager({directory:s.root,applicationId:'developer',protect:protector(),automaticAllowed:()=>true,isManualOpen:()=>false,now:s.now,createPage:async site=>fakePage(site,async()=>({status:'challenge'}))});m.vault.save('hmp',account,true);m.attempts.reserve('hmp',s.now());m.attempts.finish('hmp','rejected',s.now());m.runner.run=async()=>({status:'challenge'});await m.save('hmp','different','different',true);assert.deepEqual(m.vault.read('hmp'),account);assert.equal(m.attempts.data.sites.hmp.disabled,true);});
 test('automatic recovery requires explicit consent, execution enabled and no manual window',async t=>{const s=setup(t);let paused=true,open=false,pages=0;const m=new CredentialManager({directory:s.root,applicationId:'developer',protect:protector(),automaticAllowed:()=>!paused,isManualOpen:()=>open,createPage:async()=>{pages++;throw Error();}});m.vault.save('hmp',account,false);await m.recover('hmp',{automatic:true});paused=false;await m.recover('hmp',{automatic:true});m.vault.setAutomatic('hmp',true);open=true;await m.recover('hmp',{automatic:true});assert.equal(pages,0);});
 test('deleting a credential cancels its active recovery and removes its encrypted record',async t=>{const s=setup(t);let release;const m=new CredentialManager({directory:s.root,applicationId:'developer',protect:protector(),automaticAllowed:()=>true,isManualOpen:()=>false,createPage:async site=>fakePage(site,async()=>({status:'ready'}))});m.vault.save('hmp',account,true);m.runner.run=async(_site,_p,{signal})=>new Promise(resolve=>{release=()=>resolve({status:signal.aborted?'cancelled':'authenticated'});});const work=m.recover('hmp');await new Promise(resolve=>setImmediate(resolve));m.remove('hmp');release();await work;assert.equal(m.vault.has('hmp'),false);assert.equal(m.last.get('hmp').status,'cancelled');});

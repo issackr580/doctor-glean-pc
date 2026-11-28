@@ -39,7 +39,7 @@ export class CredentialManager{
    if(controller.signal.aborted)return result={status:'cancelled'};
    run.page=await this.createPage(site,controller.signal,{validation:kind==='save',partition:'credential-validation-'+randomUUID()});
    result=await work(run.page,controller.signal,()=>!controller.signal.aborted&&(!automatic||this.automaticAllowed(site)&&this.vault.enabled(site)));
-   if(!controller.signal.aborted&&!this.siteAvailable(site)&&result.status!=='authenticated')result={...result,status:'site_wait'};
+   if(!controller.signal.aborted&&!['authenticated','saved'].includes(result.status)&&!this.siteAvailable(site))result={...result,status:'site_wait'};
    if(kind==='recover'&&result.status==='authenticated')await run.page.flushSession?.();
   }catch(error){result={status:safeCredentialStatus(controller.signal.aborted?'cancelled':error.code??error.message)};}
   finally{run.page?.close();signal?.removeEventListener('abort',abort);if(this.active===run)this.active=null;this.last.set(site,{status:result.status,at:this.now(),kind,automatic,attempted:result.attempted===true,submitted:result.submitted===true,retryAt:this.attempts.retryAt(site,this.now(),{automatic}),...(result.detail==='input_format'?{detail:'input_format'}:{}),...(Array.isArray(result.trace)?{trace:result.trace}:{}),...(Number.isSafeInteger(result.reads)?{reads:result.reads,elapsedMs:result.elapsedMs}:{})});this.onChange();}
@@ -52,6 +52,7 @@ export class CredentialManager{
    return await this.#operation(site,'save',async(page,signal,allowed)=>{
     const result=await this.runner.run(site,page,{candidate,validation:true,signal,allowed});
     if(result.status!=='authenticated'||!result.submitted||!allowed())return result;
+    if(!this.siteAvailable(site))return {...result,status:'site_wait'};
     this.vault.save(site,candidate,automatic,this.now());this.attempts.reset(site);return {...result,status:'saved'};
    });
   }finally{candidate.id='';candidate.password='';candidate=null;}
