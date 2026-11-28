@@ -126,6 +126,7 @@ const buildState=()=>({
   sites:SITES.map(({id,name,loginUrl})=>({id,name,serverWait:siteWait?.status(id),open:[...manualOwners.values()].includes(id),loginEntry:!!loginUrl,session:effectiveSession(id),catalog:true,selected:catalog.selected().includes(id)})),
   collection:collector.snapshot(),results:catalog.view(validQueryDate(viewDate)?viewDate:kstDate()).results,
   doctorvilleApplications:doctorvilleApplicationOffers().map(({id,date,time,title})=>({id,date,time,title})),
+  doctorvilleApplicationsCheckedAt:doctorvilleOffersOwner===doctorvilleCatalogOwner()?doctorvilleApplicationsCheckedAt:0,
   pendingQueries:catalogQueue?.snapshot()??[],
   siteWaitUntrusted:!!siteWait&&!siteWait.clockTrusted(Date.now()),dataAccess:dataAccess.snapshot(),usage:resourceUse(),options:pcOptions?.snapshot(),credentials:credentials?.snapshot(),update:updater?.snapshot(),
   medigateCounterPage:medigateCountPages?.get(kstDate().slice(0,7)),automationAvailable:true,automation:automation?.snapshot(),registration:registrationState(),dailyTasks:DAILY_TASKS.map(({key,label,site})=>({key,label,site})),
@@ -330,6 +331,7 @@ let attendanceSelectionEpoch=0,catalogSelectionEpoch=0;
 const surveyContext=()=>[kstDate(),credentials?.vault.epoch('doctorville'),profileEpochs.get('doctorville')??0,state?.snapshot().epoch].join('/');
 function hardenSiteWindow(window,id){
   if(remoteWindows.has(window))return;
+  if(id==='doctorville')collector?.doctorvilleRefresh.invalidate();
   remoteWindows.add(window);manualOwners.set(window,id);notify();
   const contents=window.webContents;
   if(automaticEntrySite(id))watchManualEntry(window,id,{jobs:()=>automation?.store.entries()??[],surveyScope:url=>{
@@ -415,7 +417,7 @@ function openSurvey(key){
  const url=automation.survey.target(key);if(!url)return {ok:false};
  openSite('doctorville',false,{surveyKey:key,url});return {ok:true};
 }
-let doctorvilleNotices,doctorvilleOffers=[];
+let doctorvilleNotices,doctorvilleOffers=[],doctorvilleApplicationsCheckedAt=0;
 const doctorvilleCatalogOwner=()=>[credentials?.vault.epoch('doctorville'),profileEpochs.get('doctorville')??0].join('/');
 let doctorvilleOffersOwner;
 function doctorvilleApplicationOffers(){
@@ -430,9 +432,11 @@ function openDoctorvilleApplication(id){
  openSite('doctorville',false,{url:target.url});
  return {ok:true};
 }
-function notifyDoctorvilleApplications(row,observed){
+function notifyDoctorvilleApplications(row,observed,{reused=false,checkedAt=0}={}){
  if(row?.site!=='doctorville'||!catalog.selected().includes(row.site)||quitting)return;
+ if(reused)return;
  doctorvilleOffersOwner=doctorvilleCatalogOwner();
+ doctorvilleApplicationsCheckedAt=checkedAt;
  doctorvilleOffers=row.stale||!['ok','review'].includes(row.status)||!['list_read','list_unconfirmed'].includes(row.reason)?[]:doctorvilleApplicationTargets(observed);
  if(!doctorvilleOffers.length||!Notification.isSupported())return;
  try{
@@ -467,7 +471,7 @@ function registerIPC(channel,handler){
     catch(error){if(pcOptions?.failed){try{state.setPaused(true);automation?.cancel();notify();}catch{}}return {ok:false,reason:['invalid_selection','invalid_date','collection_busy','window_unavailable','data_blocked','site_wait'].includes(error.message)?error.message:'operation_unavailable'};}
   });
 }
-const remoteChannels=new Set('update-check update-install update-page collect collect-site daily quick-run survey-open doctorville-application credential-save credential-recover entry-preflight entry-preflight-upcoming registration-request open-site open-login finish-login'.split(' ').map(k=>'pc:'+k));
+const remoteChannels=new Set('update-check update-install update-page collect collect-site daily quick-run survey-open doctorville-application doctorville-applications-refresh credential-save credential-recover entry-preflight entry-preflight-upcoming registration-request open-site open-login finish-login'.split(' ').map(k=>'pc:'+k));
 function ipc(){
   registerIPC('pc:data-mode',mode=>{
    const before=dataAccess.allowed();
@@ -569,6 +573,13 @@ function ipc(){
   registerIPC('pc:entry-preflight-upcoming',()=>automation.preflightUpcoming());
   registerIPC('pc:registration-request',(source,key)=>registration.request(source,key));
   registerIPC('pc:doctorville-application',openDoctorvilleApplication);
+  registerIPC('pc:doctorville-applications-refresh',()=>{
+   if(!validQueryDate(viewDate)||!catalog.selected().includes('doctorville'))return {ok:false};
+   if(!siteWait.allowed('doctorville'))return {ok:false,reason:'site_wait'};
+   if([...manualOwners.values()].includes('doctorville'))return {ok:false,reason:'busy'};
+   catalogQueue.request(viewDate,['doctorville'],{joinRunning:true,fullDoctorvilleApplications:true});
+   return {ok:true};
+  });
   registerIPC('pc:quit',()=>{setImmediate(()=>app.quit());return {ok:true};});
   registerIPC('pc:open-site',id=>{
     if(!siteById(id))return {ok:false,reason:'invalid_site'};
@@ -634,7 +645,7 @@ else{
         prepareCollection:async(id,signal)=>{const admission=await credentials.prepareCollection(id,signal);if(id==='ckd')nativeCatalog.admitCkd(admission);},nativeRead:(...args)=>nativeCatalog.read(...args),
         recoverLogin:async(id,signal)=>(await credentials.recover(id,{automatic:true,signal})).status==='authenticated',onResult:notifyDoctorvilleApplications,
         isManualOpen:id=>[...manualOwners.values()].includes(id)||credentials.active?.site===id,onChange:snapshot=>{developerTools.observe(snapshot);notify();if(!snapshot.running)queueMicrotask(()=>catalogQueue?.pump());}});
-      catalogQueue=new CatalogQueue({context:id=>credentials.vault.epoch(id)+':'+(profileEpochs.get(id)??0),resultValid:(date,id)=>{const row=catalog.view(date).results[id];return row?.coverage===true&&!row.stale&&row.status==='ok';},start:async(date,ids,morningAt)=>{const run=collector.start(date,ids);if(collector.snapshot().running)automation?.catalogStarted(date,morningAt);await run;automation?.catalogFinished(date,ids,collector.snapshot(),morningAt);},busy:()=>!dataAccess.allowed()||updater.guarded||collector.sleeping||collector.snapshot().running||!!automation?.busy||credentials.busy,validDate:validQueryDate,onChange:notify});
+      catalogQueue=new CatalogQueue({context:id=>credentials.vault.epoch(id)+':'+(profileEpochs.get(id)??0),resultValid:(date,id)=>{const row=catalog.view(date).results[id];return row?.coverage===true&&!row.stale&&row.status==='ok';},start:async(date,ids,morningAt,options)=>{const run=collector.start(date,ids,options);if(collector.snapshot().running)automation?.catalogStarted(date,morningAt);await run;automation?.catalogFinished(date,ids,collector.snapshot(),morningAt);},busy:()=>!dataAccess.allowed()||updater.guarded||collector.sleeping||collector.snapshot().running||!!automation?.busy||credentials.busy,validDate:validQueryDate,onChange:notify});
       medigateCountPages=new MedigateCountPages(join(dataDirectory,'medigate-counter-pages-v1.json'));
       automation=new AutomationController({file:join(dataDirectory,'workflows-v1.json'),dataEnabledAt:()=>dataAccess.enabledAt??0,options:pcOptions,followupAllowed:()=>net.isOnline()&&siteWait.allowed('intermd')&&!credentials.busy&&![...manualOwners.values()].includes('intermd'),ledger:state,executionAllowed:()=>dataAccess.allowed()&&!updater.guarded,
        surveyAllowed:()=>net.isOnline()&&Notification.isSupported()&&!credentials.busy&&!registration?.active&&siteWait.allowed('doctorville'),surveyContext,notifySurvey,
@@ -649,7 +660,7 @@ else{
         const row=automation.store.day(date).morning;
         if(!queued&&morningAt&&row?.catalogRequestedAt===morningAt)automation.store.record(date,'morning',{...row,status:ids.length?'unknown':'none',reason:ids.length?'collection_in_progress_or_cached':'no_target'});
        },
-       yieldCatalog:()=>{const current=collector.snapshot();if(current.running){catalogQueue.request(current.date,collector.remainingSites());collector.cancel('entry_priority');}},
+       yieldCatalog:()=>{const current=collector.snapshot();if(current.running){catalogQueue.request(current.date,collector.remainingSites(),{fullDoctorvilleApplications:collector.fullDoctorvilleApplications});collector.cancel('entry_priority');}},
        onChange:()=>{notify();if(!automation?.busy)queueMicrotask(()=>catalogQueue?.pump());},onError:operationError});
       automation.daily.readDocpleAttendance=(date,signal,options)=>{
        if(!dataAccess.allowed()||updater.guarded||!net.isOnline())return {abandoned:true};

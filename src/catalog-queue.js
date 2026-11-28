@@ -3,16 +3,18 @@ export class CatalogQueue {
  constructor({start,busy,onChange=()=>{},context=()=>0,resultValid=()=>false,now=Date.now,validDate}){
   Object.assign(this,{start,busy,onChange,context,resultValid,now,validDate});this.running=new Map();this.recent=new Map();this.pending=new Map();this.generation=0;this.automaticGeneration=0;
  }
- request(date,ids,{automatic=false,morningAt,joinRunning=automatic}={}){
+ request(date,ids,{automatic=false,morningAt,joinRunning=automatic,fullDoctorvilleApplications=false}={}){
   if(this.disposed||!this.validDate(date))return false;
   let queued=false;
   for(const id of ids){
    const scope=this.context(id),current=this.running.get(id),cached=this.recent.get(id),age=this.now()-(cached?.at??0);
-   const runningSame=current?.date===date&&current.scope===scope;
-   const freshAutomatic=automatic&&cached?.date===date&&cached.scope===scope&&age>=0&&age<60000&&this.resultValid(date,id);
+   const full=id==='doctorville'&&fullDoctorvilleApplications;
+   const runningSame=current?.date===date&&current.scope===scope&&(!full||current.fullDoctorvilleApplications);
+   const freshAutomatic=!full&&automatic&&cached?.date===date&&cached.scope===scope&&age>=0&&age<60000&&this.resultValid(date,id);
    if(joinRunning&&runningSame||freshAutomatic)continue;
    queued=true;const old=this.pending.get(id);
-   this.pending.set(id,{date,scope,morningAt:morningAt??(old?.date===date?old.morningAt:undefined),retried:false,automatic:automatic&&!(old?.date===date&&!old.automatic)});
+   this.pending.set(id,{date,scope,morningAt:morningAt??(old?.date===date?old.morningAt:undefined),retried:false,
+    automatic:automatic&&!(old?.date===date&&!old.automatic),fullDoctorvilleApplications:full||old?.date===date&&old.scope===scope&&old.fullDoctorvilleApplications===true});
   }
   this.onChange();this.pump();return queued;
  }
@@ -26,7 +28,8 @@ export class CatalogQueue {
   this.onChange();
   const launch=async()=>{
    try{
-    const result=await this.start(date,batch.map(([id])=>id),batch.find(([,item])=>item.morningAt)?.[1].morningAt);
+    const result=await this.start(date,batch.map(([id])=>id),batch.find(([,item])=>item.morningAt)?.[1].morningAt,
+     {fullDoctorvilleApplications:batch.some(([,item])=>item.fullDoctorvilleApplications)});
     if(result===false)throw Error('collection_busy');
     if(generation===this.generation)for(const [id,item] of batch)if(item.scope===this.context(id)&&this.resultValid(date,id))this.recent.set(id,{date,scope:item.scope,at:this.now()});
    }catch(error){

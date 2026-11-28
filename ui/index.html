@@ -46,14 +46,18 @@
         </div>
       </div>
       <p id="progress" role="status" aria-live="polite"></p>
-      <details id="doctorville-applications" class="control" hidden>
-        <summary id="doctorville-applications-title">닥터빌 사전 신청</summary>
-        <div id="doctorville-application-list"></div>
-      </details>
       <section class="agenda-card" aria-labelledby="schedule-title">
         <div class="agenda-columns" aria-hidden="true"><span>시작</span><span>강의</span><span>사이트</span></div>
         <div id="lectures"></div>
       </section>
+      <details id="doctorville-applications" class="control" hidden>
+        <summary id="doctorville-applications-title">닥터빌 사전 신청</summary>
+        <div class="query-controls">
+          <button id="doctorville-applications-refresh" type="button">닥터빌 사전 신청 전체 확인</button>
+          <span id="doctorville-applications-checked" class="muted"></span>
+        </div>
+        <div id="doctorville-application-list"></div>
+      </details>
     </section>
     <section id="panel-automation" role="tabpanel" aria-labelledby="tab-automation" class="app-panel" hidden>
       <div class="section-heading panel-heading"><h2 class="panel-title">자동 실행</h2>

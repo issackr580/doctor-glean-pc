@@ -233,8 +233,10 @@ try{
   layout.rows.every(row=>row.top>0&&row.bottom<layout.height)&&layout.rows[0].top<layout.height/2);
  control.setContentSize(600,500);
  await pause(150);
- check('minimum viewport has no horizontal overflow and keeps a lecture in view',await evaluate(`
-  document.documentElement.scrollWidth===innerWidth && document.querySelector('.agenda-row').getBoundingClientRect().bottom<innerHeight`));
+ const narrow=await evaluate(`({width:document.documentElement.clientWidth, contentWidth:document.documentElement.scrollWidth, height:innerHeight,
+  firstLectureBottom:document.querySelector('#lectures .agenda-row').getBoundingClientRect().bottom})`);
+ check('minimum viewport has no horizontal overflow and keeps a lecture in view '+JSON.stringify(narrow),
+  narrow.contentWidth===narrow.width&&narrow.firstLectureBottom<narrow.height);
  control.setContentSize(780,760);
  await evaluate(`window.doctorGlean.setDate(${JSON.stringify(tomorrow)})`);
  await until(()=>evaluate(`document.querySelector('#schedule-title').textContent==='선택일 강의'`));
@@ -336,15 +338,25 @@ try{
  modes.doctorville='application-catalog';
  await evaluate('window.doctorGlean.setDate('+JSON.stringify(today)+')');
  const listReadStart=requests.length,noticeStart=applicationNotices.length;
+ let applicationsCheckedAt=0;
  for(let round=0;round<2;round++){
   const before=(await state()).results.doctorville?.checkedAt??0;
   await evaluate('window.doctorGlean.collectSite("doctorville")');
   await until(async()=>{const s=await state();return !s.collection.running&&s.results.doctorville?.checkedAt>before;});
+  if(round===0)applicationsCheckedAt=(await state()).doctorvilleApplicationsCheckedAt;
  }
  const doctorvilleReads=requests.slice(listReadStart).filter(r=>r.site==='doctorville');
- check('Doctorville follows original catalog pagination and alerts once for the upcoming unregistered card only',applicationNotices.length===noticeStart+1&&
-  doctorvilleReads.length===4&&doctorvilleReads.filter(r=>r.page==='2').length===2&&doctorvilleReads.every(r=>r.method==='GET'&&r.path==='/seminar/main')&&
-  JSON.stringify((await state()).doctorvilleApplications.map(e=>[e.id,e.date]))===JSON.stringify([['91',later]]));
+ const reusedApplications=await state();
+ check('Doctorville checks both pages initially and only the first on an unchanged second read',doctorvilleReads.length===3&&
+  doctorvilleReads.filter(r=>r.page==='2').length===1&&doctorvilleReads.every(r=>r.method==='GET'&&r.path==='/seminar/main'));
+ check('Doctorville first-page reuse keeps the selected-day scope and prior notification inventory',applicationsCheckedAt>0&&
+  reusedApplications.results.doctorville.scope==='date_range_checked'&&reusedApplications.results.doctorville.events.length===1&&
+  reusedApplications.doctorvilleApplicationsCheckedAt===applicationsCheckedAt&&applicationNotices.length===noticeStart+1&&
+  JSON.stringify(reusedApplications.doctorvilleApplications.map(e=>[e.id,e.date]))===JSON.stringify([['91',later]]));
+ const forcedBefore=requests.length;
+ await evaluate('document.getElementById("doctorville-applications").open=true;document.getElementById("doctorville-applications-refresh").click()');
+ await until(async()=>{const s=await state();return !s.collection.running&&s.doctorvilleApplicationsCheckedAt>applicationsCheckedAt;});
+ check('Doctorville explicit refresh visits the next page without resending a notification',requests.slice(forcedBefore).filter(r=>r.site==='doctorville').map(r=>r.page).join(',')===',2'&&applicationNotices.length===noticeStart+1);
  const apply='document.querySelector("#doctorville-application-list button")';
  await until(()=>evaluate('!!('+apply+')'));
  check('Doctorville application rejects renderer-provided URLs without loading either site',!(await evaluate('window.doctorGlean.openDoctorvilleApplication("https://invalid.example/")')).ok);

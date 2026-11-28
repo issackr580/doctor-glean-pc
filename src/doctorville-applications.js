@@ -2,8 +2,10 @@ import {atomicJson,readJson} from './atomic-json.js';
 import {doctorvilleDetailNavigation} from './automation-policy.js';
 import {officialIdentity} from './entry-identity.js';
 import {kstDate,kstInstant} from './schedule.js';
+import {createHash} from 'node:crypto';
 
 const list='https://www.doctorville.co.kr/seminar/main';
+const fullRefreshInterval=3*60*60*1000;
 
 // Serialized with the original reader. Its date, title and time must come from
 // the same parsed row as the observed original detail link.
@@ -91,6 +93,10 @@ function doctorvilleCatalogStep(profile,date,previous,catalogStep,collectPage,in
  }
  const marker=JSON.stringify([location.href,result.state.signature,signature]);
  if(result.state.visited.includes(marker))return result;
+ if(result.state.listPageChecked&&applicationRows.length===result.diagnostics.rows){
+  result.applicationContinuation=JSON.stringify([action.kind,action.url??action.selector,signature,
+   ...pagers.map(pager=>text(pager))]);
+ }
  result.state.pcDoctorvilleIncomplete||=!result.state.listPageChecked;
  result.state.visited.push(marker);result.state.expansions++;result.state.scrolls=0;
  result.state.pending={at:Date.now(),before:result.state.signature,reason:'다음 목록 페이지',scopeConfirmed:true};
@@ -116,6 +122,72 @@ export function doctorvilleApplicationTargets(rows,now=Date.now()){
  const today=kstDate(now);
  return [...observed.values()].filter(event=>event?.registrationStatus==='not_registered'&&event.date>today)
   .sort((a,b)=>a.start-b.start||a.title.localeCompare(b.title));
+}
+
+function catalogRows(rows){
+ if(!Array.isArray(rows)||!rows.length||rows.length>500)return null;
+ const parsed=[];
+ for(const row of rows){
+  const id=officialIdentity(row)?.id;
+  if(row?.site!=='doctorville'||!id||!doctorvilleDetailNavigation(list,row.url)||typeof row.title!=='string'||!row.title.trim()||
+     row.title.length>250||!['registered','not_registered','closed','unknown'].includes(row.registrationStatus))return null;
+  try{kstInstant(row.date,row.time);}catch{return null;}
+  parsed.push([row.date,row.time,id,row.title,row.registrationStatus]);
+ }
+ return parsed;
+}
+
+export function doctorvilleApplicationPageSignature(rows,continuation){
+ const parsed=catalogRows(rows);
+ if(!parsed||typeof continuation!=='string'||!continuation||continuation.length>4096)return null;
+ return createHash('sha256').update(JSON.stringify([continuation,parsed])).digest('hex');
+}
+
+// Learn the date boundary only from an exhausted list, including every page.
+// A load-more page can repeat existing rows. Check the order of newly seen rows.
+function doctorvillePageOrder(pages){
+ if(pages.length<2||pages.length>9)return null;
+ const seen=new Map(),boundaries=[];let lastDay='',direction=0;
+ for(const rows of pages){
+  const parsed=catalogRows(rows);
+  if(!parsed)return null;
+  let newRows=0;
+  for(const row of parsed){
+   const [day,,id]=row,signature=JSON.stringify(row);
+   if(seen.has(id)){if(seen.get(id)!==signature)return null;continue;}
+   if(lastDay&&day!==lastDay){
+    const change=day>lastDay?1:-1;
+    if(direction&&change!==direction)return null;
+    direction=change;
+   }
+   seen.set(id,signature);lastDay=day;newRows++;
+  }
+  if(!newRows)return null;
+  boundaries.push(lastDay);
+ }
+ return direction?{direction,boundaries}:null;
+}
+
+export class DoctorvilleApplicationRefresh{
+ invalidate(){this.last=null;}
+ #previous(owner,now){
+  const previous=this.last;
+  return previous?.owner===owner&&kstDate(previous.at)===kstDate(now)&&now>=previous.at?previous:null;
+ }
+ reuse({owner,now,date,signatures,forced}){
+  const previous=this.#previous(owner,now);
+  if(forced||!previous?.order||now-previous.at>=fullRefreshInterval)return '';
+  const {direction,boundaries}=previous.order,boundary=boundaries[signatures.length-1];
+  if(!boundary||!signatures.every((value,index)=>!!value&&value===previous.signatures[index]))return '';
+  if(direction===1&&date<boundary)return 'after_target_date';
+  if(direction===-1&&date>boundary)return 'past_target_date';
+  return '';
+ }
+ finish({owner,now,signatures,pages,complete}){
+  if(!complete){this.invalidate();return 0;}
+  this.last={owner,at:now,signatures,order:doctorvillePageOrder(pages)};
+  return now;
+ }
 }
 
 export class DoctorvilleApplicationNotices{

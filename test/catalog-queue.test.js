@@ -47,3 +47,20 @@ test('same-date manual refresh shares the running site but an interrupted site c
  release();await new Promise(resolve=>setImmediate(resolve));queue.pump();queue.close();
  assert.deepEqual(calls,[['docple','keymedi'],['keymedi']]);
 });
+
+test('a queued explicit Doctorville sweep survives a normal refresh and collapses duplicate requests',async()=>{
+ let release;
+ const calls=[];
+ const queue=new CatalogQueue({busy:()=>false,validDate:()=>true,start:async(_date,_sites,_,options)=>{
+  calls.push(options.fullDoctorvilleApplications);
+  await new Promise(resolve=>{release=resolve;});
+ }});
+ const date='2026-11-24';
+ queue.request(date,['doctorville'],{joinRunning:true});
+ queue.request(date,['doctorville'],{fullDoctorvilleApplications:true,joinRunning:true});
+ assert.equal(queue.request(date,['doctorville'],{joinRunning:true}),false);
+ release();await new Promise(resolve=>setImmediate(resolve));queue.pump();
+ assert.equal(queue.request(date,['doctorville'],{fullDoctorvilleApplications:true,joinRunning:true}),false);
+ release();await new Promise(resolve=>setImmediate(resolve));queue.close();
+ assert.deepEqual(calls,[false,true]);
+});

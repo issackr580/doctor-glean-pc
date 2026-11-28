@@ -47,10 +47,16 @@ function setupNavigation(){
  }
 }
 const dateLabel=new Intl.DateTimeFormat('ko-KR',{month:'long',day:'numeric',weekday:'long',timeZone:'UTC'});
-function renderDoctorvilleApplications(targets){
+const applicationCheckTime=new Intl.DateTimeFormat('ko-KR',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Seoul'});
+function renderDoctorvilleApplications(state){
+ const targets=state.doctorvilleApplications??[],checkedAt=state.doctorvilleApplicationsCheckedAt;
  const panel=document.getElementById('doctorville-applications');
- panel.hidden=!targets.length;
- document.getElementById('doctorville-applications-title').textContent='닥터빌 사전 신청 '+targets.length+'개';
+ panel.hidden=!state.sites.some(site=>site.id==='doctorville'&&site.selected);
+ document.getElementById('doctorville-applications-title').textContent='닥터빌 사전 신청'+(targets.length?' '+targets.length+'개':'');
+ document.getElementById('doctorville-applications-checked').textContent=checkedAt?'전체 확인 '+applicationCheckTime.format(checkedAt):'';
+ const refresh=document.getElementById('doctorville-applications-refresh');
+ refresh.disabled=state.collection.running&&state.collection.site==='doctorville'||state.pendingQueries?.some(job=>job.site==='doctorville');
+ refresh.onclick=()=>perform(()=>api.refreshDoctorvilleApplications(),'닥터빌 사전 신청 목록의 전체 확인을 요청했어요.');
  document.getElementById('doctorville-application-list').replaceChildren(...targets.map(event=>{
   const row=node('article',undefined,'agenda-row');
   row.append(node('p',dateLabel.format(new Date(event.date+'T00:00:00Z'))+' '+event.time+' · '+event.title,'lecture-title'));
@@ -171,7 +177,7 @@ async function refresh(){
   });document.getElementById('sites').replaceChildren(...rows);
   const selected=state.sites.filter(site=>site.selected),events=selected.flatMap(site=>(state.results[site.id]?.events??[]).map(event=>({...event,siteName:site.name,stale:state.results[site.id].stale}))).sort((a,b)=>a.time.localeCompare(b.time)||a.siteName.localeCompare(b.siteName));
   renderAgenda(state,events);
-  renderDoctorvilleApplications(state.doctorvilleApplications??[]);
+  renderDoctorvilleApplications(state);
   const progress=document.getElementById('progress');
   progress.textContent=state.collection.running?`조회 ${state.collection.completed}/${state.collection.total} · ${state.sites.find(site=>site.id===state.collection.site)?.name??''}`:state.collection.reason==='finished'?'조회 종료 · '+collectionSummary(state.results,selected.map(site=>site.id)):reasonLabels[state.collection.reason]??'';
   if(state.pendingQueries?.length)progress.textContent+=' · 로그인 후 조회 대기 '+state.pendingQueries.length+'곳';
