@@ -67,6 +67,43 @@ test('an update check and install are single-flight and cannot dispatch without 
 test('active lectures or accounts defer installation while keeping the downloaded patch ready',async t=>{
   const s=syntheticUpdate(t);let busy=true,downloads=0,launches=0,quits=0;const updater=manager(s,{fetch:async()=>{downloads++;return response(s.bytes);},isBusy:()=>busy,launchHelper:async()=>{launches++;},quit:()=>quits++});await updater.check();assert.equal((await updater.install()).status,'ready_busy');assert.equal(launches,0);assert.equal(updater.guarded,false);busy=false;await updater.install();assert.equal(downloads,1);assert.equal(launches,1);assert.equal(quits,1);assert.equal(updater.guarded,true);
 });
+test('developer ZIP selection can use the checked target after a GitHub failure and defer the restart',async t=>{
+  const s=syntheticUpdate(t,{edition:'developer'}),file=join(s.root,'official-patch.zip');
+  writeFileSync(file,s.bytes);
+  let busy=true,reads=0,downloads=0,launches=0,quits=0;
+  const signed=signedSyntheticFeed(s.feed),updater=manager(s,{
+    readFeed:async()=>{reads++;return verifyUpdateFeed(signed.bytes,{publicKey:signed.publicKey});},
+    privateDownload:async()=>{downloads++;throw Error('update_private');},isBusy:()=>busy,
+    launchHelper:async()=>launches++,quit:()=>quits++,
+  });
+  await updater.check();
+  assert.equal((await updater.install()).reason,'update_private');
+  assert.equal(updater.snapshot().page,s.target.page);
+  assert.equal((await updater.installSelectedPatch(async target=>{assert.deepEqual(target,s.target);return file;})).status,'ready_busy');
+  assert.equal(launches,0);
+  busy=false;
+  assert.equal((await updater.install()).status,'installing');
+  assert.deepEqual([reads,downloads,launches,quits],[1,1,1,1]);
+});
+test('local selection requests verified metadata first and refuses changed, cancelled or unreadable ZIP files',async t=>{
+  const s=syntheticUpdate(t,{edition:'developer'}),file=join(s.root,'candidate.zip'),link=join(s.root,'linked.zip');
+  let reads=0,chosen=0;
+  const updater=manager(s,{readFeed:async()=>{reads++;return s.feed;},privateDownload:async()=>assert.fail('ZIP path opened GitHub'),launchHelper:async()=>assert.fail('invalid patch installed')});
+  const choose=path=>async()=>{chosen++;return path;};
+  const tampered=Buffer.from(s.bytes);tampered[25]^=1;writeFileSync(file,tampered);
+  assert.equal((await updater.installSelectedPatch(choose(file))).reason,'update_hash');
+  writeFileSync(file,Buffer.concat([s.bytes,Buffer.from('extra')]));
+  assert.equal((await updater.installSelectedPatch(choose(file))).reason,'update_size');
+  symlinkSync(file,link);
+  assert.equal((await updater.installSelectedPatch(choose(link))).reason,'update_file');
+  assert.equal((await updater.installSelectedPatch(choose())).reason,'update_cancelled');
+  assert.deepEqual([reads,chosen],[1,4]);
+  const bad=manager(s,{readFeed:async()=>{throw Error('update_signature');}});
+  assert.equal((await bad.installSelectedPatch(choose(file))).reason,'update_signature');
+  const distribution=manager(syntheticUpdate(t));
+  assert.equal((await distribution.installSelectedPatch(choose(file))).status,'idle');
+  assert.equal(chosen,4);
+});
 test('failed helper launch leaves the old app and user records untouched and releases the execution guard',async t=>{
   const s=syntheticUpdate(t),updater=manager(s,{launchHelper:async()=>{throw Error('update_boot');},quit:()=>assert.fail('must not quit')});await updater.check();assert.equal((await updater.install()).reason,'update_boot');assert.equal(updater.guarded,false);assert.equal(readFileSync(join(s.context.appPath,'src/main.js'),'utf8'),'old application');assert.equal(readFileSync(join(s.data,'state-v1.json'),'utf8'),'synthetic reservation and attempt sentinel');
 });

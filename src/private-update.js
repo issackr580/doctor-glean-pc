@@ -1,2 +1,2 @@
 // The packager replaces this source-development bridge with one edition.
-export {downloadPrivateUpdate} from '../editions/developer/update-download.js';
+export {downloadPrivateUpdate,registerPrivateUpdateInstaller} from '../editions/developer/update-download.js';

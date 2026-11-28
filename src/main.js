@@ -41,7 +41,7 @@ import {credentialPageState} from './credential-page-state.js';
 import {manualLoadRecovery} from './site-load-policy.js';
 import {RuntimeFaults,faultNotice} from './runtime-faults.js';
 import {PcUpdater} from './update-manager.js';
-import {downloadPrivateUpdate} from './private-update.js';
+import {downloadPrivateUpdate,registerPrivateUpdateInstaller} from './private-update.js';
 import {electronPatchDownload} from './update-electron-download.js';
 import {RegistrationController,RegistrationStore,registrationKey} from './registration.js';
 import {pcEntryPage,pcEntrySource} from './entry-page.js';
@@ -494,9 +494,10 @@ function ipc(){
   });
   registerIPC('pc:update-check',()=>updater.check());
   registerIPC('pc:update-install',()=>updater.install());
+  if(EDITION.developer)registerPrivateUpdateInstaller({register:registerIPC,updater,owner:()=>control,allowed:()=>dataAccess.allowed()});
   registerIPC('pc:update-ready',()=>{updater.acknowledgeBoot().catch(()=>{});return {ok:true};});
   registerIPC('pc:update-page',async()=>{
-   const result=updater.snapshot();if(!['available','full_required'].includes(result.status))return {ok:false};
+   const result=updater.snapshot();if(!result.canInstall&&result.status!=='full_required')return {ok:false};
    const page=result.page;
    if(!/^https:\/\/github\.com\/issackr580\/doctor-glean-pc\/releases\/tag\/(?:pc-v\d+\.\d+\.\d+(?:-preview\.\d+)?|untagged-[a-zA-Z0-9-]{1,80}|pc-developer-v\d+\.\d+\.\d+(?:-preview\.\d+)?)$/.test(page))return {ok:false};
    await shell.openExternal(page);return {ok:true};
@@ -614,7 +615,7 @@ else{
       configureUsage(join(dataDirectory,'usage-v1.json'),VERSION);siteWait=new SiteWait(join(dataDirectory,'site-wait-v1.json'));
       state=new LocalState(join(app.getPath('userData'),'state-v1.json'));
       updater=new PcUpdater({context:{appPath:app.getAppPath(),executable:process.execPath,edition:EDITION.id,currentVersion:VERSION,electronVersion:process.versions.electron,platform:process.platform,arch:process.arch,channel:VERSION.includes('-preview.')?'preview':'stable'},
-       fetch:(url,options)=>{dataAccess.require();return net.fetch(url,{...options,signal:AbortSignal.any([options.signal,dataAccess.controller.signal])});},publicDownload:(target,progress)=>{dataAccess.require();return electronPatchDownload(target,progress,dataAccess.controller.signal);},privateDownload:(target,progress)=>{dataAccess.require();return downloadPrivateUpdate(target,progress,{parent:control});},
+       fetch:(url,options)=>{dataAccess.require();return net.fetch(url,{...options,signal:AbortSignal.any([options.signal,dataAccess.controller.signal])});},publicDownload:(target,progress)=>{dataAccess.require();return electronPatchDownload(target,progress,dataAccess.controller.signal);},privateDownload:(target,progress,onLogin)=>{dataAccess.require();return downloadPrivateUpdate(target,progress,{parent:control,onLogin,signal:dataAccess.controller.signal});},
        isBusy:()=>!dataAccess.allowed()||!!automation?.busy||!!automation?.entry.medigateWatch||!!credentials?.busy||!!registration?.active||!!collector?.snapshot().running||manualOwners.size>0||remoteWindows.size>0||!state.snapshot().paused&&automation?.store.features().entry&&!!automation?.store.entries().some(job=>job.status==='reserved'&&job.deadline>=Date.now()&&(job.nextAt??job.due)<=Date.now()+120000),
        onChange:()=>{notify();if(!updater?.guarded){catalogQueue?.pump();automation?.tick();}},quit:()=>app.quit()});
       if(updater.waitForHelper){app.quit();return;}

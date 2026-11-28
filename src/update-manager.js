@@ -4,10 +4,10 @@ import {randomBytes} from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {fetchUpdateFeed,downloadUpdate} from './update-download.js';
 import {chooseSignedUpdate} from './update-trust.js';
-import {validatePatch,validateInstallation,writeStagedApp,updateInventory} from './update-package.js';
+import {readSelectedPatch,validatePatch,validateInstallation,writeStagedApp,updateInventory} from './update-package.js';
 import helper from './update-helper.cjs';
 
-const failure=error=>['update_signature','update_hash','update_runtime','update_installation','update_path','update_package','update_size','update_private','update_cancelled','update_busy','update_boot','update_permission'].includes(error?.message)?error.message:'update_network';
+const failure=error=>['data_blocked','update_signature','update_hash','update_runtime','update_installation','update_path','update_package','update_size','update_file','update_private','update_cancelled','update_busy','update_boot','update_permission'].includes(error?.message)?error.message:'update_network';
 export function pendingUpdate(appPath,version,edition){
   const resources=dirname(resolve(appPath)),pointer=join(resources,'.doctor-glean-update.json');
   try{
@@ -31,7 +31,7 @@ export class PcUpdater{
     else if(this.boot?.plan.phase==='rolled_back')this.state={status:'rolled_back'};
   }
   get guarded(){return this.installing||this.bootPending;}
-  snapshot(){return {...this.state};}
+  snapshot(){return {...this.state,...(this.target?{page:this.target.page,signatureVerified:true,canInstall:true}:{})};}
   set(value){this.state=value;this.onChange();return this.snapshot();}
   supported(){const c=this.context;return c.platform==='win32'&&c.arch==='x64'&&resolve(c.appPath)===join(dirname(c.executable),'resources','app')&&dirname(c.executable)===resolve(dirname(c.executable));}
   check(){
@@ -51,15 +51,39 @@ export class PcUpdater{
     if(this.operation)return this.operation;
     this.operation=this.#install().finally(()=>{this.operation=null;});return this.operation;
   }
-  async #install(){
+  installSelectedPatch(chooseFile){
+    if(this.context.edition!=='developer'||typeof chooseFile!=='function'||!this.supported())return this.snapshot();
+    if(this.operation||this.guarded||this.ready)return this.snapshot();
+    this.operation=this.#installSelectedPatch(chooseFile).finally(()=>{this.operation=null;});
+    return this.operation;
+  }
+  async #installSelectedPatch(chooseFile){
+    if(!this.target){
+      const result=await this.#check();
+      if(result.status!=='available')return result;
+    }
+    return this.#install(async target=>{
+      this.set({status:'choosing_file',version:target.version});
+      const path=await chooseFile(target);
+      if(!path)throw Error('update_cancelled');
+      this.set({status:'verifying',version:target.version});
+      return readSelectedPatch(path,target.patch.size);
+    });
+  }
+  async #install(localPatch){
     if(this.guarded)return this.snapshot();
     if(!this.supported()||!this.target)return this.set({status:'failed',reason:'update_installation'});
     const target=this.target;
     try{
       if(!this.ready){
-        this.set({status:target.edition==='developer'?'github_login':'downloading',version:target.version,received:0,total:target.patch.size});
-        const progress=(received,total)=>this.set({status:'downloading',version:target.version,received,total});
-        const bytes=target.edition==='developer'?await this.privateDownload(target,progress):await (this.publicDownload??((row,report)=>downloadUpdate(this.fetch,row,report)))(target,progress);
+        let bytes;
+        if(localPatch)bytes=await localPatch(target);
+        else{
+          this.set({status:target.edition==='developer'?'github_connect':'downloading',version:target.version,received:0,total:target.patch.size});
+          const progress=(received,total)=>this.set({status:'downloading',version:target.version,received,total});
+          const login=()=>this.set({status:'github_login',version:target.version});
+          bytes=target.edition==='developer'?await this.privateDownload(target,progress,login):await (this.publicDownload??((row,report)=>downloadUpdate(this.fetch,row,report)))(target,progress);
+        }
         this.set({status:'verifying',version:target.version});
         this.ready=validatePatch(bytes,target,this.context);
       }

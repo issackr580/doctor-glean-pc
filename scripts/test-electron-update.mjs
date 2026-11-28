@@ -1,5 +1,5 @@
 // Real Chromium GitHub-login/download boundaries; synthetic HTTPS only.
-import {app,session,net} from 'electron';
+import {app,dialog,session,net} from 'electron';
 import {mkdtempSync,rmSync,readFileSync,writeFileSync} from 'node:fs';
 import {join,dirname} from 'node:path';
 import {tmpdir} from 'node:os';
@@ -10,7 +10,7 @@ import {PcUpdater} from '../src/update-manager.js';
 import {fetchUpdateFeed,downloadUpdate} from '../src/update-download.js';
 import {validatePatch} from '../src/update-package.js';
 import {electronPatchDownload} from '../src/update-electron-download.js';
-import {downloadPrivateUpdate,githubUpdateNavigation,privateUpdateDownloadUrls} from '../editions/developer/update-download.js';
+import {downloadPrivateUpdate,githubUpdateNavigation,privateUpdateDownloadUrls,registerPrivateUpdateInstaller} from '../editions/developer/update-download.js';
 import {syntheticUpdate,signedSyntheticFeed} from '../test/update-fixtures.js';
 const root=mkdtempSync(join(tmpdir(),'pc-update-electron-')),roots=[root],checks=[],check=(name,value)=>{assert.ok(value,name);checks.push(name);};
 app.setPath('userData',root);app.setPath('sessionData',join(root,'browser'));app.on('window-all-closed',()=>{});
@@ -47,32 +47,57 @@ async function run(){
   check('helper does not replace the app while its parent is alive',readFileSync(join(current.context.appPath,'src/main.js'),'utf8')==='old application');child.kill();
   await new Promise(resolve=>child.once('exit',resolve));
 
-  for(const mode of ['valid','cancel','size','no_permission']){
-    const s=fixture('developer'),profile=session.fromPartition('update-synthetic-'+randomUUID());let pageReads=0,downloadReads=0,foreignReads=0,created,bridgeSafe=false;
+  for(const mode of ['warm','valid','cancel','size','no_permission']){
+    const s=fixture('developer'),profile=session.fromPartition('update-synthetic-'+randomUUID());
+    let pageReads=0,loginReads=0,downloadReads=0,foreignReads=0,created,bridgeSafe=false,prompts=0;
     await profile.protocol.handle('https',request=>{
       const url=new URL(request.url);
       if(url.hostname==='foreign.invalid'){foreignReads++;return html('blocked');}
-      if(url.pathname==='/login')return html(`<h1>Synthetic GitHub login</h1><script>setTimeout(()=>location.href='https://foreign.invalid/',80);setTimeout(()=>location.href=${JSON.stringify(s.target.page)},250)</script>`);
-      if(request.url===s.target.page){pageReads++;return html(mode==='no_permission'?'<title>Page not found · GitHub</title>':'<h1>Synthetic private Draft</h1>');}
+      if(url.pathname==='/login'){loginReads++;return html(`<h1>Synthetic GitHub login</h1><script>setTimeout(()=>location.href='https://foreign.invalid/',80);setTimeout(()=>location.href=${JSON.stringify(s.target.page)},250)</script>`);}
+      if(request.url===s.target.page){
+        pageReads++;
+        if((mode!=='warm'&&!loginReads)||mode==='no_permission')return new Response('<title>Page not found · GitHub</title>',{status:404,headers:{'content-type':'text/html'}});
+        return html('<h1>Synthetic private Draft</h1>');
+      }
       if(request.url===s.target.patch.url){downloadReads++;return new Response(s.bytes,{headers:{'content-type':'application/octet-stream','content-disposition':'attachment; filename="'+s.target.patch.name+'"','content-length':String(s.bytes.length+(mode==='size'?1:0))}});}
       return new Response('',{status:404});
     });
-    const capture=(_event,window)=>{created=window;window.webContents.once('did-finish-load',async()=>{
+    const capture=(_event,window)=>{created=window;window.webContents.on('did-finish-load',async()=>{
+      if(window.isDestroyed())return;
+      const onLoginPage=new URL(window.webContents.getURL()).pathname==='/login';
       const p=window.webContents.getLastWebPreferences();bridgeSafe=p.nodeIntegration===false&&p.contextIsolation===true&&p.sandbox===true&&p.webSecurity===true&&!p.preload&&await window.webContents.executeJavaScript('typeof require+":"+typeof window.doctorGlean')==='undefined:undefined';
-      if(mode==='cancel')window.close();
+      if(mode==='cancel'&&onLoginPage&&!window.isDestroyed())window.close();
     });};app.once('browser-window-created',capture);
-    let error,bytes;try{bytes=await downloadPrivateUpdate(s.target,()=>{},{profile,timeout:5000});}catch(e){error=e;}
+    let error,bytes;try{bytes=await downloadPrivateUpdate(s.target,()=>{},{profile,timeout:5000,onLogin:()=>prompts++});}catch(e){error=e;}
     check('private GitHub '+mode+' window has no Node, control preload or management bridge',bridgeSafe);
     check('private GitHub '+mode+' does not navigate to an unreviewed external origin',foreignReads===0);
     if(mode==='valid'){
-      check('private login reaches only the signed Draft then automatically downloads its exact asset',pageReads===1&&downloadReads===1&&bytes.equals(s.bytes));
+      check('private login reaches only the signed Draft then automatically downloads its exact asset',pageReads===2&&loginReads===1&&prompts===1&&downloadReads===1&&bytes?.equals(s.bytes));
       check('private download closes only its dedicated window after completion',created.isDestroyed());
+    }else if(mode==='warm'){
+      check('an already signed-in session downloads the official asset without showing a login window',pageReads===1&&loginReads===0&&prompts===0&&downloadReads===1&&bytes?.equals(s.bytes));
     }else check('private GitHub '+mode+' leaves installation to the verifier or reports cancellation',mode==='cancel'?error?.message==='update_cancelled'&&downloadReads===0:mode==='no_permission'?error?.message==='update_private'&&downloadReads===0:!!error&&bytes===undefined);
     profile.protocol.unhandle('https');
   }
   check('GitHub update navigation rejects userinfo, http and foreign hosts',['http://github.com/','https://foreign.invalid/','https://user:pass@github.com/'].every(url=>!githubUpdateNavigation(url)));
   const s=fixture('developer');
   check('private downloads reject other assets and unrelated redirect chains',!privateUpdateDownloadUrls([s.target.patch.url+'?different'],s.target)&&!privateUpdateDownloadUrls([s.target.patch.url,'https://foreign.invalid/'],s.target));
+  const local=join(s.root,s.target.patch.name);writeFileSync(local,s.bytes);
+  let choose,dialogs=0,approved=true,localLaunches=0;
+  const localUpdater=new PcUpdater({context:s.context,readFeed:async()=>s.feed,privateDownload:async()=>assert.fail('selected ZIP triggered a draft download'),
+    launchHelper:async()=>localLaunches++});
+  const originalChooser=dialog.showOpenDialog;
+  try{
+    dialog.showOpenDialog=async (_window,options)=>{
+      dialogs++;
+      assert.equal(options.defaultPath.endsWith(s.target.patch.name),true);
+      return {canceled:false,filePaths:[local]};
+    };
+    registerPrivateUpdateInstaller({register:(channel,handler)=>{assert.equal(channel,'pc-dev:install-update-zip');choose=handler;},updater:localUpdater,owner:()=>undefined,allowed:()=>approved});
+    approved=false;check('app data rules block the installer before opening the native chooser',(await choose()).reason==='data_blocked'&&dialogs===0);
+    approved=true;check('the developer chooser uses only the native dialog result and the signed patch target',
+      (await choose('untrusted renderer path')).status==='installing'&&dialogs===1&&localLaunches===1);
+  }finally{dialog.showOpenDialog=originalChooser;}
   const report={checks:checks.length,names:checks,runtime:{electron:process.versions.electron,platform:process.platform},windowsExecuted:false,authenticatedGitHubVerified:false};
   writeFileSync(new URL('../verification/electron-update.json',import.meta.url),JSON.stringify(report,null,2)+'\n');console.log('ELECTRON_UPDATE_PASS:'+checks.length);
 }

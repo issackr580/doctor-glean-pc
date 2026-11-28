@@ -110,6 +110,7 @@ try{
  check('button updates are disabled on the unsupported synthetic Linux runtime',update.status==='unsupported');
  if(edition.developer){await evaluate('window.doctorGlean.openUpdatePage("https://foreign.invalid/")');check('developer cannot open an unsigned update page or supplied URL',openedPages.length===0);}
  check('renderer supplied update arguments cannot select a URL, local file or executable',(await evaluate('window.doctorGlean.installUpdate("https://foreign.invalid/", "/tmp/private")')).status==='failed'&&openedPages.length===0);
+ check('only developer control exposes the official patch ZIP chooser',await evaluate('typeof window.doctorGleanDeveloper?.installUpdateZip==="function"')===edition.developer);
  check('rendered control can acknowledge readiness without supplying a nonce, path or process',(await evaluate('window.doctorGlean.updateReady("untrusted", "/tmp/private", 1)')).ok===true);
  check('agenda is the only panel visible when the app opens',await evaluate(`!document.querySelector('#panel-agenda').hidden &&
   ['automation','sites','settings'].every(name=>document.getElementById('panel-'+name).hidden) &&
